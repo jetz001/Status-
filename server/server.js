@@ -606,6 +606,18 @@ app.post('/api/lists/:listId/fields', (req, res) => {
   }
 });
 
+// Serve production frontend if built
+const DIST_DIR = path.join(__dirname, '..', 'dist');
+if (fs.existsSync(DIST_DIR)) {
+  app.use(express.static(DIST_DIR));
+  app.use((req, res, next) => {
+    if (req.method === 'GET' && !req.path.startsWith('/api') && !req.path.startsWith('/uploads')) {
+      return res.sendFile(path.join(DIST_DIR, 'index.html'));
+    }
+    next();
+  });
+}
+
 // Start listening
 if (process.env.NODE_ENV !== 'test') {
   app.listen(PORT, () => {

@@ -25,11 +25,17 @@ function createWindow() {
   const startUrl = process.env.ELECTRON_START_URL || 'http://localhost:5173';
   mainWindow.loadURL(startUrl);
 
-  // If local dev server isn't up immediately, retry once
+  // If local dev server isn't up, fallback to built dist/index.html
   mainWindow.webContents.on('did-fail-load', () => {
-    setTimeout(() => {
-      mainWindow.loadURL(startUrl);
-    }, 1500);
+    const distPath = path.join(__dirname, '..', 'dist', 'index.html');
+    const fs = require('fs');
+    if (fs.existsSync(distPath)) {
+      mainWindow.loadFile(distPath);
+    } else {
+      setTimeout(() => {
+        mainWindow.loadURL(startUrl);
+      }, 1500);
+    }
   });
 }
 
