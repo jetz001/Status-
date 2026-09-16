@@ -10,7 +10,9 @@
     "build": "vite build",
     "start": "concurrently -k \"node server/server.js\" \"vite\" \"electron .\"",
     "web": "node server/server.js",
-    "electron": "electron ."
+    "electron": "electron .",
+    "package": "npm run build && electron-builder --win --dir",
+    "package:exe": "npm run build && electron-builder --win"
   },
   "keywords": [
     "clickup",
@@ -40,8 +42,33 @@
     "concurrently": "^10.0.5",
     "cross-env": "^10.1.0",
     "electron": "^44.3.0",
+    "electron-builder": "^26.15.3",
     "postcss": "^8.5.28",
     "tailwindcss": "^4.3.3",
     "vite": "^8.3.0"
+  },
+  "build": {
+    "appId": "com.clickup.localpm",
+    "productName": "ClickUp Local Project Management",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "server/**/*",
+      "uploads/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   }
 }
