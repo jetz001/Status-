@@ -8,6 +8,9 @@ const { db } = require('./db');
 const { indexTask, semanticSearch, reindexAll } = require('./ragService');
 const { callLLM, polishText, generateSubtasks, autofillMetadata, chatAssistant } = require('./aiService');
 const { setWindowsWallpaper, saveWallpaperDataUrl, STOCK_WALLPAPERS } = require('./wallpaperService');
+const { processAgentQuery } = require('./aiSkills');
+const { processFileForAI, saveFileBuffer } = require('./fileProcessor');
+const { executeTool } = require('./aiTools');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -39,12 +42,12 @@ if (fs.existsSync(DIST_WALLPAPERS)) {
   app.use('/wallpapers', express.static(DIST_WALLPAPERS));
 }
 
-// Configure multer for file uploads
+// Configure multer for file uploads (Images & PDFs)
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, ATTACHMENTS_DIR),
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname);
-    const uniqueName = `img-${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
+    const uniqueName = `file-${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
     cb(null, uniqueName);
   }
 });
@@ -991,6 +994,110 @@ app.delete('/api/ai/history', (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.error('Error clearing AI history:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// AI AGENTIC CHAT WITH SKILL ROUTING & TOOLS
+// ==========================================
+app.post('/api/ai/agent-chat', upload.single('file'), async (req, res) => {
+  try {
+    let { message = '', context = '', activeListId = '', sessionId = '', fileData = '' } = req.body;
+    let fileProcessed = null;
+
+    // 1. If file uploaded via multipart
+    if (req.file) {
+      const fileInfo = {
+        filename: req.file.filename,
+        originalName: req.file.originalname,
+        mimeType: req.file.mimetype,
+        size: req.file.size,
+        url: `/uploads/attachments/${req.file.filename}`,
+        fullPath: req.file.path
+      };
+      fileProcessed = await processFileForAI(fileInfo);
+    } else if (fileData) {
+      try {
+        const parsed = typeof fileData === 'string' ? JSON.parse(fileData) : fileData;
+        if (parsed && parsed.base64) {
+          const buffer = Buffer.from(parsed.base64, 'base64');
+          const saved = saveFileBuffer(buffer, parsed.name || 'document.pdf', parsed.mimeType || 'application/pdf');
+          fileProcessed = await processFileForAI(saved);
+        }
+      } catch (e) {
+        console.error('Error parsing fileData:', e);
+      }
+    }
+
+    // 2. Process query via Skill Router & Tools
+    const result = await processAgentQuery({
+      userMessage: message,
+      fileProcessed,
+      activeListId,
+      context
+    });
+
+    // 3. Save conversation to history session
+    let savedSessionId = sessionId;
+    try {
+      if (!savedSessionId) {
+        savedSessionId = `session-${Date.now()}`;
+      }
+      const userContent = message || (fileProcessed ? `[แนบไฟล์: ${fileProcessed.originalName}]` : 'คำสั่ง');
+      const sessionTitle = userContent.slice(0, 40);
+
+      const existing = db.prepare('SELECT id, messages_json FROM ai_chat_sessions WHERE id = ?').get(savedSessionId);
+      let msgs = [];
+      if (existing) {
+        try { msgs = JSON.parse(existing.messages_json); } catch (e) {}
+      }
+      msgs.push({
+        role: 'user',
+        content: userContent,
+        attachment: fileProcessed ? { name: fileProcessed.originalName, type: fileProcessed.type } : null
+      });
+      msgs.push({
+        role: 'assistant',
+        content: result.reply,
+        skill: result.skill,
+        actions: result.actions
+      });
+
+      if (existing) {
+        db.prepare('UPDATE ai_chat_sessions SET messages_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+          .run(JSON.stringify(msgs), savedSessionId);
+      } else {
+        db.prepare('INSERT INTO ai_chat_sessions (id, title, messages_json, created_at, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)')
+          .run(savedSessionId, sessionTitle, JSON.stringify(msgs));
+      }
+    } catch (saveErr) {
+      console.error('Error updating session:', saveErr);
+    }
+
+    res.json({
+      reply: result.reply,
+      skill: result.skill,
+      actions: result.actions,
+      sessionId: savedSessionId,
+      fileProcessed: fileProcessed ? { name: fileProcessed.originalName, type: fileProcessed.type } : null
+    });
+  } catch (err) {
+    console.error('Error in /api/ai/agent-chat:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Confirm destructive action (e.g. Delete task)
+app.post('/api/ai/confirm-action', async (req, res) => {
+  try {
+    const { actionType, payload } = req.body;
+    if (!actionType) return res.status(400).json({ error: 'Action type is required' });
+
+    const result = await executeTool(actionType, { ...payload, confirmed: true });
+    res.json(result);
+  } catch (err) {
+    console.error('Error in /api/ai/confirm-action:', err);
     res.status(500).json({ error: err.message });
   }
 });

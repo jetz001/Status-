@@ -578,6 +578,13 @@ export default function App() {
         activeSessionId={activeAiSessionId}
         onSessionChange={setActiveAiSessionId}
         onHistoryUpdated={loadAiHistory}
+        activeListId={activeListId}
+        onDataChanged={() => {
+          loadTasks();
+          loadAllTasks();
+          loadSpaces();
+          checkNotifications();
+        }}
         context={[activeSpaceName ? `Space: ${activeSpaceName}` : '', activeListName ? `List: ${activeListName}` : ''].filter(Boolean).join(', ')}
         onSelectTaskById={async (taskId) => {
           try {
