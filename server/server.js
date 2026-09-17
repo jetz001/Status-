@@ -271,6 +271,30 @@ app.get('/api/tasks/all', (req, res) => {
   }
 });
 
+app.get('/api/tasks/:id', (req, res) => {
+  try {
+    const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    const subtasks = db.prepare('SELECT * FROM subtasks WHERE task_id = ? ORDER BY position ASC').all(task.id);
+    const fieldValues = db.prepare('SELECT * FROM task_field_values WHERE task_id = ?').all(task.id);
+    const attachments = db.prepare('SELECT * FROM attachments WHERE task_id = ? ORDER BY created_at DESC').all(task.id);
+    
+    const valuesMap = {};
+    fieldValues.forEach(fv => { valuesMap[fv.field_id] = fv.value; });
+
+    res.json({
+      ...task,
+      subtasks,
+      fieldValues: valuesMap,
+      attachments
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/tasks', (req, res) => {
   try {
     const {
@@ -736,7 +760,13 @@ app.post('/api/wallpaper/generate-ai', async (req, res) => {
 
 app.get('/api/notifications', (req, res) => {
   try {
-    const tasks = db.prepare('SELECT id, name, due_date, status, priority FROM tasks WHERE status != "COMPLETED" AND due_date IS NOT NULL').all();
+    const tasks = db.prepare(`
+      SELECT t.id, t.name, t.due_date, t.status, t.priority, t.list_id, l.name as list_name
+      FROM tasks t
+      LEFT JOIN lists l ON t.list_id = l.id
+      WHERE t.status != 'COMPLETED' AND t.due_date IS NOT NULL AND t.due_date != ''
+      ORDER BY t.due_date ASC
+    `).all();
     const todayStr = new Date().toISOString().split('T')[0];
     const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
 
@@ -747,6 +777,10 @@ app.get('/api/notifications', (req, res) => {
         notifications.push({
           id: `notif-overdue-${t.id}`,
           taskId: t.id,
+          listId: t.list_id,
+          listName: t.list_name || '',
+          priority: t.priority || 'Normal',
+          status: t.status,
           title: '⚠️ งานเกินกำหนดส่ง (Overdue)',
           message: `งาน "${t.name}" ครบกำหนดส่งเมื่อ ${t.due_date}`,
           type: 'overdue',
@@ -756,6 +790,10 @@ app.get('/api/notifications', (req, res) => {
         notifications.push({
           id: `notif-soon-${t.id}`,
           taskId: t.id,
+          listId: t.list_id,
+          listName: t.list_name || '',
+          priority: t.priority || 'Normal',
+          status: t.status,
           title: '⏰ งานใกล้ถึงกำหนดส่ง (Due Soon)',
           message: `งาน "${t.name}" มีกำหนดส่ง ${t.due_date === todayStr ? 'วันนี้!' : 'พรุ่งนี้'}`,
           type: 'due_soon',

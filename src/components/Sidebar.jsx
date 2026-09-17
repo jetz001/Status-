@@ -347,19 +347,19 @@ export default function Sidebar({
           </div>
         </div>
 
-        {/* AI & Super Agents Section */}
+        {/* AI Assistant Section */}
         <div className="pt-2 border-t border-[#2e3033]">
           <div className="flex items-center justify-between px-2 py-1 text-[11px] font-semibold tracking-wider text-gray-400 uppercase">
             <span>AI Assistant</span>
-            <Sparkles size={13} className="text-purple-400 animate-pulse" />
+            <Sparkles size={13} className="text-cyan-400 animate-pulse" />
           </div>
           <div className="space-y-0.5 mt-1">
             <div 
               onClick={onOpenAISidebar}
-              className="flex items-center space-x-2 px-2 py-1.5 rounded hover:bg-[#2a2b2d] text-purple-300 hover:text-purple-200 cursor-pointer font-medium"
+              className="flex items-center space-x-2 px-2 py-1.5 rounded hover:bg-[#2a2b2d] text-cyan-300 hover:text-cyan-200 cursor-pointer font-medium transition"
             >
-              <Sparkles size={14} className="text-purple-400" />
-              <span>AI Chat & RAG Search</span>
+              <Sparkles size={14} className="text-cyan-400" />
+              <span>AI Assistant</span>
             </div>
           </div>
         </div>
@@ -367,13 +367,6 @@ export default function Sidebar({
 
       {/* Footer Bottom Bar */}
       <div className="p-2 border-t border-[#333538] flex flex-col space-y-1 bg-[#141517]">
-        <button 
-          onClick={onOpenBackupDataModal}
-          className="flex items-center space-x-2 px-2 py-1.5 rounded hover:bg-[#2a2b2d] text-gray-300 hover:text-white cursor-pointer transition w-full"
-        >
-          <Database size={15} className="text-purple-400" />
-          <span className="text-xs font-medium">Backup & Data Center</span>
-        </button>
 
         <button 
           onClick={onOpenSettings}

@@ -83,10 +83,10 @@ export default function App() {
     try {
       const res = await fetch('/api/notifications');
       const data = await res.json();
-      setNotifications(data || []);
+      setNotifications(Array.isArray(data) ? data : []);
 
       // If in Electron and there are overdue/due soon alerts, send desktop toast
-      if (window.electronAPI && data && data.length > 0) {
+      if (window.electronAPI && Array.isArray(data) && data.length > 0) {
         const overdue = data.filter(d => d.type === 'overdue');
         if (overdue.length > 0) {
           window.electronAPI.showNotification(
@@ -533,8 +533,21 @@ export default function App() {
         isOpen={showAISidebar}
         onClose={() => setShowAISidebar(false)}
         context={[activeSpaceName ? `Space: ${activeSpaceName}` : '', activeListName ? `List: ${activeListName}` : ''].filter(Boolean).join(', ')}
-        onSelectTaskById={(taskId) => {
-          const t = tasks.find(item => item.id === taskId);
+        onSelectTaskById={async (taskId) => {
+          try {
+            const res = await fetch(`/api/tasks/${taskId}`);
+            if (res.ok) {
+              const fullTask = await res.json();
+              if (fullTask.list_id && fullTask.list_id !== activeListId) {
+                setActiveListId(fullTask.list_id);
+              }
+              setSelectedTask(fullTask);
+              return;
+            }
+          } catch (err) {
+            console.error('Error fetching task details:', err);
+          }
+          const t = tasks.find(item => item.id === taskId) || allTasks.find(item => item.id === taskId);
           if (t) setSelectedTask(t);
         }}
       />
@@ -552,8 +565,21 @@ export default function App() {
         isOpen={showNotificationCenter}
         onClose={() => setShowNotificationCenter(false)}
         notifications={notifications}
-        onSelectTaskById={(taskId) => {
-          const t = tasks.find(item => item.id === taskId);
+        onSelectTaskById={async (taskId, listId) => {
+          if (listId && listId !== activeListId) {
+            setActiveListId(listId);
+          }
+          try {
+            const res = await fetch(`/api/tasks/${taskId}`);
+            if (res.ok) {
+              const fullTask = await res.json();
+              setSelectedTask(fullTask);
+              return;
+            }
+          } catch (err) {
+            console.error('Error fetching task details:', err);
+          }
+          const t = tasks.find(item => item.id === taskId) || allTasks.find(item => item.id === taskId);
           if (t) setSelectedTask(t);
         }}
       />
