@@ -100,7 +100,9 @@ async function fallbackRuleExecution(skill, query, fileProcessed = null, activeL
       .filter(l => l.length > 5 && (/^(\d+[\.\)]|[-*•])/.test(l) || /task|งาน|จัดทำ|ตรวจสอบ|ดำเนินการ/i.test(l)))
       .slice(0, 5);
 
-    const planTitle = cleanLines[0]?.replace(/^(\d+[\.\)]|[-*•])\s*/, '') || (fileProcessed.type === 'image' ? `วิเคราะห์และดำเนินงานตามรูปภาพ: ${fileProcessed.originalName}` : `ดำเนินการตามเอกสาร: ${fileProcessed.originalName}`);
+    const isClipboard = /clipboard-/i.test(fileProcessed.originalName);
+    const cleanDocName = isClipboard ? 'ภาพแนบ' : fileProcessed.originalName;
+    const planTitle = cleanLines[0]?.replace(/^(\d+[\.\)]|[-*•])\s*/, '') || (isClipboard ? 'งานตรวจสอบและดำเนินการตามภาพแนบ' : (fileProcessed.type === 'image' ? `วิเคราะห์และดำเนินงานตามภาพ: ${cleanDocName}` : `ดำเนินการตามเอกสาร: ${cleanDocName}`));
     const subtasks = cleanLines.length > 1 
       ? cleanLines.slice(1).map(l => l.replace(/^(\d+[\.\)]|[-*•])\s*/, ''))
       : ['ตรวจสอบความถูกต้องและรายละเอียดในภาพ/เอกสาร', 'แบ่งหน้าที่และมอบหมายผู้รับผิดชอบ', 'ติดตามผลการดำเนินงาน'];
@@ -303,7 +305,7 @@ async function processAgentQuery({
 
   // System instructions for structured tool execution
   const systemInstruction = `
-คุณคือ Status+ AI Agent ผู้ช่วยอัจฉริยะในการบริหารจัดการโปรเจกต์และงาน
+คุณคือ Status+ AI Agent ผู้ช่วยอัจฉริยะด้านการบริหารจัดการงานและโครงการ (Project & Task Management System)
 สกิลปัจจุบันที่ถูกเลือก: "${skill.label}" (${skill.id})
 เครื่องมือที่คุณมีสิทธิ์เรียกใช้: ${skill.tools.join(', ')}
 
@@ -314,56 +316,56 @@ ${spacesListText}
 
 ${fileProcessed ? `
 มีไฟล์แนบเข้ามา: "${fileProcessed.originalName}" (${fileProcessed.type})
-${fileProcessed.text ? `เนื้อหาในเอกสารที่สกัดได้:\n"""\n${fileProcessed.text.slice(0, 3000)}\n"""` : 'ไฟล์รูปภาพ (ให้วิเคราะห์ภาพ อ่านข้อความ OCR และสรุปองค์ประกอบงาน)'}
+${fileProcessed.text ? `เนื้อหาในเอกสารที่สกัดได้:\n"""\n${fileProcessed.text.slice(0, 3000)}\n"""` : 'ไฟล์รูปภาพ (ให้คุณทำหน้าที่ Vision OCR อ่านข้อความ ลายมือ ตาราง หัวข้อเอกสาร และรายละเอียดในภาพอย่างถี่ถ้วน เพื่อวิเคราะห์งาน)'}
 ` : ''}
 
-## กฎเหล็กในการทำงาน (Grill-Me & Plan-First Principle):
-1. เมื่อมีเอกสารหรือรูปภาพแนบเข้ามา หรือผู้ใช้สั่งให้ "จัดงาน", "แยกงาน", "วิเคราะห์", "วางแผน" (และยังไม่ได้ระบุยืนยันว่าให้สร้างลง Space/List ใดชัดเจน):
-   - **ห้ามเรียกใช้ "create_task" ทันทีโดยเด็ดขาด!**
-   - ให้วิเคราะห์ข้อความ/ภาพอย่างละเอียด สกัดชื่องานจริง (ห้ามตั้งชื่อ dummy เช่น ดำเนินการตามเอกสาร: ...)
-   - สรุปรายละเอียดงาน และจัดทำรายการ Checklist (subtasks) 3-5 ข้อ
-   - ให้ส่งผลลัพธ์เป็น Action ชนิด "plan_proposal" เท่านั้น เพื่อให้ผู้ใช้ตรวจทานและเลือก Space/List ก่อนสร้าง:
-   {
-     "actions": [
-       {
-         "action": "plan_proposal",
-         "title": "📋 ร่างแผนงาน (รออนุมัติก่อนสร้าง)",
-         "plan": {
-           "name": "ชื่องานจริงที่สกัดได้จากเอกสารหรือภาพ",
-           "description": "รายละเอียดงานและขอบเขต",
-           "priority": "Normal/High/Urgent/Low",
-           "due_date": "YYYY-MM-DD หรือ null",
-           "subtasks": ["Checklist 1", "Checklist 2", "Checklist 3"]
-         }
-       }
-     ],
-     "reply": "ข้อความสรุปสิ่งที่อ่านได้จากเอกสาร/ภาพ พร้อมนำเสนอแผนงาน และถามผู้ใช้ (Grill-me) ชัดเจนว่าต้องการให้นำเข้า Space หรือ List ใดในระบบ"
-   }
+## ข้อควรระวังและบริบทสำคัญ (CRITICAL RULES):
+1. **บริบทของระบบ**: Status+ คือระบบจัดการงาน/โปรเจกต์ (Task & Workflow Management) คล้าย ClickUp / Jira
+   - คำว่า "งาน" หรือ "จัดงาน" หมายถึง **ภาระงาน (Tasks / Work Items)** เช่น งานซ่อมบำรุง, ตรวจสอบความปลอดภัย, งานเอกสาร, ติดตามผล, ปรับปรุงระบบ ฯลฯ
+   - **ห้ามเข้าใจผิดว่าเป็นการจัดงานเลี้ยง งานสังสรรค์ หรืองานอีเวนต์ (Event Planning) เด็ดขาด!**
 
-2. หากผู้ใช้สั่ง "สร้างงานใหม่ X โดยตรง" (ระบุชื่อและต้องการสร้างทันที) หรือ "อนุมัติสร้างแผนงาน" หรือ "สร้างลงใน Space/List Y":
-   - ให้ตอบกลับเป็น JSON เพื่อเรียกใช้ Tool "create_task":
-   {
-     "actions": [
-       {
-         "tool": "create_task",
-         "args": {
-           "list_id": "ID ของ List ที่ถูกต้องจากรายชื่อ Lists ในระบบ",
-           "name": "ชื่องาน",
-           "description": "รายละเอียดงาน",
-           "priority": "Normal/High/Urgent/Low",
-           "due_date": "YYYY-MM-DD หรือ null",
-           "subtasks": ["ข้อย่อย 1", "ข้อย่อย 2"]
-         }
-       }
-     ],
-     "reply": "ข้อความสรุปการสร้างงานที่เรียบร้อยและชัดเจน"
-   }
+2. **การวิเคราะห์รูปภาพและตั้งชื่อแผนงาน (plan.name)**:
+   - ให้อ่านตัวหนังสือ OCR และวิเคราะห์เนื้อหาในภาพอย่างละเอียด เพื่อระบุว่าเอกสารหรือรูปภาพนี้คือเรื่องอะไร
+   - **การตั้งชื่องานที่แนะนำ (plan.name)**:
+     - ต้องตั้งชื่องานจริงที่อ่านได้จากภาพอย่างเฉพาะเจาะจง สื่อความหมาย เช่น "งานตรวจเช็คและซ่อมบำรุงระบบปรับอากาศ (HVAC)", "ตรวจสอบความปลอดภัยประจำสัปดาห์", "บันทึกผลตรวจสอบคุณภาพ QMS ประจำงวด"
+     - **ข้อห้ามเด็ดขาด (STRICT PROHIBITION)**: ห้ามนำชื่อไฟล์ เช่น "clipboard-...", "image.png", "วิเคราะห์และดำเนินงานตามรูปภาพ: ...", หรือ "ดำเนินการตามเอกสาร: ..." มาเป็นชื่องานเด็ดขาด!
+   - **Checklist (Subtasks)**: แตกข้อย่อย 3-5 ข้อที่ตรงกับขั้นตอนปฏิบัติจริงในเอกสารหรือภาพ
 
-3. หากเป็นการปรึกษา สรุปภาพรวม หรือถามทั่วไปที่ไม่ต้องสร้างหรือแก้ไขงาน:
-   {
-     "actions": [],
-     "reply": "คำตอบและคำแนะนำของคุณ..."
-   }
+3. **ตอบกลับเป็น JSON Object เท่านั้น (JSON Response Only)** โดยมีโครงสร้างดังนี้:
+{
+  "actions": [
+    {
+      "action": "plan_proposal",
+      "title": "📋 ร่างแผนงาน (รออนุมัติก่อนสร้าง)",
+      "plan": {
+        "name": "ชื่องานจริงที่สกัดได้จากเอกสารหรือภาพ (ห้ามมีชื่อไฟล์)",
+        "description": "รายละเอียดงานและขอบเขตที่อ่านได้",
+        "priority": "Normal/High/Urgent/Low",
+        "due_date": null,
+        "subtasks": ["ขั้นตอนที่ 1 ที่สกัดได้จริง", "ขั้นตอนที่ 2", "ขั้นตอนที่ 3"]
+      }
+    }
+  ],
+  "reply": "สรุปสิ่งที่วิเคราะห์ได้จากภาพ/เอกสารเป็นภาษาไทย พร้อมถามผู้ใช้ชัดเจนว่าต้องการให้นำเข้า Space หรือ List ใดในระบบ"
+}
+
+หากผู้ใช้สั่งสร้างงานโดยตรงและระบุ List ชัดเจน:
+{
+  "actions": [
+    {
+      "tool": "create_task",
+      "args": {
+        "list_id": "ID ของ List ที่ถูกต้องจากรายชื่อ Lists ในระบบ",
+        "name": "ชื่องาน",
+        "description": "รายละเอียดงาน",
+        "priority": "Normal",
+        "due_date": null,
+        "subtasks": ["ข้อย่อย 1", "ข้อย่อย 2"]
+      }
+    }
+  ],
+  "reply": "สร้างงานเรียบร้อยแล้วครับ"
+}
 `;
 
 // Safe JSON parser that handles markdown fences and unescaped newlines from LLMs
@@ -410,7 +412,15 @@ function safeJsonParse(rawText) {
 
   // Attempt LLM execution
   try {
-    const prompt = userMessage || (fileProcessed ? `ช่วยวิเคราะห์และแยกงานจากไฟล์ ${fileProcessed.originalName}` : 'สรุปงาน');
+    let prompt = userMessage ? userMessage.trim() : '';
+    if (fileProcessed) {
+      const fileContext = fileProcessed.type === 'image'
+        ? 'ช่วยวิเคราะห์ภาพแนบนี้ อ่านข้อความ OCR และสาระสำคัญ สกัดชื่องาน (Task Name) ที่สื่อถึงเนื้องานจริงในรูป คำอธิบาย และ Checklist ข้อย่อย 3-5 ข้อเพื่อนำเข้าสู่ระบบ Status+'
+        : `ช่วยวิเคราะห์เอกสารแนบ (${fileProcessed.originalName}) สกัดชื่องาน (Task Name) ที่สื่อถึงเนื้องานจริง คำอธิบาย และ Checklist ข้อย่อยเพื่อนำเข้าสู่ระบบ Status+`;
+      prompt = prompt ? `${prompt}\n${fileContext}` : fileContext;
+    } else if (!prompt) {
+      prompt = 'สรุปภาพรวมงานในระบบ';
+    }
     const llmResponse = await callLLM(prompt, systemInstruction, fileProcessed);
 
     if (llmResponse) {
@@ -436,6 +446,14 @@ function safeJsonParse(rawText) {
               act.action = 'plan_proposal';
               act.availableLists = flatLists;
               if (act.plan) {
+                // Ensure plan name is clean and does not contain prefixes or clipboard names
+                let cleanName = (act.plan.name || '').trim();
+                cleanName = cleanName.replace(/^(?:จัดทำแผนงานและดำเนิน(?:การ)?ตาม(?:รูปภาพ|ภาพ|เอกสาร)|วิเคราะห์และดำเนิน(?:การ)?ตาม(?:รูปภาพ|ภาพ|เอกสาร)|ตาม(?:รูปภาพ|ภาพ|เอกสาร)|งานตาม(?:รูปภาพ|ภาพ))\s*[:\-]?\s*/i, '');
+                cleanName = cleanName.replace(/clipboard-\d+/gi, '').replace(/^[:\-]\s*/, '').trim();
+                if (!cleanName || cleanName.length < 3) {
+                  cleanName = 'งานตรวจสอบและดำเนินการตามข้อมูลที่วิเคราะห์ได้';
+                }
+                act.plan.name = cleanName;
                 act.plan.defaultListId = activeListId || (flatLists[0]?.listId || '');
                 if (fileProcessed) {
                   act.plan.fileInfo = fileProcessed.fileInfo;
@@ -463,12 +481,73 @@ function safeJsonParse(rawText) {
 
         const replyText = typeof parsed.reply === 'string' 
           ? parsed.reply 
-          : (parsed.reply?.text || 'วิเคราะห์ข้อมูลและร่างแผนงานเรียบร้อยแล้วครับ');
+          : (parsed.reply?.message || parsed.reply?.text || 'วิเคราะห์ข้อมูลและร่างแผนงานเรียบร้อยแล้วครับ');
 
         return {
           skill,
           actions: executedActions,
           reply: replyText
+        };
+      }
+
+      // If safeJsonParse returned null but LLM gave a rich markdown/text response:
+      if (llmResponse.length > 20) {
+        const text = llmResponse.trim();
+        let planTitle = '';
+        const titleMatch = text.match(/(?:ชื่องาน|หัวข้อ|ประเภทงาน|ประเภทเอกสาร|งาน)\s*[:\-]?\s*([^\n\*\#]+)/i);
+        if (titleMatch && titleMatch[1].trim().length > 3) {
+          planTitle = titleMatch[1].replace(/\*\*/g, '').trim();
+        } else {
+          const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+          for (const l of lines) {
+            if (/^#{1,4}\s*(.+)/.test(l)) {
+              const clean = l.replace(/^#{1,4}\s*/, '').replace(/\*\*/g, '').trim();
+              if (clean.length > 4 && !/สรุป|ข้อเสนอแนะ|คำตอบ|เนื้อหา/i.test(clean)) {
+                planTitle = clean;
+                break;
+              }
+            }
+          }
+        }
+
+        if (!planTitle || /clipboard-|วิเคราะห์และดำเนินงานตามรูปภาพ/i.test(planTitle)) {
+          planTitle = 'งานตรวจสอบและดำเนินการตามข้อมูลที่วิเคราะห์ได้';
+        }
+
+        const subtasks = [];
+        const bulletMatches = text.matchAll(/^[•\-\*\d+\.]\s+(.+)$/gm);
+        for (const m of bulletMatches) {
+          const s = m[1].replace(/\*\*/g, '').trim();
+          if (s.length > 4 && s.length < 100 && !subtasks.includes(s) && !/หมายเหตุ|คำแนะนำ/i.test(s)) {
+            subtasks.push(s);
+            if (subtasks.length >= 5) break;
+          }
+        }
+
+        const fallbackSubtasks = subtasks.length > 0 ? subtasks : [
+          'ตรวจสอบรายละเอียดตามเนื้อหาที่วิเคราะห์',
+          'แบ่งหน้าที่และมอบหมายผู้รับผิดชอบ',
+          'ติดตามผลการดำเนินงาน'
+        ];
+
+        return {
+          skill,
+          actions: [
+            {
+              action: 'plan_proposal',
+              title: '📋 ร่างแผนงาน (รออนุมัติก่อนสร้าง)',
+              plan: {
+                name: planTitle,
+                description: text.slice(0, 500),
+                priority: 'Normal',
+                subtasks: fallbackSubtasks,
+                defaultListId: activeListId || (flatLists[0]?.listId || ''),
+                fileInfo: fileProcessed ? fileProcessed.fileInfo : null
+              },
+              availableLists: flatLists
+            }
+          ],
+          reply: text
         };
       }
     }

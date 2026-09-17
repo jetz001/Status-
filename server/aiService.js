@@ -94,7 +94,12 @@ async function callLLM(prompt, systemInstruction = '', fileProcessed = null) {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${apiKey}`
         },
-        body: JSON.stringify({ model, messages, temperature: 0.7 })
+        body: JSON.stringify({
+          model,
+          messages,
+          temperature: 0.2,
+          response_format: { type: 'json_object' }
+        })
       });
       const data = await res.json();
       if (data.choices && data.choices[0]?.message?.content) {
@@ -176,7 +181,12 @@ async function callLLM(prompt, systemInstruction = '', fileProcessed = null) {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${apiKey}`
           },
-          body: JSON.stringify({ model: targetModel, messages, temperature: 0.7 })
+          body: JSON.stringify({
+            model: targetModel,
+            messages,
+            temperature: 0.2,
+            response_format: { type: 'json_object' }
+          })
         });
       };
 
