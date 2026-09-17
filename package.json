@@ -58,6 +58,7 @@
       "electron/**/*",
       "server/**/*",
       "uploads/**/*",
+      "public/**/*",
       "package.json"
     ],
     "win": {

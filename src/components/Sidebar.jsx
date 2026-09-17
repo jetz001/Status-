@@ -16,8 +16,25 @@ import {
   Calendar,
   Clock,
   LayoutDashboard,
-  Database
+  Database,
+  Edit3,
+  Palette,
+  Copy,
+  Trash2,
+  PlusCircle,
+  AlertTriangle
 } from 'lucide-react';
+import ContextMenu from './ContextMenu.jsx';
+
+const COLOR_PRESETS = [
+  { label: 'ม่วง Purple', value: '#7b68ee' },
+  { label: 'ฟ้า Blue', value: '#3b82f6' },
+  { label: 'เขียว Emerald', value: '#10b981' },
+  { label: 'ส้ม Amber', value: '#f59e0b' },
+  { label: 'แดง Ruby', value: '#ef4444' },
+  { label: 'ชมพู Rose', value: '#ec4899' },
+  { label: 'คราม Cyan', value: '#06b6d4' }
+];
 
 export default function Sidebar({ 
   spaces, 
@@ -27,6 +44,12 @@ export default function Sidebar({
   onSelectHome,
   onCreateSpace, 
   onCreateList,
+  onUpdateSpace,
+  onDeleteSpace,
+  onUpdateList,
+  onDeleteList,
+  onDuplicateList,
+  onQuickAddTask,
   onOpenAISidebar,
   onOpenSettings,
   onOpenBackupDataModal
@@ -36,6 +59,13 @@ export default function Sidebar({
   const [newSpaceName, setNewSpaceName] = useState('');
   const [showAddListModal, setShowAddListModal] = useState(null);
   const [newListName, setNewListName] = useState('');
+
+  // Context Menu State
+  const [contextMenu, setContextMenu] = useState({ isOpen: false, position: { x: 0, y: 0 }, items: [] });
+  
+  // Modals for context menu actions
+  const [renameTarget, setRenameTarget] = useState(null); // { type: 'space' | 'list', id, name }
+  const [deleteConfirmTarget, setDeleteConfirmTarget] = useState(null); // { type: 'space' | 'list', id, name }
 
   const toggleSpace = (spaceId) => {
     setExpandedSpaces(prev => ({ ...prev, [spaceId]: !prev[spaceId] }));
@@ -57,6 +87,129 @@ export default function Sidebar({
     setShowAddListModal(null);
   };
 
+  // Right-click on Space
+  const handleSpaceContextMenu = (e, space) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const colorSubmenu = COLOR_PRESETS.map(c => ({
+      label: c.label,
+      colorDot: c.value,
+      checked: space.color === c.value,
+      onClick: () => {
+        if (onUpdateSpace) onUpdateSpace(space.id, { color: c.value });
+      }
+    }));
+
+    setContextMenu({
+      isOpen: true,
+      position: { x: e.clientX, y: e.clientY },
+      items: [
+        {
+          label: 'เปลี่ยนชื่อ Space...',
+          icon: Edit3,
+          onClick: () => setRenameTarget({ type: 'space', id: space.id, name: space.name })
+        },
+        {
+          label: 'เปลี่ยนสี Space',
+          icon: Palette,
+          submenu: colorSubmenu
+        },
+        { type: 'separator' },
+        {
+          label: 'เพิ่ม List ใน Space นี้',
+          icon: Plus,
+          onClick: () => {
+            setExpandedSpaces(prev => ({ ...prev, [space.id]: true }));
+            setShowAddListModal(space.id);
+          }
+        },
+        { type: 'separator' },
+        {
+          label: 'ลบ Space นี้...',
+          icon: Trash2,
+          danger: true,
+          onClick: () => setDeleteConfirmTarget({ type: 'space', id: space.id, name: space.name })
+        }
+      ]
+    });
+  };
+
+  // Right-click on List
+  const handleListContextMenu = (e, list) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const colorSubmenu = COLOR_PRESETS.map(c => ({
+      label: c.label,
+      colorDot: c.value,
+      checked: list.color === c.value,
+      onClick: () => {
+        if (onUpdateList) onUpdateList(list.id, { color: c.value });
+      }
+    }));
+
+    setContextMenu({
+      isOpen: true,
+      position: { x: e.clientX, y: e.clientY },
+      items: [
+        {
+          label: 'เปลี่ยนชื่อ List...',
+          icon: Edit3,
+          onClick: () => setRenameTarget({ type: 'list', id: list.id, name: list.name })
+        },
+        {
+          label: 'เปลี่ยนสี List',
+          icon: Palette,
+          submenu: colorSubmenu
+        },
+        {
+          label: 'ทำสำเนา List (Duplicate)',
+          icon: Copy,
+          onClick: () => {
+            if (onDuplicateList) onDuplicateList(list.id);
+          }
+        },
+        { type: 'separator' },
+        {
+          label: 'เพิ่มงานใน List นี้',
+          icon: PlusCircle,
+          onClick: () => {
+            if (onQuickAddTask) onQuickAddTask({ list_id: list.id, name: 'งานใหม่...' });
+          }
+        },
+        { type: 'separator' },
+        {
+          label: 'ลบ List นี้...',
+          icon: Trash2,
+          danger: true,
+          onClick: () => setDeleteConfirmTarget({ type: 'list', id: list.id, name: list.name })
+        }
+      ]
+    });
+  };
+
+  const handleRenameSubmit = (e) => {
+    e.preventDefault();
+    if (!renameTarget || !renameTarget.name.trim()) return;
+    if (renameTarget.type === 'space') {
+      if (onUpdateSpace) onUpdateSpace(renameTarget.id, { name: renameTarget.name.trim() });
+    } else {
+      if (onUpdateList) onUpdateList(renameTarget.id, { name: renameTarget.name.trim() });
+    }
+    setRenameTarget(null);
+  };
+
+  const handleDeleteConfirm = () => {
+    if (!deleteConfirmTarget) return;
+    if (deleteConfirmTarget.type === 'space') {
+      if (onDeleteSpace) onDeleteSpace(deleteConfirmTarget.id);
+    } else {
+      if (onDeleteList) onDeleteList(deleteConfirmTarget.id);
+    }
+    setDeleteConfirmTarget(null);
+  };
+
   return (
     <aside className="w-64 bg-[#18191b] border-r border-[#333538] flex flex-col h-screen select-none text-[#cfd3d8] flex-shrink-0 z-10 text-xs">
       {/* Workspace Header */}
@@ -64,12 +217,17 @@ export default function Sidebar({
         onClick={onSelectHome}
         className="p-3 border-b border-[#333538] flex items-center justify-between hover:bg-[#222427] cursor-pointer transition"
       >
-        <div className="flex items-center space-x-2 truncate">
-          <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-purple-600 to-indigo-500 flex items-center justify-center text-white font-black text-[11px] shadow-sm">
-            S+
-          </div>
+        <div className="flex items-center space-x-2.5 truncate">
+          <img 
+            src="/logo.png" 
+            alt="Status+" 
+            className="w-7 h-7 rounded-lg object-cover shadow-sm ring-1 ring-[#7b68ee]/30 flex-shrink-0" 
+          />
           <div className="flex flex-col truncate leading-tight">
-            <span className="font-bold text-white truncate text-xs">Status+</span>
+            <div className="flex items-center space-x-1.5">
+              <span className="font-bold text-white truncate text-xs">Status+</span>
+              <span className="text-[9px] px-1 py-0.2 rounded bg-[#7b68ee]/20 text-[#a292ff] font-semibold">PRO</span>
+            </div>
             <span className="text-[10px] text-gray-400 truncate">Jet mut's Workspace</span>
           </div>
         </div>
@@ -100,7 +258,7 @@ export default function Sidebar({
             <button 
               onClick={() => setShowAddSpaceModal(true)}
               title="Add Space"
-              className="p-0.5 hover:bg-[#333538] rounded text-gray-400 hover:text-white transition"
+              className="p-0.5 hover:bg-[#333538] rounded text-gray-400 hover:text-white transition cursor-pointer"
             >
               <Plus size={14} />
             </button>
@@ -114,7 +272,9 @@ export default function Sidebar({
                   {/* Space Header */}
                   <div 
                     onClick={() => toggleSpace(space.id)}
+                    onContextMenu={(e) => handleSpaceContextMenu(e, space)}
                     className="flex items-center justify-between px-2 py-1.5 rounded hover:bg-[#222427] cursor-pointer text-gray-200 group"
+                    title="คลิกขวาเพื่อจัดการ Space"
                   >
                     <div className="flex items-center space-x-2 truncate">
                       {isExpanded ? <ChevronDown size={13} className="text-gray-400" /> : <ChevronRight size={13} className="text-gray-400" />}
@@ -139,14 +299,19 @@ export default function Sidebar({
                           <div 
                             key={list.id}
                             onClick={() => onSelectList(list.id)}
+                            onContextMenu={(e) => handleListContextMenu(e, list)}
                             className={`flex items-center justify-between px-2.5 py-1.5 rounded cursor-pointer transition text-xs ${
                               isActive 
                                 ? 'bg-[#2a2b2d] text-white font-semibold border-l-2 border-[#7b68ee]' 
                                 : 'text-gray-300 hover:bg-[#222427] hover:text-white'
                             }`}
+                            title="คลิกขวาเพื่อจัดการ List"
                           >
                             <div className="flex items-center space-x-2 truncate">
-                              <span className="text-gray-400">#</span>
+                              <span 
+                                className="w-2 h-2 rounded-full flex-shrink-0" 
+                                style={{ backgroundColor: list.color || space.color || '#7b68ee' }} 
+                              />
                               <span className="truncate">{list.name}</span>
                             </div>
                             {list.taskCount !== undefined && list.taskCount > 0 && (
@@ -237,13 +402,13 @@ export default function Sidebar({
                 <button 
                   type="button" 
                   onClick={() => setShowAddSpaceModal(false)}
-                  className="px-3 py-1.5 rounded text-gray-300 hover:bg-[#333538] text-xs"
+                  className="px-3 py-1.5 rounded text-gray-300 hover:bg-[#333538] text-xs cursor-pointer"
                 >
                   ยกเลิก
                 </button>
                 <button 
                   type="submit" 
-                  className="px-3 py-1.5 bg-[#7b68ee] hover:bg-[#6a55e0] text-white font-medium rounded text-xs"
+                  className="px-3 py-1.5 bg-[#7b68ee] hover:bg-[#6a55e0] text-white font-medium rounded text-xs cursor-pointer"
                 >
                   สร้าง Space
                 </button>
@@ -252,6 +417,82 @@ export default function Sidebar({
           </div>
         </div>
       )}
+
+      {/* Modal to Rename Space or List */}
+      {renameTarget && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-[#222427] border border-[#383a3e] rounded-xl p-4 w-80 shadow-2xl space-y-3">
+            <h3 className="font-semibold text-white text-sm">
+              เปลี่ยนชื่อ {renameTarget.type === 'space' ? 'Space' : 'List'}
+            </h3>
+            <form onSubmit={handleRenameSubmit} className="space-y-3">
+              <input 
+                type="text" 
+                value={renameTarget.name}
+                onChange={(e) => setRenameTarget({ ...renameTarget, name: e.target.value })}
+                autoFocus
+                className="w-full px-3 py-2 bg-[#18191b] border border-[#383a3e] rounded text-white text-xs outline-none focus:border-[#7b68ee]"
+              />
+              <div className="flex justify-end space-x-2">
+                <button 
+                  type="button" 
+                  onClick={() => setRenameTarget(null)}
+                  className="px-3 py-1.5 rounded text-gray-300 hover:bg-[#333538] text-xs cursor-pointer"
+                >
+                  ยกเลิก
+                </button>
+                <button 
+                  type="submit" 
+                  className="px-3 py-1.5 bg-[#7b68ee] hover:bg-[#6a55e0] text-white font-medium rounded text-xs cursor-pointer"
+                >
+                  บันทึก
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal to Confirm Delete Space or List */}
+      {deleteConfirmTarget && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-[#222427] border border-red-500/30 rounded-xl p-4 w-88 shadow-2xl space-y-3">
+            <div className="flex items-center space-x-2 text-red-400">
+              <AlertTriangle size={18} />
+              <h3 className="font-semibold text-sm">
+                ยืนยันการลบ {deleteConfirmTarget.type === 'space' ? 'Space' : 'List'}
+              </h3>
+            </div>
+            <p className="text-xs text-gray-300 leading-relaxed">
+              คุณแน่ใจหรือไม่ว่าต้องการลบ <span className="font-semibold text-white">"{deleteConfirmTarget.name}"</span>? ข้อมูลงานย่อยและบันทึกทั้งหมดภายในจะถูกลบถาวร
+            </p>
+            <div className="flex justify-end space-x-2 pt-2">
+              <button 
+                type="button" 
+                onClick={() => setDeleteConfirmTarget(null)}
+                className="px-3 py-1.5 rounded text-gray-300 hover:bg-[#333538] text-xs cursor-pointer"
+              >
+                ยกเลิก
+              </button>
+              <button 
+                type="button" 
+                onClick={handleDeleteConfirm}
+                className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white font-medium rounded text-xs cursor-pointer"
+              >
+                ยืนยันลบ
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Context Menu Component */}
+      <ContextMenu 
+        isOpen={contextMenu.isOpen}
+        position={contextMenu.position}
+        items={contextMenu.items}
+        onClose={() => setContextMenu(prev => ({ ...prev, isOpen: false }))}
+      />
     </aside>
   );
 }

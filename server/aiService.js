@@ -11,14 +11,26 @@ function getSetting(key, defaultValue = '') {
 async function callLLM(prompt, systemInstruction = '') {
   const provider = getSetting('ai_provider', 'gemini');
   const apiKey = getSetting('ai_api_key', '');
-  const model = getSetting('ai_model', provider === 'openai' ? 'gpt-4o-mini' : 'gemini-1.5-flash');
+
+  const defaultModelMap = {
+    gemini: 'gemini-1.5-flash',
+    openai: 'gpt-4o-mini',
+    claude: 'claude-3-5-sonnet-20241022',
+    mistral: 'mistral-large-latest',
+    qwen: 'qwen-plus',
+    kimi: 'moonshot-v1-8k',
+    ollama: 'llama3'
+  };
+
+  const model = getSetting('ai_model', defaultModelMap[provider] || 'gemini-1.5-flash');
 
   // If no API key is set for cloud providers, use our intelligent local rule-based fallback
-  if ((provider === 'gemini' || provider === 'openai') && !apiKey) {
+  if (provider !== 'ollama' && !apiKey) {
     return null; // Signals fallback
   }
 
   try {
+    // 1. Google Gemini
     if (provider === 'gemini') {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
       const res = await fetch(url, {
@@ -35,6 +47,7 @@ async function callLLM(prompt, systemInstruction = '') {
       throw new Error(data.error?.message || 'Gemini API Error');
     }
 
+    // 2. OpenAI
     if (provider === 'openai') {
       const url = 'https://api.openai.com/v1/chat/completions';
       const messages = [];
@@ -56,6 +69,97 @@ async function callLLM(prompt, systemInstruction = '') {
       throw new Error(data.error?.message || 'OpenAI API Error');
     }
 
+    // 3. Anthropic Claude
+    if (provider === 'claude') {
+      const url = 'https://api.anthropic.com/v1/messages';
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01'
+        },
+        body: JSON.stringify({
+          model: model || 'claude-3-5-sonnet-20241022',
+          max_tokens: 1024,
+          system: systemInstruction || undefined,
+          messages: [{ role: 'user', content: prompt }]
+        })
+      });
+      const data = await res.json();
+      if (data.content && data.content[0]?.text) {
+        return data.content[0].text.trim();
+      }
+      throw new Error(data.error?.message || 'Anthropic Claude API Error');
+    }
+
+    // 4. Mistral AI
+    if (provider === 'mistral') {
+      const url = 'https://api.mistral.ai/v1/chat/completions';
+      const messages = [];
+      if (systemInstruction) messages.push({ role: 'system', content: systemInstruction });
+      messages.push({ role: 'user', content: prompt });
+
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({ model: model || 'mistral-large-latest', messages, temperature: 0.7 })
+      });
+      const data = await res.json();
+      if (data.choices && data.choices[0]?.message?.content) {
+        return data.choices[0].message.content.trim();
+      }
+      throw new Error(data.error?.message || 'Mistral API Error');
+    }
+
+    // 5. Qwen (Alibaba Cloud DashScope)
+    if (provider === 'qwen') {
+      const url = 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions';
+      const messages = [];
+      if (systemInstruction) messages.push({ role: 'system', content: systemInstruction });
+      messages.push({ role: 'user', content: prompt });
+
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({ model: model || 'qwen-plus', messages, temperature: 0.7 })
+      });
+      const data = await res.json();
+      if (data.choices && data.choices[0]?.message?.content) {
+        return data.choices[0].message.content.trim();
+      }
+      throw new Error(data.error?.message || 'Qwen API Error');
+    }
+
+    // 6. Kimi (Moonshot AI)
+    if (provider === 'kimi') {
+      const url = 'https://api.moonshot.cn/v1/chat/completions';
+      const messages = [];
+      if (systemInstruction) messages.push({ role: 'system', content: systemInstruction });
+      messages.push({ role: 'user', content: prompt });
+
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({ model: model || 'moonshot-v1-8k', messages, temperature: 0.7 })
+      });
+      const data = await res.json();
+      if (data.choices && data.choices[0]?.message?.content) {
+        return data.choices[0].message.content.trim();
+      }
+      throw new Error(data.error?.message || 'Kimi Moonshot API Error');
+    }
+
+    // 7. Local Ollama
     if (provider === 'ollama') {
       const url = 'http://localhost:11434/api/generate';
       const res = await fetch(url, {
@@ -81,18 +185,32 @@ async function callLLM(prompt, systemInstruction = '') {
  * Polish / improve text wording
  */
 async function polishText(text) {
-  if (!text) return text;
-  const prompt = `กรุณาปรับปรุงข้อความต่อไปนี้ให้เป็นภาษาไทย/อังกฤษที่กระชับ เป็นทางการ ชัดเจน และถูกต้องตามหลักการบริหารโครงการ:\n"${text}"\nตอบกลับเฉพาะข้อความที่ปรับแก้แล้วเท่านั้น ไม่ต้องมีคำนำหรือคำลงท้าย`;
+  if (!text || !text.trim()) return text;
+  const prompt = `กรุณาปรับปรุงข้อความต่อไปนี้ให้เป็นภาษาไทย/อังกฤษที่กระชับ สละสลวย เป็นทางการ ชัดเจน และถูกต้องตามหลักการบริหารโครงการ:\n"${text.trim()}"\nตอบกลับเฉพาะข้อความที่ปรับแก้แล้วเท่านั้น ไม่ต้องมีคำนำหรือคำลงท้ายหรือเครื่องหมายคำพูด`;
   const llmResult = await callLLM(prompt, 'คุณคือผู้ช่วยบริหารโครงการมืออาชีพ');
-  if (llmResult) return llmResult;
-
-  // Local fallback smart polish
-  let cleaned = text.trim();
-  cleaned = cleaned.replace(/\s+/g, ' ');
-  if (!cleaned.endsWith('.') && !/[ก-๙]$/.test(cleaned)) {
-    // leave as is
+  if (llmResult && llmResult.trim()) {
+    return llmResult.trim().replace(/^["'“”‘’]|["'“”‘’]$/g, '');
   }
-  return cleaned;
+
+  // Local rule-based smart polish fallback
+  let polished = text.trim();
+  polished = polished.replace(/%/g, 'ร้อยละ ');
+  polished = polished.replace(/^ทำ\s*/g, 'ดำเนินการจัดทำ ');
+  polished = polished.replace(/^เช็ค\s*/g, 'ตรวจสอบและประเมินผล ');
+  polished = polished.replace(/^ตาม\s*/g, 'ติดตามความคืบหน้า ');
+  polished = polished.replace(/^แจก\s*/g, 'จัดทำและแจกแจง ');
+  polished = polished.replace(/^ส่ง\s*/g, 'จัดส่งและประสานงาน ');
+  polished = polished.replace(/^แก้\s*/g, 'ดำเนินการแก้ไขและปรับปรุง ');
+  polished = polished.replace(/\s+/g, ' ').trim();
+
+  // Keyword specific enrichment
+  if (polished.includes('ความพึงพอใจลูกค้า') && !polished.includes('รายงาน')) {
+    polished = `จัดทำและแจกแจงรายงานการวิเคราะห์ร้อยละความพึงพอใจของลูกค้า (Customer Satisfaction Report)`;
+  } else if (polished === text.trim()) {
+    polished = `จัดทำและบริหารงาน: ${text.trim()}`;
+  }
+
+  return polished;
 }
 
 /**

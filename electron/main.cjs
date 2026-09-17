@@ -14,6 +14,7 @@ function createWindow() {
     minHeight: 640,
     backgroundColor: '#1e1f21',
     title: 'Status+',
+    icon: path.join(__dirname, '..', 'public', 'logo.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       nodeIntegration: false,

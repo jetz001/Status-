@@ -50,7 +50,7 @@ export default function SettingsModal({
 
   return (
     <div className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4 select-none text-xs">
-      <div className="bg-[#222427] border border-[#383a3e] rounded-xl w-[480px] max-w-full shadow-2xl p-5 space-y-5">
+      <div className="bg-[#222427] border border-[#383a3e] rounded-xl w-[540px] max-w-full shadow-2xl p-5 space-y-5">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[#333538] pb-3">
           <div className="flex items-center space-x-2">
@@ -71,28 +71,30 @@ export default function SettingsModal({
           {/* AI Provider Radio */}
           <div className="space-y-1.5">
             <label className="text-gray-300 font-semibold block">ผู้ให้บริการ AI (AI Provider)</label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {[
-                { id: 'gemini', label: 'Google Gemini' },
-                { id: 'openai', label: 'OpenAI (ChatGPT)' },
-                { id: 'ollama', label: 'Local Ollama' }
+                { id: 'gemini', label: 'Google Gemini', defaultModel: 'gemini-1.5-flash', hint: 'AIzaSy...' },
+                { id: 'openai', label: 'OpenAI (ChatGPT)', defaultModel: 'gpt-4o-mini', hint: 'sk-proj-...' },
+                { id: 'claude', label: 'Claude (Anthropic)', defaultModel: 'claude-3-5-sonnet-20241022', hint: 'sk-ant-...' },
+                { id: 'mistral', label: 'Mistral AI', defaultModel: 'mistral-large-latest', hint: 'apiKey...' },
+                { id: 'qwen', label: 'Qwen (Alibaba)', defaultModel: 'qwen-plus', hint: 'sk-...' },
+                { id: 'kimi', label: 'Kimi (Moonshot)', defaultModel: 'moonshot-v1-8k', hint: 'sk-...' },
+                { id: 'ollama', label: 'Local Ollama', defaultModel: 'llama3', hint: 'ไม่ต้องใช้ Key' }
               ].map(p => (
                 <button
                   key={p.id}
                   type="button"
                   onClick={() => {
                     setProvider(p.id);
-                    if (p.id === 'gemini') setModel('gemini-1.5-flash');
-                    if (p.id === 'openai') setModel('gpt-4o-mini');
-                    if (p.id === 'ollama') setModel('llama3');
+                    setModel(p.defaultModel);
                   }}
-                  className={`p-2 rounded border text-center font-medium transition ${
+                  className={`p-2 rounded-lg border text-center font-medium transition cursor-pointer ${
                     provider === p.id 
-                      ? 'border-[#7b68ee] bg-[#7b68ee]/20 text-white font-bold' 
-                      : 'border-[#383a3e] bg-[#18191b] text-gray-400 hover:text-white'
+                      ? 'border-[#7b68ee] bg-[#7b68ee]/20 text-white font-bold shadow-sm' 
+                      : 'border-[#383a3e] bg-[#18191b] text-gray-400 hover:text-white hover:border-[#4f5258]'
                   }`}
                 >
-                  {p.label}
+                  <div className="text-xs">{p.label}</div>
                 </button>
               ))}
             </div>
@@ -105,8 +107,8 @@ export default function SettingsModal({
               type="text"
               value={model}
               onChange={(e) => setModel(e.target.value)}
-              placeholder="gemini-1.5-flash หรือ gpt-4o-mini"
-              className="w-full p-2 bg-[#18191b] border border-[#383a3e] rounded text-white outline-none focus:border-[#7b68ee]"
+              placeholder="เช่น gemini-1.5-flash, gpt-4o-mini, claude-3-5-sonnet-20241022, mistral-large-latest, qwen-plus, moonshot-v1-8k"
+              className="w-full p-2 bg-[#18191b] border border-[#383a3e] rounded-lg text-white outline-none focus:border-[#7b68ee]"
             />
           </div>
 
@@ -114,11 +116,13 @@ export default function SettingsModal({
           {provider !== 'ollama' && (
             <div className="space-y-1">
               <div className="flex items-center justify-between">
-                <label className="text-gray-300 font-medium">API Key</label>
+                <label className="text-gray-300 font-medium">
+                  API Key ({provider === 'gemini' ? 'Google AI Studio' : provider === 'claude' ? 'Anthropic Console' : provider === 'mistral' ? 'Mistral Console' : provider === 'qwen' ? 'Alibaba DashScope' : provider === 'kimi' ? 'Moonshot Open Platform' : 'OpenAI Platform'})
+                </label>
                 <button
                   type="button"
                   onClick={() => setShowKey(!showKey)}
-                  className="text-[11px] text-purple-400 hover:underline"
+                  className="text-[11px] text-purple-400 hover:underline cursor-pointer"
                 >
                   {showKey ? 'ซ่อน Key' : 'แสดง Key'}
                 </button>
@@ -127,14 +131,21 @@ export default function SettingsModal({
                 type={showKey ? 'text' : 'password'}
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
-                placeholder={provider === 'gemini' ? 'AIzaSy...' : 'sk-...'}
-                className="w-full p-2 bg-[#18191b] border border-[#383a3e] rounded text-white outline-none focus:border-[#7b68ee] font-mono text-[11px]"
+                placeholder={
+                  provider === 'gemini' ? 'AIzaSy...' :
+                  provider === 'claude' ? 'sk-ant-api03-...' :
+                  provider === 'mistral' ? '...' :
+                  provider === 'qwen' ? 'sk-...' :
+                  provider === 'kimi' ? 'sk-...' :
+                  'sk-proj-...'
+                }
+                className="w-full p-2 bg-[#18191b] border border-[#383a3e] rounded-lg text-white outline-none focus:border-[#7b68ee] font-mono text-[11px]"
               />
             </div>
           )}
 
           {/* Security Note */}
-          <div className="p-3 bg-[#18191b] border border-[#2e3034] rounded-md flex items-start space-x-2 text-[11px] text-gray-400">
+          <div className="p-3 bg-[#18191b] border border-[#2e3034] rounded-lg flex items-start space-x-2 text-[11px] text-gray-400">
             <ShieldCheck size={16} className="text-emerald-400 flex-shrink-0 mt-0.5" />
             <span>
               API Key จะถูกบันทึกลงในไฟล์ SQLite บนเครื่องคอมพิวเตอร์ของคุณเท่านั้น ไม่มีการส่งต่อไปยังเซิร์ฟเวอร์ภายนอกอื่นใด

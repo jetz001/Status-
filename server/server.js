@@ -6,7 +6,7 @@ const fs = require('fs');
 
 const { db } = require('./db');
 const { indexTask, semanticSearch, reindexAll } = require('./ragService');
-const { polishText, generateSubtasks, autofillMetadata, chatAssistant } = require('./aiService');
+const { callLLM, polishText, generateSubtasks, autofillMetadata, chatAssistant } = require('./aiService');
 const { setWindowsWallpaper, saveWallpaperDataUrl, STOCK_WALLPAPERS } = require('./wallpaperService');
 
 const app = express();
@@ -74,6 +74,42 @@ app.post('/api/spaces', (req, res) => {
   }
 });
 
+app.put('/api/spaces/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, color, icon } = req.body;
+    db.prepare(`
+      UPDATE spaces 
+      SET name = COALESCE(?, name),
+          color = COALESCE(?, color),
+          icon = COALESCE(?, icon)
+      WHERE id = ?
+    `).run(name || null, color || null, icon || null, id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/spaces/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const lists = db.prepare('SELECT id FROM lists WHERE space_id = ?').all(id);
+    for (const l of lists) {
+      const tasks = db.prepare('SELECT id FROM tasks WHERE list_id = ?').all(l.id);
+      for (const t of tasks) {
+        db.prepare('DELETE FROM task_embeddings WHERE task_id = ?').run(t.id);
+        db.prepare('DELETE FROM tasks WHERE id = ?').run(t.id);
+      }
+      db.prepare('DELETE FROM lists WHERE id = ?').run(l.id);
+    }
+    db.prepare('DELETE FROM spaces WHERE id = ?').run(id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/lists', (req, res) => {
   try {
     const { space_id, name, color = '#7b68ee' } = req.body;
@@ -81,6 +117,73 @@ app.post('/api/lists', (req, res) => {
     db.prepare('INSERT INTO lists (id, space_id, name, color) VALUES (?, ?, ?, ?)')
       .run(id, space_id, name, color);
     res.json({ id, space_id, name, color });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/lists/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, color } = req.body;
+    db.prepare(`
+      UPDATE lists 
+      SET name = COALESCE(?, name),
+          color = COALESCE(?, color)
+      WHERE id = ?
+    `).run(name || null, color || null, id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/lists/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const tasks = db.prepare('SELECT id FROM tasks WHERE list_id = ?').all(id);
+    for (const t of tasks) {
+      db.prepare('DELETE FROM task_embeddings WHERE task_id = ?').run(t.id);
+      db.prepare('DELETE FROM tasks WHERE id = ?').run(t.id);
+    }
+    db.prepare('DELETE FROM custom_fields WHERE list_id = ?').run(id);
+    db.prepare('DELETE FROM lists WHERE id = ?').run(id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/lists/:id/duplicate', (req, res) => {
+  try {
+    const { id } = req.params;
+    const origList = db.prepare('SELECT * FROM lists WHERE id = ?').get(id);
+    if (!origList) return res.status(404).json({ error: 'List not found' });
+
+    const newListId = `list-${Date.now()}`;
+    db.prepare('INSERT INTO lists (id, space_id, name, color, position) VALUES (?, ?, ?, ?, ?)')
+      .run(newListId, origList.space_id, `${origList.name} (Copy)`, origList.color, (origList.position || 0) + 1);
+
+    // Copy tasks
+    const tasks = db.prepare('SELECT * FROM tasks WHERE list_id = ?').all(id);
+    for (const t of tasks) {
+      const newTaskId = `task-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+      db.prepare(`
+        INSERT INTO tasks (id, list_id, name, description, status, priority, due_date, start_date, assignee, position)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(newTaskId, newListId, t.name, t.description, t.status, t.priority, t.due_date, t.start_date, t.assignee, t.position);
+
+      // Copy subtasks
+      const subtasks = db.prepare('SELECT * FROM subtasks WHERE task_id = ?').all(t.id);
+      for (const s of subtasks) {
+        db.prepare('INSERT INTO subtasks (id, task_id, title, completed, position) VALUES (?, ?, ?, ?, ?)')
+          .run(`sub-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`, newTaskId, s.title, s.completed, s.position);
+      }
+
+      indexTask(newTaskId);
+    }
+
+    res.json({ success: true, id: newListId });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -467,52 +570,6 @@ app.get('/api/rag/search', (req, res) => {
   }
 });
 
-app.post('/api/ai/chat', async (req, res) => {
-  try {
-    const { messages = [] } = req.body;
-    const lastMsg = messages[messages.length - 1]?.content || '';
-    
-    // Perform RAG retrieval on the user's message
-    const ragResults = semanticSearch(lastMsg, 4);
-    const ragContext = ragResults.map(r => `• [${r.status}] ${r.name} (ความสำคัญ: ${r.priority}, กำหนดส่ง: ${r.dueDate || '-'}):\n  ${r.textChunk}`).join('\n\n');
-
-    const reply = await chatAssistant(messages, ragContext);
-    res.json({ reply, sources: ragResults });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.post('/api/ai/polish', async (req, res) => {
-  try {
-    const { text } = req.body;
-    const polished = await polishText(text);
-    res.json({ text: polished });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.post('/api/ai/generate-subtasks', async (req, res) => {
-  try {
-    const { title, description } = req.body;
-    const subtasks = await generateSubtasks(title, description);
-    res.json({ subtasks });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.post('/api/ai/autofill', async (req, res) => {
-  try {
-    const { title } = req.body;
-    const data = await autofillMetadata(title);
-    res.json(data);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 // ==========================================
 // 6. WINDOWS WALLPAPER
 // ==========================================
@@ -611,6 +668,109 @@ app.post('/api/settings', (req, res) => {
     }
     res.json({ success: true });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// 8.5. AI & RAG ENDPOINTS
+// ==========================================
+
+// Semantic Vector RAG Search
+app.get('/api/rag/search', (req, res) => {
+  try {
+    const { q, limit = 6 } = req.query;
+    if (!q || !q.trim()) return res.json([]);
+    const results = semanticSearch(q.trim(), parseInt(limit, 10) || 6);
+    res.json(results);
+  } catch (err) {
+    console.error('Error in /api/rag/search:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// AI Conversational Assistant with RAG context
+app.post('/api/ai/chat', async (req, res) => {
+  try {
+    const { messages } = req.body;
+    if (!messages || !Array.isArray(messages)) {
+      return res.status(400).json({ error: 'Messages array is required.' });
+    }
+    const lastUserMsg = messages[messages.length - 1]?.content || '';
+    const ragResults = semanticSearch(lastUserMsg, 5);
+    const ragContext = ragResults.map(r => `- [${r.status}] ${r.name} (Priority: ${r.priority || 'Normal'}, List: ${r.listName}): ${r.textChunk || ''}`).join('\n');
+    
+    const reply = await chatAssistant(messages, ragContext);
+    res.json({
+      reply: reply || 'ขออภัยครับ ไม่สามารถประมวลผลข้อความได้ในขณะนี้',
+      sources: ragResults
+    });
+  } catch (err) {
+    console.error('Error in /api/ai/chat:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// AI Polish Title or Text
+app.post('/api/ai/polish', async (req, res) => {
+  try {
+    const { text } = req.body;
+    if (!text || !text.trim()) return res.json({ text: '' });
+    const polished = await polishText(text.trim());
+    res.json({ text: polished || text.trim() });
+  } catch (err) {
+    console.error('Error in /api/ai/polish:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// AI Generate Subtasks Checklist
+app.post('/api/ai/generate-subtasks', async (req, res) => {
+  try {
+    const { title, description = '' } = req.body;
+    if (!title || !title.trim()) return res.json({ subtasks: [] });
+    const subtasks = await generateSubtasks(title.trim(), description.trim());
+    res.json({ subtasks: subtasks || [] });
+  } catch (err) {
+    console.error('Error in /api/ai/generate-subtasks:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// AI Smart Auto-Fill (Priority, Severity, Suggested Days, and Auto Description)
+app.post('/api/ai/autofill', async (req, res) => {
+  try {
+    const { title, description = '' } = req.body;
+    if (!title || !title.trim()) {
+      return res.json({ priority: 'Normal', severity: 'Low', suggestedDays: 7, description: '' });
+    }
+    const metadata = await autofillMetadata(title.trim());
+
+    // Generate or enhance task description
+    let enhancedDescription = '';
+    const descPrompt = `วิเคราะห์ชื่องาน: "${title.trim()}" ${description ? 'รายละเอียดเดิม: ' + description.trim() : ''}
+กรุณาเขียนคำอธิบายงานและแนวทางการปฏิบัติงาน (Scope of Work & Key Deliverables) สำหรับชิ้นงานนี้
+สรุปเป็น 2-4 บรรทัด หรือรายการข้อที่กระชับ ชัดเจน เป็นภาษาไทยสำหรับฝ่ายบริหารและทีมงาน
+ตอบเฉพาะเนื้อหาคำอธิบายเท่านั้น ไม่ต้องมีคำเกริ่น`;
+    
+    const descResult = await callLLM(descPrompt, 'คุณคือผู้จัดการโครงการมืออาชีพ');
+    if (descResult && descResult.trim()) {
+      enhancedDescription = descResult.trim();
+    } else {
+      enhancedDescription = `รายละเอียดการดำเนินงานสำหรับ: ${title.trim()}
+- ตรวจสอบความถูกต้องและรวบรวมข้อมูลที่เกี่ยวข้อง
+- ดำเนินการตามขั้นตอนและมาตรฐานของโครงการ
+- ประเมินผลลัพธ์และสรุปรายงานเสนอฝ่ายบริหาร`;
+    }
+
+    res.json({
+      priority: metadata.priority || 'Normal',
+      severity: metadata.severity || 'Minor',
+      suggestedDays: metadata.suggestedDays || 7,
+      description: enhancedDescription
+    });
+  } catch (err) {
+    console.error('Error in /api/ai/autofill:', err);
     res.status(500).json({ error: err.message });
   }
 });

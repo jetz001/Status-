@@ -156,6 +156,72 @@ export default function App() {
     }
   };
 
+  const handleUpdateSpace = async (spaceId, updates) => {
+    try {
+      await fetch(`/api/spaces/${spaceId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      });
+      loadSpaces();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleDeleteSpace = async (spaceId) => {
+    try {
+      await fetch(`/api/spaces/${spaceId}`, { method: 'DELETE' });
+      loadSpaces();
+      loadTasks();
+      loadAllTasks();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleUpdateList = async (listId, updates) => {
+    try {
+      await fetch(`/api/lists/${listId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      });
+      loadSpaces();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleDeleteList = async (listId) => {
+    try {
+      await fetch(`/api/lists/${listId}`, { method: 'DELETE' });
+      loadSpaces();
+      loadTasks();
+      loadAllTasks();
+      if (activeListId === listId) {
+        setActiveListId(null);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleDuplicateList = async (listId) => {
+    try {
+      const res = await fetch(`/api/lists/${listId}/duplicate`, { method: 'POST' });
+      const data = await res.json();
+      loadSpaces();
+      loadAllTasks();
+      if (data && data.newList && data.newList.id) {
+        setActiveListId(data.newList.id);
+        setActiveView('list');
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   // Task Mutations
   const handleQuickAddTask = async (taskData) => {
     try {
@@ -299,6 +365,12 @@ export default function App() {
         onSelectHome={() => setActiveView('home')}
         onCreateSpace={handleCreateSpace}
         onCreateList={handleCreateList}
+        onUpdateSpace={handleUpdateSpace}
+        onDeleteSpace={handleDeleteSpace}
+        onUpdateList={handleUpdateList}
+        onDeleteList={handleDeleteList}
+        onDuplicateList={handleDuplicateList}
+        onQuickAddTask={handleQuickAddTask}
         onOpenAISidebar={() => setShowAISidebar(true)}
         onOpenSettings={() => setShowSettingsModal(true)}
         onOpenBackupDataModal={() => setShowBackupModal(true)}
@@ -332,6 +404,14 @@ export default function App() {
               spaces={spaces}
               onSelectTask={setSelectedTask}
               onUpdateTaskStatus={handleUpdateTaskStatus}
+              onUpdateTaskPriority={(taskId, priority) => handleUpdateTask(taskId, { priority })}
+              onDeleteTask={handleDeleteTask}
+              onCopyTask={(taskId, targetListId) => handleCopyTask(taskId, targetListId, true, true)}
+              onOpenMoveCopy={(task) => {
+                setTaskForMoveCopy(task);
+                setShowMoveCopyModal(true);
+              }}
+              onOpenPrintSingleTask={(task) => setPrintConfig({ type: 'task', singleTask: task })}
               onQuickAddTask={handleQuickAddTask}
               onSelectList={(listId) => {
                 setActiveListId(listId);
@@ -349,7 +429,10 @@ export default function App() {
               fields={fields}
               onSelectTask={setSelectedTask}
               onUpdateTaskStatus={handleUpdateTaskStatus}
+              onUpdateTaskPriority={(taskId, priority) => handleUpdateTask(taskId, { priority })}
               onDeleteTask={handleDeleteTask}
+              onCopyTask={(taskId, targetListId) => handleCopyTask(taskId, targetListId, true, true)}
+              onOpenPrintSingleTask={(task) => setPrintConfig({ type: 'task', singleTask: task })}
               onQuickAddTask={handleQuickAddTask}
               onOpenMoveCopy={(task) => {
                 setTaskForMoveCopy(task);
@@ -364,7 +447,10 @@ export default function App() {
               tasks={filteredTasks}
               onSelectTask={setSelectedTask}
               onUpdateTaskStatus={handleUpdateTaskStatus}
+              onUpdateTaskPriority={(taskId, priority) => handleUpdateTask(taskId, { priority })}
               onDeleteTask={handleDeleteTask}
+              onCopyTask={(taskId, targetListId) => handleCopyTask(taskId, targetListId, true, true)}
+              onOpenPrintSingleTask={(task) => setPrintConfig({ type: 'task', singleTask: task })}
               onQuickAddTask={handleQuickAddTask}
               onOpenMoveCopy={(task) => {
                 setTaskForMoveCopy(task);

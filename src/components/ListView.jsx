@@ -10,8 +10,12 @@ import {
   ArrowRightLeft, 
   Image as ImageIcon,
   Calendar,
-  AlertCircle
+  AlertCircle,
+  Flag,
+  Printer,
+  ExternalLink
 } from 'lucide-react';
+import ContextMenu from './ContextMenu.jsx';
 
 const STATUS_CONFIG = {
   'COMPLETED': {
@@ -42,7 +46,10 @@ export default function ListView({
   fields = [],
   onSelectTask,
   onUpdateTaskStatus,
+  onUpdateTaskPriority,
   onDeleteTask,
+  onCopyTask,
+  onOpenPrintSingleTask,
   onQuickAddTask,
   onOpenMoveCopy,
   onOpenAddColumn
@@ -50,6 +57,7 @@ export default function ListView({
   const [quickAddName, setQuickAddName] = useState('');
   const [quickAddStatus, setQuickAddStatus] = useState(null);
   const [taskToDelete, setTaskToDelete] = useState(null);
+  const [contextMenu, setContextMenu] = useState({ isOpen: false, position: { x: 0, y: 0 }, items: [] });
 
   // Group tasks by status
   const statuses = ['COMPLETED', 'IN PROGRESS', 'NOT STARTED'];
@@ -71,6 +79,104 @@ export default function ListView({
       onDeleteTask(taskToDelete.id);
       setTaskToDelete(null);
     }
+  };
+
+  const handleTaskContextMenu = (e, task) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const statusSubmenu = [
+      {
+        label: 'COMPLETED (เสร็จสิ้น)',
+        colorDot: '#26b26d',
+        checked: task.status === 'COMPLETED',
+        onClick: () => onUpdateTaskStatus(task.id, 'COMPLETED')
+      },
+      {
+        label: 'IN PROGRESS (กำลังทำ)',
+        colorDot: '#1e88e5',
+        checked: task.status === 'IN PROGRESS',
+        onClick: () => onUpdateTaskStatus(task.id, 'IN PROGRESS')
+      },
+      {
+        label: 'NOT STARTED (ยังไม่เริ่ม)',
+        colorDot: '#e2483d',
+        checked: task.status === 'NOT STARTED',
+        onClick: () => onUpdateTaskStatus(task.id, 'NOT STARTED')
+      }
+    ];
+
+    const prioritySubmenu = [
+      {
+        label: 'Urgent (ด่วนมาก)',
+        colorDot: '#ef4444',
+        checked: task.priority === 'Urgent',
+        onClick: () => onUpdateTaskPriority && onUpdateTaskPriority(task.id, 'Urgent')
+      },
+      {
+        label: 'High (สูง)',
+        colorDot: '#f59e0b',
+        checked: task.priority === 'High',
+        onClick: () => onUpdateTaskPriority && onUpdateTaskPriority(task.id, 'High')
+      },
+      {
+        label: 'Normal (ปกติ)',
+        colorDot: '#3b82f6',
+        checked: task.priority === 'Normal' || !task.priority,
+        onClick: () => onUpdateTaskPriority && onUpdateTaskPriority(task.id, 'Normal')
+      },
+      {
+        label: 'Low (ต่ำ)',
+        colorDot: '#94a3b8',
+        checked: task.priority === 'Low',
+        onClick: () => onUpdateTaskPriority && onUpdateTaskPriority(task.id, 'Low')
+      }
+    ];
+
+    setContextMenu({
+      isOpen: true,
+      position: { x: e.clientX, y: e.clientY },
+      items: [
+        {
+          label: 'เปิดดู / แก้ไขงาน',
+          icon: ExternalLink,
+          onClick: () => onSelectTask(task)
+        },
+        {
+          label: 'เปลี่ยนสถานะ (Status)',
+          icon: Circle,
+          submenu: statusSubmenu
+        },
+        {
+          label: 'ปรับความสำคัญ (Priority)',
+          icon: Flag,
+          submenu: prioritySubmenu
+        },
+        { type: 'separator' },
+        {
+          label: 'ย้ายงานไปที่... (Move)',
+          icon: ArrowRightLeft,
+          onClick: () => onOpenMoveCopy && onOpenMoveCopy(task)
+        },
+        {
+          label: 'ทำสำเนางาน (Duplicate)',
+          icon: Copy,
+          onClick: () => onCopyTask && onCopyTask(task.id, task.list_id)
+        },
+        {
+          label: 'พิมพ์ / ส่งออก PDF',
+          icon: Printer,
+          onClick: () => onOpenPrintSingleTask && onOpenPrintSingleTask(task)
+        },
+        { type: 'separator' },
+        {
+          label: 'ลบงานนี้ (Delete)',
+          icon: Trash2,
+          danger: true,
+          onClick: () => setTaskToDelete(task)
+        }
+      ]
+    });
   };
 
   return (
@@ -117,7 +223,9 @@ export default function ListView({
                       <tr 
                         key={task.id}
                         onClick={() => onSelectTask(task)}
+                        onContextMenu={(e) => handleTaskContextMenu(e, task)}
                         className="hover:bg-[#252629] cursor-pointer group transition duration-150"
+                        title="คลิกขวาเพื่อเปิดเมนูลัด"
                       >
                         {/* Name Column */}
                         <td className="py-2.5 px-3">
@@ -308,6 +416,14 @@ export default function ListView({
           </div>
         </div>
       )}
+
+      {/* Context Menu Component */}
+      <ContextMenu 
+        isOpen={contextMenu.isOpen}
+        position={contextMenu.position}
+        items={contextMenu.items}
+        onClose={() => setContextMenu(prev => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }

@@ -40,6 +40,7 @@ export default function TaskDrawer({
   const [fieldValues, setFieldValues] = useState(task.fieldValues || {});
   const [attachments, setAttachments] = useState(task.attachments || []);
   const [isAiLoading, setIsAiLoading] = useState(false);
+  const [aiNotice, setAiNotice] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const fileInputRef = useRef(null);
 
@@ -177,6 +178,7 @@ export default function TaskDrawer({
   const handleAiPolishTitle = async () => {
     if (!name) return;
     setIsAiLoading(true);
+    setAiNotice('');
     try {
       const res = await fetch('/api/ai/polish', {
         method: 'POST',
@@ -184,9 +186,15 @@ export default function TaskDrawer({
         body: JSON.stringify({ text: name })
       });
       const data = await res.json();
-      if (data.text) setName(data.text);
+      if (data.text) {
+        setName(data.text);
+        onUpdateTask(task.id, { name: data.text });
+        setAiNotice('✨ ปรับปรุงชื่องานด้วย AI สำเร็จแล้ว!');
+        setTimeout(() => setAiNotice(''), 4000);
+      }
     } catch (err) {
       console.error(err);
+      setAiNotice('⚠️ ไม่สามารถเรียกใช้งาน AI ได้');
     } finally {
       setIsAiLoading(false);
     }
@@ -194,6 +202,7 @@ export default function TaskDrawer({
 
   const handleAiGenerateSubtasks = async () => {
     setIsAiLoading(true);
+    setAiNotice('');
     try {
       const res = await fetch('/api/ai/generate-subtasks', {
         method: 'POST',
@@ -201,7 +210,7 @@ export default function TaskDrawer({
         body: JSON.stringify({ title: name, description })
       });
       const data = await res.json();
-      if (data.subtasks) {
+      if (data.subtasks && data.subtasks.length > 0) {
         for (const st of data.subtasks) {
           const subRes = await fetch(`/api/tasks/${task.id}/subtasks`, {
             method: 'POST',
@@ -211,9 +220,12 @@ export default function TaskDrawer({
           const created = await subRes.json();
           setSubtasks(prev => [...prev, created]);
         }
+        setAiNotice(`✨ AI แตกซับทาสก์สำเร็จ เพิ่ม ${data.subtasks.length} รายการ!`);
+        setTimeout(() => setAiNotice(''), 4000);
       }
     } catch (err) {
       console.error(err);
+      setAiNotice('⚠️ ไม่สามารถเรียกใช้งาน AI ได้');
     } finally {
       setIsAiLoading(false);
     }
@@ -221,17 +233,29 @@ export default function TaskDrawer({
 
   const handleAiAutofill = async () => {
     setIsAiLoading(true);
+    setAiNotice('');
     try {
       const res = await fetch('/api/ai/autofill', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: name })
+        body: JSON.stringify({ title: name, description })
       });
       const data = await res.json();
-      if (data.priority) setPriority(data.priority);
+      const updates = {};
+
+      if (data.priority) {
+        setPriority(data.priority);
+        updates.priority = data.priority;
+      }
+      if (data.description) {
+        setDescription(data.description);
+        updates.description = data.description;
+      }
       if (data.suggestedDays && !dueDate) {
         const d = new Date(Date.now() + 86400000 * data.suggestedDays);
-        setDueDate(d.toISOString().split('T')[0]);
+        const dateStr = d.toISOString().split('T')[0];
+        setDueDate(dateStr);
+        updates.due_date = dateStr;
       }
       if (data.severity) {
         const sevField = fields.find(f => f.name.includes('Severity'));
@@ -239,8 +263,13 @@ export default function TaskDrawer({
           setFieldValues(prev => ({ ...prev, [sevField.id]: data.severity }));
         }
       }
+
+      onUpdateTask(task.id, updates);
+      setAiNotice('✨ AI Auto-Fill เติมรายละเอียดและปรับแต่งข้อมูลให้แล้ว!');
+      setTimeout(() => setAiNotice(''), 4000);
     } catch (err) {
       console.error(err);
+      setAiNotice('⚠️ ไม่สามารถเรียกใช้งาน AI ได้');
     } finally {
       setIsAiLoading(false);
     }
@@ -309,6 +338,30 @@ export default function TaskDrawer({
           </button>
         </div>
       </div>
+
+      {/* AI Processing Banner */}
+      {isAiLoading && (
+        <div className="px-4 py-2 bg-purple-950/50 border-b border-purple-500/40 text-purple-200 text-xs flex items-center space-x-2 animate-pulse">
+          <Sparkles size={14} className="text-purple-400 animate-spin flex-shrink-0" />
+          <span>AI กำลังประมวลผลและวิเคราะห์ข้อมูล กรุณารอสักครู่...</span>
+        </div>
+      )}
+
+      {/* AI Success / Alert Banner */}
+      {aiNotice && !isAiLoading && (
+        <div className="px-4 py-2 bg-emerald-950/60 border-b border-emerald-500/40 text-emerald-200 text-xs flex items-center justify-between animate-in fade-in duration-200">
+          <div className="flex items-center space-x-2 truncate">
+            <CheckCircle2 size={15} className="text-emerald-400 flex-shrink-0" />
+            <span className="font-medium truncate">{aiNotice}</span>
+          </div>
+          <button 
+            onClick={() => setAiNotice('')} 
+            className="text-emerald-400 hover:text-white text-[11px] px-1 cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Main Body Scroll Area */}
       <div className="flex-1 overflow-y-auto p-5 space-y-6">

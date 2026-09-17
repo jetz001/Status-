@@ -21,20 +21,31 @@ import {
   Layers,
   Send,
   Trash2,
-  FileText
+  FileText,
+  Flag,
+  Printer,
+  ExternalLink,
+  Copy
 } from 'lucide-react';
+import ContextMenu from './ContextMenu.jsx';
 
 export default function HomeView({
   allTasks = [],
   spaces = [],
   onSelectTask,
   onUpdateTaskStatus,
+  onUpdateTaskPriority,
+  onDeleteTask,
+  onCopyTask,
+  onOpenMoveCopy,
+  onOpenPrintSingleTask,
   onQuickAddTask,
   onSelectList,
   onOpenAISidebar,
   onOpenWallpaperModal,
   onOpenBackupModal
 }) {
+  const [contextMenu, setContextMenu] = useState({ isOpen: false, position: { x: 0, y: 0 }, items: [] });
   // 1. Greeting calculation
   const [greeting, setGreeting] = useState({ text: 'สวัสดี', icon: 'sun' });
   const [todayFormatted, setTodayFormatted] = useState('');
@@ -162,6 +173,104 @@ export default function HomeView({
     setQuickTaskTitle('');
   };
 
+  const handleTaskContextMenu = (e, task) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const statusSubmenu = [
+      {
+        label: 'COMPLETED (เสร็จสิ้น)',
+        colorDot: '#26b26d',
+        checked: task.status === 'COMPLETED',
+        onClick: () => onUpdateTaskStatus(task.id, 'COMPLETED')
+      },
+      {
+        label: 'IN PROGRESS (กำลังทำ)',
+        colorDot: '#1e88e5',
+        checked: task.status === 'IN PROGRESS',
+        onClick: () => onUpdateTaskStatus(task.id, 'IN PROGRESS')
+      },
+      {
+        label: 'NOT STARTED (ยังไม่เริ่ม)',
+        colorDot: '#e2483d',
+        checked: task.status === 'NOT STARTED',
+        onClick: () => onUpdateTaskStatus(task.id, 'NOT STARTED')
+      }
+    ];
+
+    const prioritySubmenu = [
+      {
+        label: 'Urgent (ด่วนมาก)',
+        colorDot: '#ef4444',
+        checked: task.priority === 'Urgent',
+        onClick: () => onUpdateTaskPriority && onUpdateTaskPriority(task.id, 'Urgent')
+      },
+      {
+        label: 'High (สูง)',
+        colorDot: '#f59e0b',
+        checked: task.priority === 'High',
+        onClick: () => onUpdateTaskPriority && onUpdateTaskPriority(task.id, 'High')
+      },
+      {
+        label: 'Normal (ปกติ)',
+        colorDot: '#3b82f6',
+        checked: task.priority === 'Normal' || !task.priority,
+        onClick: () => onUpdateTaskPriority && onUpdateTaskPriority(task.id, 'Normal')
+      },
+      {
+        label: 'Low (ต่ำ)',
+        colorDot: '#94a3b8',
+        checked: task.priority === 'Low',
+        onClick: () => onUpdateTaskPriority && onUpdateTaskPriority(task.id, 'Low')
+      }
+    ];
+
+    setContextMenu({
+      isOpen: true,
+      position: { x: e.clientX, y: e.clientY },
+      items: [
+        {
+          label: 'เปิดดู / แก้ไขงาน',
+          icon: ExternalLink,
+          onClick: () => onSelectTask(task)
+        },
+        {
+          label: 'เปลี่ยนสถานะ (Status)',
+          icon: Circle,
+          submenu: statusSubmenu
+        },
+        {
+          label: 'ปรับความสำคัญ (Priority)',
+          icon: Flag,
+          submenu: prioritySubmenu
+        },
+        { type: 'separator' },
+        {
+          label: 'ย้ายงานไปที่... (Move)',
+          icon: ArrowRightLeft,
+          onClick: () => onOpenMoveCopy && onOpenMoveCopy(task)
+        },
+        {
+          label: 'ทำสำเนางาน (Duplicate)',
+          icon: Copy,
+          onClick: () => onCopyTask && onCopyTask(task.id, task.list_id)
+        },
+        {
+          label: 'พิมพ์ / ส่งออก PDF',
+          icon: Printer,
+          onClick: () => onOpenPrintSingleTask && onOpenPrintSingleTask(task)
+        },
+        { type: 'separator' },
+        {
+          label: 'ลบงานนี้ (Delete)',
+          icon: Trash2,
+          danger: true,
+          onClick: () => onDeleteTask && onDeleteTask(task.id)
+        }
+      ]
+    });
+  };
+
   return (
     <div className="flex-1 overflow-y-auto bg-[#1e1f21] text-[#ececef] p-6 space-y-6 select-none">
       {/* ========================================================= */}
@@ -175,9 +284,11 @@ export default function HomeView({
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 relative z-10">
           {/* User Info & Greeting */}
           <div className="flex items-center space-x-4">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-[#7b68ee] to-indigo-500 flex items-center justify-center text-white font-black text-2xl shadow-lg shadow-purple-500/20">
-              S+
-            </div>
+            <img 
+              src="/logo.png" 
+              alt="Status+" 
+              className="w-14 h-14 rounded-2xl object-cover shadow-lg shadow-purple-500/20 ring-1 ring-white/10 flex-shrink-0" 
+            />
             <div>
               <div className="flex items-center space-x-2">
                 <h1 className="text-xl md:text-2xl font-bold text-white tracking-tight">
@@ -374,7 +485,9 @@ export default function HomeView({
                     <div
                       key={task.id}
                       onClick={() => onSelectTask(task)}
+                      onContextMenu={(e) => handleTaskContextMenu(e, task)}
                       className="group flex items-center justify-between p-2.5 bg-[#1a1b1e] hover:bg-[#202226] border border-[#2e3034] hover:border-[#3d4046] rounded-xl transition cursor-pointer"
+                      title="คลิกขวาเพื่อเปิดเมนูลัด"
                     >
                       {/* Left: Checkbox + Name */}
                       <div className="flex items-center space-x-3 truncate flex-1 mr-3">
@@ -696,6 +809,14 @@ export default function HomeView({
           </div>
         </div>
       )}
+
+      {/* Context Menu Component */}
+      <ContextMenu 
+        isOpen={contextMenu.isOpen}
+        position={contextMenu.position}
+        items={contextMenu.items}
+        onClose={() => setContextMenu(prev => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }

@@ -8,8 +8,14 @@ import {
   Edit3, 
   Trash2, 
   ArrowRightLeft,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Circle,
+  Flag,
+  Printer,
+  ExternalLink,
+  Copy
 } from 'lucide-react';
+import ContextMenu from './ContextMenu.jsx';
 
 const STATUS_COLUMNS = [
   { id: 'NOT STARTED', name: 'NOT STARTED', color: '#e2483d' },
@@ -21,13 +27,17 @@ export default function BoardView({
   tasks,
   onSelectTask,
   onUpdateTaskStatus,
+  onUpdateTaskPriority,
   onDeleteTask,
+  onCopyTask,
+  onOpenPrintSingleTask,
   onQuickAddTask,
   onOpenMoveCopy
 }) {
   const [newCardTitle, setNewCardTitle] = useState('');
   const [addingToStatus, setAddingToStatus] = useState(null);
   const [activeMenuTaskId, setActiveMenuTaskId] = useState(null);
+  const [contextMenu, setContextMenu] = useState({ isOpen: false, position: { x: 0, y: 0 }, items: [] });
 
   const handleAddCard = (status) => {
     if (!newCardTitle.trim()) return;
@@ -51,6 +61,104 @@ export default function BoardView({
     if (taskId) {
       onUpdateTaskStatus(taskId, targetStatus);
     }
+  };
+
+  const handleTaskContextMenu = (e, task) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const statusSubmenu = [
+      {
+        label: 'COMPLETED (เสร็จสิ้น)',
+        colorDot: '#26b26d',
+        checked: task.status === 'COMPLETED',
+        onClick: () => onUpdateTaskStatus(task.id, 'COMPLETED')
+      },
+      {
+        label: 'IN PROGRESS (กำลังทำ)',
+        colorDot: '#1e88e5',
+        checked: task.status === 'IN PROGRESS',
+        onClick: () => onUpdateTaskStatus(task.id, 'IN PROGRESS')
+      },
+      {
+        label: 'NOT STARTED (ยังไม่เริ่ม)',
+        colorDot: '#e2483d',
+        checked: task.status === 'NOT STARTED',
+        onClick: () => onUpdateTaskStatus(task.id, 'NOT STARTED')
+      }
+    ];
+
+    const prioritySubmenu = [
+      {
+        label: 'Urgent (ด่วนมาก)',
+        colorDot: '#ef4444',
+        checked: task.priority === 'Urgent',
+        onClick: () => onUpdateTaskPriority && onUpdateTaskPriority(task.id, 'Urgent')
+      },
+      {
+        label: 'High (สูง)',
+        colorDot: '#f59e0b',
+        checked: task.priority === 'High',
+        onClick: () => onUpdateTaskPriority && onUpdateTaskPriority(task.id, 'High')
+      },
+      {
+        label: 'Normal (ปกติ)',
+        colorDot: '#3b82f6',
+        checked: task.priority === 'Normal' || !task.priority,
+        onClick: () => onUpdateTaskPriority && onUpdateTaskPriority(task.id, 'Normal')
+      },
+      {
+        label: 'Low (ต่ำ)',
+        colorDot: '#94a3b8',
+        checked: task.priority === 'Low',
+        onClick: () => onUpdateTaskPriority && onUpdateTaskPriority(task.id, 'Low')
+      }
+    ];
+
+    setContextMenu({
+      isOpen: true,
+      position: { x: e.clientX, y: e.clientY },
+      items: [
+        {
+          label: 'เปิดดู / แก้ไขงาน',
+          icon: ExternalLink,
+          onClick: () => onSelectTask(task)
+        },
+        {
+          label: 'เปลี่ยนสถานะ (Status)',
+          icon: Circle,
+          submenu: statusSubmenu
+        },
+        {
+          label: 'ปรับความสำคัญ (Priority)',
+          icon: Flag,
+          submenu: prioritySubmenu
+        },
+        { type: 'separator' },
+        {
+          label: 'ย้ายงานไปที่... (Move)',
+          icon: ArrowRightLeft,
+          onClick: () => onOpenMoveCopy && onOpenMoveCopy(task)
+        },
+        {
+          label: 'ทำสำเนางาน (Duplicate)',
+          icon: Copy,
+          onClick: () => onCopyTask && onCopyTask(task.id, task.list_id)
+        },
+        {
+          label: 'พิมพ์ / ส่งออก PDF',
+          icon: Printer,
+          onClick: () => onOpenPrintSingleTask && onOpenPrintSingleTask(task)
+        },
+        { type: 'separator' },
+        {
+          label: 'ลบงานนี้ (Delete)',
+          icon: Trash2,
+          danger: true,
+          onClick: () => onDeleteTask && onDeleteTask(task.id)
+        }
+      ]
+    });
   };
 
   return (
@@ -100,7 +208,9 @@ export default function BoardView({
                     draggable
                     onDragStart={(e) => handleDragStart(e, task.id)}
                     onClick={() => onSelectTask(task)}
+                    onContextMenu={(e) => handleTaskContextMenu(e, task)}
                     className="bg-[#222427] hover:bg-[#282a2e] border border-[#333538] hover:border-[#4a4d52] rounded-md p-3 cursor-grab active:cursor-grabbing transition shadow-sm group relative space-y-2"
+                    title="คลิกขวาเพื่อเปิดเมนูลัด"
                   >
                     {/* Optional Image Thumbnail */}
                     {firstImg && (
@@ -252,6 +362,14 @@ export default function BoardView({
           </div>
         );
       })}
+
+      {/* Context Menu Component */}
+      <ContextMenu 
+        isOpen={contextMenu.isOpen}
+        position={contextMenu.position}
+        items={contextMenu.items}
+        onClose={() => setContextMenu(prev => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }
