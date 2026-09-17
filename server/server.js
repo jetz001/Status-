@@ -1212,6 +1212,33 @@ app.post('/api/ai/confirm-action', async (req, res) => {
     const { actionType, payload } = req.body;
     if (!actionType) return res.status(400).json({ error: 'Action type is required' });
 
+    if (actionType === 'create_tasks' || (actionType === 'create_task' && Array.isArray(payload?.tasks))) {
+      const tasks = payload.tasks || [];
+      const targetListId = payload.list_id;
+      const fileInfo = payload.fileInfo || null;
+      const createdList = [];
+
+      for (const t of tasks) {
+        const singleRes = await executeTool('create_task', {
+          list_id: targetListId,
+          name: t.name,
+          description: t.description || '',
+          priority: t.priority || 'Normal',
+          due_date: t.due_date || null,
+          subtasks: t.subtasks || []
+        }, fileInfo);
+        createdList.push(singleRes);
+      }
+
+      return res.json({
+        success: true,
+        action: 'created_tasks',
+        count: createdList.length,
+        tasks: createdList,
+        message: `สร้างงานทั้งหมด ${createdList.length} รายการ เรียบร้อยแล้วครับ`
+      });
+    }
+
     const result = await executeTool(actionType, { ...payload, confirmed: true });
     res.json(result);
   } catch (err) {

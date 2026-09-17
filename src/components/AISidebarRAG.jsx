@@ -559,13 +559,15 @@ export default function AISidebarRAG({
   // Execute approved plan (create task in selected list)
   const handleExecuteApprovedPlan = async (msgIdx, actIdx, plan, targetListId) => {
     try {
+      const isMulti = Array.isArray(plan.tasks) && plan.tasks.length > 1;
       const res = await fetch('/api/ai/confirm-action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          actionType: 'create_task',
+          actionType: isMulti ? 'create_tasks' : 'create_task',
           payload: {
             list_id: targetListId || plan.defaultListId,
+            tasks: plan.tasks || [],
             name: plan.name,
             description: plan.description || '',
             priority: plan.priority || 'Normal',
@@ -583,8 +585,8 @@ export default function AISidebarRAG({
           if (cloned[msgIdx]?.actions?.[actIdx]) {
             cloned[msgIdx].actions[actIdx] = {
               ...result,
-              action: 'created_task',
-              resolvedMessage: result.message || `สร้างงาน "${plan.name}" สำเร็จแล้ว`
+              action: isMulti ? 'created_tasks' : 'created_task',
+              resolvedMessage: result.message || (isMulti ? `สร้างงานทั้งหมด ${plan.tasks.length} รายการสำเร็จแล้ว` : `สร้างงาน "${plan.name}" สำเร็จแล้ว`)
             };
           }
           return cloned;
@@ -711,31 +713,72 @@ export default function AISidebarRAG({
                                 </span>
                               </div>
 
-                              {/* Plan Details */}
-                              <div className="space-y-1.5 text-[11px]">
-                                <div>
-                                  <span className="text-gray-400 font-medium">ชื่องานที่แนะนำ:</span>{' '}
-                                  <span className="text-white font-semibold">{act.plan.name}</span>
-                                </div>
-                                {act.plan.description && (
-                                  <div className="text-gray-300 bg-[#1f2126] p-2 rounded border border-[#2f3238] text-[10.5px] leading-relaxed">
-                                    {act.plan.description}
+                              {/* Plan Details (Multi-Task or Single Task) */}
+                              {act.plan.tasks && act.plan.tasks.length > 1 ? (
+                                <div className="space-y-2 text-[11px]">
+                                  <div className="flex items-center justify-between text-gray-400 font-medium pb-1 border-b border-[#2d3035]">
+                                    <span className="text-cyan-300 font-semibold">📋 พบรายการงานทั้งหมด {act.plan.tasks.length} งาน:</span>
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-900/40 text-cyan-300 font-semibold border border-cyan-500/30">
+                                      {act.plan.tasks.length} Tasks Batch
+                                    </span>
                                   </div>
-                                )}
-                                {act.plan.subtasks && act.plan.subtasks.length > 0 && (
-                                  <div className="space-y-1 pt-1">
-                                    <span className="text-gray-400 font-medium text-[10.5px]">Checklist แนะนำ ({act.plan.subtasks.length} ข้อ):</span>
-                                    <div className="space-y-1 pl-1">
-                                      {act.plan.subtasks.map((st, sIdx) => (
-                                        <div key={sIdx} className="flex items-center space-x-1.5 text-gray-300 text-[10.5px]">
-                                          <Circle size={8} className="text-cyan-400/80 flex-shrink-0" />
-                                          <span>{typeof st === 'string' ? st : st.title}</span>
+                                  <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1">
+                                    {act.plan.tasks.map((taskItem, tIdx) => (
+                                      <div key={tIdx} className="bg-[#1b1e23] p-2 rounded-lg border border-[#2d3038] space-y-1">
+                                        <div className="flex items-center justify-between">
+                                          <span className="font-semibold text-white text-[11px] flex items-center space-x-1.5">
+                                            <span className="w-4 h-4 rounded-full bg-cyan-500/20 text-cyan-300 text-[9px] flex items-center justify-center font-bold">
+                                              {tIdx + 1}
+                                            </span>
+                                            <span>{taskItem.name}</span>
+                                          </span>
+                                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#26282f] text-gray-400 font-medium">
+                                            {taskItem.priority || 'Normal'}
+                                          </span>
                                         </div>
-                                      ))}
-                                    </div>
+                                        {taskItem.description && (
+                                          <p className="text-[10px] text-gray-400 pl-5 leading-tight">{taskItem.description}</p>
+                                        )}
+                                        {taskItem.subtasks && taskItem.subtasks.length > 0 && (
+                                          <div className="pl-5 pt-0.5 space-y-0.5">
+                                            {taskItem.subtasks.map((st, sIdx) => (
+                                              <div key={sIdx} className="flex items-center space-x-1 text-gray-400 text-[10px]">
+                                                <Circle size={6} className="text-cyan-400/70 flex-shrink-0" />
+                                                <span>{typeof st === 'string' ? st : st.title}</span>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    ))}
                                   </div>
-                                )}
-                              </div>
+                                </div>
+                              ) : (
+                                <div className="space-y-1.5 text-[11px]">
+                                  <div>
+                                    <span className="text-gray-400 font-medium">ชื่องานที่แนะนำ:</span>{' '}
+                                    <span className="text-white font-semibold">{act.plan.name}</span>
+                                  </div>
+                                  {act.plan.description && (
+                                    <div className="text-gray-300 bg-[#1f2126] p-2 rounded border border-[#2f3238] text-[10.5px] leading-relaxed">
+                                      {act.plan.description}
+                                    </div>
+                                  )}
+                                  {act.plan.subtasks && act.plan.subtasks.length > 0 && (
+                                    <div className="space-y-1 pt-1">
+                                      <span className="text-gray-400 font-medium text-[10.5px]">Checklist แนะนำ ({act.plan.subtasks.length} ข้อ):</span>
+                                      <div className="space-y-1 pl-1">
+                                        {act.plan.subtasks.map((st, sIdx) => (
+                                          <div key={sIdx} className="flex items-center space-x-1.5 text-gray-300 text-[10.5px]">
+                                            <Circle size={8} className="text-cyan-400/80 flex-shrink-0" />
+                                            <span>{typeof st === 'string' ? st : st.title}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
 
                               {/* Target Space & List Selector / Quick Selection */}
                               {act.availableLists && act.availableLists.length > 0 && (
@@ -769,7 +812,11 @@ export default function AISidebarRAG({
                                   className="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-lg font-bold text-[11px] transition shadow-sm cursor-pointer flex items-center space-x-1"
                                 >
                                   <Check size={13} />
-                                  <span>อนุมัติสร้างงานตามแผน</span>
+                                  <span>
+                                    {act.plan.tasks && act.plan.tasks.length > 1
+                                      ? `อนุมัติสร้างทั้งหมด (${act.plan.tasks.length} งาน)`
+                                      : 'อนุมัติสร้างงานตามแผน'}
+                                  </span>
                                 </button>
                               </div>
                             </div>

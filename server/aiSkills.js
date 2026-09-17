@@ -332,21 +332,30 @@ async function processAgentQuery({
 
     if (pendingPlan) {
       const targetListId = pendingPlan.defaultListId || activeListId || (flatLists[0]?.listId || '');
-      const taskRes = await executeTool('create_task', {
-        list_id: targetListId,
-        name: pendingPlan.name,
-        description: pendingPlan.description,
-        priority: pendingPlan.priority || 'Normal',
-        due_date: pendingPlan.due_date || null,
-        subtasks: pendingPlan.subtasks || []
-      }, pendingPlan.fileInfo);
+      const tasksToCreate = Array.isArray(pendingPlan.tasks) && pendingPlan.tasks.length > 0
+        ? pendingPlan.tasks
+        : [pendingPlan];
 
-      const targetListName = taskRes.task?.listName || (flatLists.find(l => l.listId === targetListId)?.listName || 'เป้าหมาย');
+      const createdTasks = [];
+      for (const t of tasksToCreate) {
+        const taskRes = await executeTool('create_task', {
+          list_id: targetListId,
+          name: t.name,
+          description: t.description || '',
+          priority: t.priority || 'Normal',
+          due_date: t.due_date || null,
+          subtasks: t.subtasks || []
+        }, pendingPlan.fileInfo);
+        createdTasks.push(taskRes);
+      }
+
+      const targetListName = createdTasks[0]?.task?.listName || (flatLists.find(l => l.listId === targetListId)?.listName || 'เป้าหมาย');
+      const taskNamesList = createdTasks.map((ct, idx) => `${idx + 1}. **${ct.task?.name}** (${ct.task?.subtaskCount || 0} checklists)`).join('\n');
 
       return {
         skill: SKILLS.task_ops,
-        actions: [taskRes],
-        reply: `🎉 **อนุมัติสร้างงานตามแผนเรียบร้อยแล้วครับ!**\n\n• ชื่องาน: **"${pendingPlan.name}"**\n• นำเข้าสู่ List: **"${targetListName}"**\n• Checklist ย่อย: **${pendingPlan.subtasks?.length || 0} รายการ**\n\nคุณสามารถคลิกเปิดการ์ดงานเพื่อตรวจสอบความคืบหน้าได้ทันทีครับ`
+        actions: createdTasks,
+        reply: `🎉 **อนุมัติสร้างงานตามแผนทั้งหมด ${createdTasks.length} รายการ เรียบร้อยแล้วครับ!**\n\n• บรรจุใน List: **"${targetListName}"**\n\n**รายการงานที่สร้าง:**\n${taskNamesList}\n\nคุณสามารถคลิกเปิดดูการ์ดงานเพื่อตรวจสอบความคืบหน้าได้ทันทีครับ`
       };
     }
   }
@@ -368,7 +377,7 @@ ${spacesListText}
 
 ${fileProcessed ? `
 มีไฟล์แนบเข้ามา: "${fileProcessed.originalName}" (${fileProcessed.type})
-${fileProcessed.text ? `เนื้อหาในเอกสารที่สกัดได้:\n"""\n${fileProcessed.text.slice(0, 3000)}\n"""` : 'ไฟล์รูปภาพ (ให้คุณทำหน้าที่ Vision OCR อ่านข้อความ ลายมือ ตาราง หัวข้อเอกสาร และรายละเอียดในภาพอย่างถี่ถ้วน เพื่อวิเคราะห์งาน)'}
+${fileProcessed.text ? `เนื้อหาในเอกสารที่สกัดได้:\n"""\n${fileProcessed.text.slice(0, 3000)}\n"""` : 'ไฟล์รูปภาพ (ให้คุณทำหน้าที่ Vision OCR อ่านข้อความ ลายมือ ตาราง รายชื่อ Task หัวข้อเอกสาร และรายละเอียดในภาพอย่างถี่ถ้วน เพื่อวิเคราะห์งาน)'}
 ` : ''}
 
 ## ข้อควรระวังและบริบทสำคัญ (CRITICAL RULES):
@@ -376,12 +385,15 @@ ${fileProcessed.text ? `เนื้อหาในเอกสารที่�
    - คำว่า "งาน" หรือ "จัดงาน" หมายถึง **ภาระงาน (Tasks / Work Items)** เช่น งานซ่อมบำรุง, ตรวจสอบความปลอดภัย, งานเอกสาร, ติดตามผล, ปรับปรุงระบบ ฯลฯ
    - **ห้ามเข้าใจผิดว่าเป็นการจัดงานเลี้ยง งานสังสรรค์ หรืองานอีเวนต์ (Event Planning) เด็ดขาด!**
 
-2. **การวิเคราะห์รูปภาพและตั้งชื่อแผนงาน (plan.name)**:
-   - ให้อ่านตัวหนังสือ OCR และวิเคราะห์เนื้อหาในภาพอย่างละเอียด เพื่อระบุว่าเอกสารหรือรูปภาพนี้คือเรื่องอะไร
-   - **การตั้งชื่องานที่แนะนำ (plan.name)**:
-     - ต้องตั้งชื่องานจริงที่อ่านได้จากภาพอย่างเฉพาะเจาะจง สื่อความหมาย เช่น "งานตรวจเช็คและซ่อมบำรุงระบบปรับอากาศ (HVAC)", "ตรวจสอบความปลอดภัยประจำสัปดาห์", "บันทึกผลตรวจสอบคุณภาพ QMS ประจำงวด"
-     - **ข้อห้ามเด็ดขาด (STRICT PROHIBITION)**: ห้ามนำชื่อไฟล์ เช่น "clipboard-...", "image.png", "วิเคราะห์และดำเนินงานตามรูปภาพ: ...", หรือ "ดำเนินการตามเอกสาร: ..." มาเป็นชื่องานเด็ดขาด!
-   - **Checklist (Subtasks)**: แตกข้อย่อย 3-5 ข้อที่ตรงกับขั้นตอนปฏิบัติจริงในเอกสารหรือภาพ
+2. **การวิเคราะห์รูปภาพและสกัดรายการงาน (Multi-Task Extraction - สำคัญที่สุด!)**:
+   - ให้อ่านตัวหนังสือ OCR และวิเคราะห์เนื้อหาในภาพอย่างละเอียด
+   - **กรณีมีหลายงานในภาพ/เอกสาร (เช่น ตาราง รายชื่อ Task หลายบรรทัด หรือ Checklist หลายหัวข้อ)**:
+     - **ห้ามเลือกมาแค่งานเดียวเด็ดขาด!** ต้องสกัดงานออกมาให้ **ครบทุกงานที่ปรากฏในภาพ**
+     - ใส่ในรูปแบบ array \`tasks\`: [ ... ] ใน \`plan\`
+   - **การตั้งชื่องานที่แนะนำ**:
+     - ต้องตั้งชื่องานจริงที่อ่านได้จากภาพอย่างเฉพาะเจาะจง สื่อความหมาย (เช่น "Patrol Audit", "iSingleForm", "Matra80", "Calibration ตลับเมตรและตาชั่ง")
+     - **ข้อห้ามเด็ดขาด (STRICT PROHIBITION)**: ห้ามนำชื่อไฟล์ เช่น "clipboard-...", "image.png", "วิเคราะห์และดำเนินงานตามรูปภาพ: ..." มาเป็นชื่องานเด็ดขาด!
+   - **Checklist (Subtasks)**: แตกข้อย่อย 2-4 ข้อที่ตรงกับขั้นตอนปฏิบัติจริงในแต่ละงาน
 
 3. **ตอบกลับเป็น JSON Object เท่านั้น (JSON Response Only)** โดยมีโครงสร้างดังนี้:
 {
@@ -390,18 +402,27 @@ ${fileProcessed.text ? `เนื้อหาในเอกสารที่�
       "action": "plan_proposal",
       "title": "📋 ร่างแผนงาน (รออนุมัติก่อนสร้าง)",
       "plan": {
-        "name": "ชื่องานจริงที่สกัดได้จากเอกสารหรือภาพ (ห้ามมีชื่อไฟล์)",
-        "description": "รายละเอียดงานและขอบเขตที่อ่านได้",
-        "priority": "Normal/High/Urgent/Low",
-        "due_date": null,
-        "subtasks": ["ขั้นตอนที่ 1 ที่สกัดได้จริง", "ขั้นตอนที่ 2", "ขั้นตอนที่ 3"]
+        "tasks": [
+          {
+            "name": "ชื่องานที่ 1 จากภาพ",
+            "description": "รายละเอียดงานที่ 1",
+            "priority": "Normal/High/Urgent",
+            "subtasks": ["Checklist 1", "Checklist 2"]
+          },
+          {
+            "name": "ชื่องานที่ 2 จากภาพ",
+            "description": "รายละเอียดงานที่ 2",
+            "priority": "Normal/High/Urgent",
+            "subtasks": ["Checklist 1", "Checklist 2"]
+          }
+        ]
       }
     }
   ],
-  "reply": "สรุปสิ่งที่วิเคราะห์ได้จากภาพ/เอกสารเป็นภาษาไทย พร้อมถามผู้ใช้ชัดเจนว่าต้องการให้นำเข้า Space หรือ List ใดในระบบ"
+  "reply": "สรุปรายชื่องานทั้งหมดที่สกัดได้จากภาพอย่างครบถ้วนทุกรายการ พร้อมถามผู้ใช้ว่าจะให้นำเข้า Space หรือ List ใดในระบบ"
 }
 
-หากผู้ใช้สั่งสร้างงานโดยตรงและระบุ List ชัดเจน:
+หากผู้ใช้สั่งสร้างงานเดี่ยวโดยตรงและระบุ List ชัดเจน:
 {
   "actions": [
     {
@@ -467,8 +488,8 @@ function safeJsonParse(rawText) {
     let prompt = userMessage ? userMessage.trim() : '';
     if (fileProcessed) {
       const fileContext = fileProcessed.type === 'image'
-        ? 'ช่วยวิเคราะห์ภาพแนบนี้ อ่านข้อความ OCR และสาระสำคัญ สกัดชื่องาน (Task Name) ที่สื่อถึงเนื้องานจริงในรูป คำอธิบาย และ Checklist ข้อย่อย 3-5 ข้อเพื่อนำเข้าสู่ระบบ Status+'
-        : `ช่วยวิเคราะห์เอกสารแนบ (${fileProcessed.originalName}) สกัดชื่องาน (Task Name) ที่สื่อถึงเนื้องานจริง คำอธิบาย และ Checklist ข้อย่อยเพื่อนำเข้าสู่ระบบ Status+`;
+        ? 'ช่วยวิเคราะห์ภาพแนบนี้ อ่านข้อความ OCR และสาระสำคัญ สกัดรายการงาน (Tasks) ทั้งหมดที่พบในภาพอย่างครบถ้วนทุกรายการ (หากมีหลายงานในภาพ ให้สกัดใส่ใน plan.tasks ให้ครบทุกงาน ห้ามเลือกมาแค่งานเดียวเด็ดขาด) พร้อม Checklist ข้อย่อยเพื่อนำเข้าสู่ระบบ Status+'
+        : `ช่วยวิเคราะห์เอกสารแนบ (${fileProcessed.originalName}) สกัดรายการงาน (Tasks) ทั้งหมดที่พบในเอกสารอย่างครบถ้วน (หากมีหลายงาน ให้สกัดใส่ใน plan.tasks ให้ครบทุกงาน) พร้อม Checklist ข้อย่อยเพื่อนำเข้าสู่ระบบ Status+`;
       prompt = prompt ? `${prompt}\n${fileContext}` : fileContext;
     } else if (!prompt) {
       prompt = 'สรุปภาพรวมงานในระบบ';
@@ -498,14 +519,45 @@ function safeJsonParse(rawText) {
               act.action = 'plan_proposal';
               act.availableLists = flatLists;
               if (act.plan) {
-                // Ensure plan name is clean and does not contain prefixes or clipboard names
-                let cleanName = (act.plan.name || '').trim();
-                cleanName = cleanName.replace(/^(?:จัดทำแผนงานและดำเนิน(?:การ)?ตาม(?:รูปภาพ|ภาพ|เอกสาร)|วิเคราะห์และดำเนิน(?:การ)?ตาม(?:รูปภาพ|ภาพ|เอกสาร)|ตาม(?:รูปภาพ|ภาพ|เอกสาร)|งานตาม(?:รูปภาพ|ภาพ))\s*[:\-]?\s*/i, '');
-                cleanName = cleanName.replace(/clipboard-\d+/gi, '').replace(/^[:\-]\s*/, '').trim();
-                if (!cleanName || cleanName.length < 3) {
-                  cleanName = 'งานตรวจสอบและดำเนินการตามข้อมูลที่วิเคราะห์ได้';
+                // Ensure act.plan.tasks exists and is populated
+                if (!Array.isArray(act.plan.tasks) || act.plan.tasks.length === 0) {
+                  if (act.plan.name) {
+                    act.plan.tasks = [{
+                      name: act.plan.name,
+                      description: act.plan.description || '',
+                      priority: act.plan.priority || 'Normal',
+                      due_date: act.plan.due_date || null,
+                      subtasks: act.plan.subtasks || []
+                    }];
+                  } else {
+                    act.plan.tasks = [];
+                  }
                 }
-                act.plan.name = cleanName;
+
+                // Sanitize every task name
+                act.plan.tasks = act.plan.tasks.map(t => {
+                  let cleanName = (t.name || '').trim();
+                  cleanName = cleanName.replace(/^(?:จัดทำแผนงานและดำเนิน(?:การ)?ตาม(?:รูปภาพ|ภาพ|เอกสาร)|วิเคราะห์และดำเนิน(?:การ)?ตาม(?:รูปภาพ|ภาพ|เอกสาร)|ตาม(?:รูปภาพ|ภาพ|เอกสาร)|งานตาม(?:รูปภาพ|ภาพ))\s*[:\-]?\s*/i, '');
+                  cleanName = cleanName.replace(/clipboard-\d+/gi, '').replace(/^[:\-]\s*/, '').trim();
+                  if (!cleanName || cleanName.length < 3) {
+                    cleanName = 'งานตรวจสอบและดำเนินการตามข้อมูลที่วิเคราะห์ได้';
+                  }
+                  return {
+                    ...t,
+                    name: cleanName,
+                    subtasks: Array.isArray(t.subtasks) ? t.subtasks : []
+                  };
+                });
+
+                if (act.plan.tasks.length > 0) {
+                  act.plan.name = act.plan.tasks.length > 1
+                    ? `แผนงานรวม (${act.plan.tasks.length} รายการ): ${act.plan.tasks.map(t => t.name).join(', ')}`
+                    : act.plan.tasks[0].name;
+                  act.plan.description = act.plan.tasks[0].description;
+                  act.plan.priority = act.plan.tasks[0].priority;
+                  act.plan.subtasks = act.plan.tasks[0].subtasks;
+                }
+
                 act.plan.defaultListId = activeListId || (flatLists[0]?.listId || '');
                 if (fileProcessed) {
                   act.plan.fileInfo = fileProcessed.fileInfo;
