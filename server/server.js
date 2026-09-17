@@ -4,7 +4,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
-const { db } = require('./db');
+const { db, logMcpActivity, getMcpLogs, clearMcpLogs } = require('./db');
 const { indexTask, semanticSearch, reindexAll } = require('./ragService');
 const { callLLM, polishText, generateSubtasks, autofillMetadata, chatAssistant } = require('./aiService');
 const { setWindowsWallpaper, saveWallpaperDataUrl, STOCK_WALLPAPERS } = require('./wallpaperService');
@@ -887,6 +887,47 @@ app.post('/api/settings', (req, res) => {
       upsert.run(key, String(val));
     }
     res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// 8.1. MCP ACTIVITY & AUDIT LOGS
+// ==========================================
+
+app.get('/api/mcp/logs', (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit, 10) || 100;
+    const logs = getMcpLogs(limit);
+    res.json(logs);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/mcp/logs', (req, res) => {
+  try {
+    const { client_name, action_type, tool_name, input_params, result_summary, report_text, status } = req.body;
+    const id = logMcpActivity({
+      client_name,
+      action_type,
+      tool_name,
+      input_params,
+      result_summary,
+      report_text,
+      status
+    });
+    res.json({ success: true, id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/mcp/logs', (req, res) => {
+  try {
+    clearMcpLogs();
+    res.json({ success: true, message: 'ล้างประวัติการทำงานของ AI เรียบร้อยแล้ว' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

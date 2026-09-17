@@ -1,6 +1,7 @@
 const { db } = require('./db');
 const { indexTask } = require('./ragService');
 const { attachFileToTask } = require('./fileProcessor');
+const desktopController = require('../mcp/desktopController');
 
 // Helper to get active or fallback list
 function getDefaultListId() {
@@ -377,6 +378,95 @@ const tools = {
         listId: t.list_id,
         listName: t.list_name || 'ทั่วไป'
       }))
+    };
+  },
+
+  /**
+   * 9. DESKTOP SCREENSHOT
+   */
+  async take_screenshot(args) {
+    const res = await desktopController.takeScreenshot(args || {});
+    return {
+      success: true,
+      action: 'screenshot_taken',
+      filePath: res.filePath,
+      base64Image: res.base64Image,
+      message: res.message
+    };
+  },
+
+  /**
+   * 10. LIST WINDOWS
+   */
+  async list_windows(args) {
+    const res = await desktopController.listWindows(args?.filter);
+    return {
+      success: true,
+      action: 'listed_windows',
+      count: res.count,
+      windows: res.windows,
+      message: `พบหน้าต่างโปรแกรมที่เปิดอยู่ ${res.count} หน้าต่าง`
+    };
+  },
+
+  /**
+   * 11. ACTIVATE WINDOW
+   */
+  async activate_window(args) {
+    const res = await desktopController.activateWindow(args.title);
+    return {
+      success: true,
+      action: 'activated_window',
+      foundTitle: res.foundTitle,
+      message: res.message
+    };
+  },
+
+  /**
+   * 12. MOUSE CLICK
+   */
+  async click_mouse(args) {
+    const res = await desktopController.clickMouse(args);
+    return {
+      success: true,
+      action: 'clicked_mouse',
+      message: res.message
+    };
+  },
+
+  /**
+   * 13. TYPE INPUT
+   */
+  async type_input(args) {
+    const res = await desktopController.typeInput(args);
+    return {
+      success: true,
+      action: 'typed_input',
+      message: res.message
+    };
+  },
+
+  /**
+   * 14. LAUNCH APP
+   */
+  async launch_app(args) {
+    const res = await desktopController.launchStatusPlusApp();
+    return {
+      success: true,
+      action: 'launched_app',
+      message: res.message
+    };
+  },
+
+  /**
+   * 15. QUIT APP
+   */
+  async quit_app(args) {
+    const res = await desktopController.quitStatusPlusApp(args);
+    return {
+      success: true,
+      action: 'quit_app',
+      message: res.message
     };
   }
 };

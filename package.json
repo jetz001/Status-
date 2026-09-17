@@ -12,7 +12,8 @@
     "web": "node server/server.js",
     "electron": "electron .",
     "package": "npm run build && electron-builder --win --dir",
-    "package:exe": "npm run build && electron-builder --win"
+    "package:exe": "npm run build && electron-builder --win",
+    "mcp": "node mcp/server.js"
   },
   "keywords": [
     "status-plus",

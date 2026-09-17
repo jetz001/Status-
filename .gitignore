@@ -22,6 +22,8 @@ uploads/wallpapers/*
 !uploads/wallpapers/.gitkeep
 backups/*
 !backups/.gitkeep
+data/*
+!data/.gitkeep
 
 # Environment variables
 .env

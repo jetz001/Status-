@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "status-plus": {
+      "command": "node",
+      "args": [
+        "d:\\DEV\\Project Management\\mcp\\server.js"
+      ],
+      "env": {
+        "NODE_ENV": "production"
+      }
+    }
+  }
+}

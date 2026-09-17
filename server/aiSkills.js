@@ -31,7 +31,14 @@ const SKILLS = {
     label: 'ที่ปรึกษาวางแผนงาน (Advisor)',
     icon: 'Sparkles',
     badgeClass: 'bg-blue-500/15 text-blue-300 border-blue-500/40',
-    tools: ['query_tasks']
+    tools: ['query_tasks', 'get_project_overview']
+  },
+  desktop_controller: {
+    id: 'desktop_controller',
+    label: 'ควบคุมหน้าจอ Windows (Desktop Control & MCP)',
+    icon: 'Monitor',
+    badgeClass: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40',
+    tools: ['take_screenshot', 'list_windows', 'activate_window', 'click_mouse', 'type_input', 'launch_app', 'quit_app']
   }
 };
 
@@ -44,6 +51,11 @@ function routeSkill(userText, hasAttachment = false) {
   }
 
   const text = (userText || '').toLowerCase();
+
+  // 0. Desktop Automation / MCP intent
+  if (/แคปหน้าจอ|ถ่ายหน้าจอ|ภาพหน้าจอ|screenshot|มองหน้าจอ|เปิดโปรแกรม|ปิดโปรแกรม|สลับหน้าต่าง|รายชื่อหน้าต่าง|คลิกเมาส์|พิมพ์คีย์|desktop\s*control|mcp/i.test(text)) {
+    return SKILLS.desktop_controller;
+  }
 
   // 1. Project / Space building intent
   if (/สร้าง\s*(โปรเจกต์|โปรเจค|project|space|list|รายการใหม่)|ตั้ง\s*(โปรเจกต์|space)/i.test(text)) {
@@ -106,6 +118,54 @@ async function fallbackRuleExecution(skill, query, fileProcessed = null, activeL
       reply = `สร้างงานหลักสำหรับเอกสาร "${fileProcessed.originalName}" พร้อม Checklist เริ่มต้นเรียบร้อยแล้วครับ`;
     }
 
+    return { skill, actions, reply };
+  }
+
+  // DESKTOP AUTOMATION & MCP COMMANDS:
+  // 1. Screenshot
+  if (/แคปหน้าจอ|ถ่ายหน้าจอ|ภาพหน้าจอ|screenshot|ดูหน้าจอ/i.test(text)) {
+    try {
+      const res = await executeTool('take_screenshot', {});
+      actions.push(res);
+      reply = `📸 **แคปภาพหน้าจอ Windows เรียบร้อยแล้วครับ!**\n\nบันทึกไฟล์ไว้ที่: \`${res.filePath}\`\nคุณสามารถให้ผมช่วยวิเคราะห์ข้อมูลบนหน้าจอ สรุปงาน หรือสั่งการเมาส์/คีย์บอร์ดต่อได้เลยครับ`;
+    } catch (e) {
+      reply = `⚠️ เกิดข้อผิดพลาดในการแคปหน้าจอ: ${e.message}`;
+    }
+    return { skill, actions, reply };
+  }
+
+  // 2. List Windows
+  if (/หน้าต่าง.*เปิด|โปรแกรม.*เปิด|list\s*window/i.test(text)) {
+    try {
+      const res = await executeTool('list_windows', {});
+      actions.push(res);
+      const winList = res.windows.map(w => `• **${w.title}** (PID: ${w.pid})`).join('\n');
+      reply = `🖥️ **รายชื่อหน้าต่างโปรแกรมที่เปิดอยู่บน Windows (${res.count} หน้าต่าง):**\n\n${winList || 'ไม่พบหน้าต่างโปรแกรมที่เปิดค้างไว้'}`;
+    } catch (e) {
+      reply = `⚠️ ไม่สามารถตรวจสอบรายชื่อหน้าต่างได้: ${e.message}`;
+    }
+    return { skill, actions, reply };
+  }
+
+  // 3. Activate Window
+  const switchMatch = text.match(/สลับ\s*(?:หน้าต่าง|ไปที่)?\s*[:"']?([^"'\n]+)/i);
+  if (switchMatch && !/สรุป|งาน/i.test(switchMatch[1])) {
+    const targetTitle = switchMatch[1].trim();
+    try {
+      const res = await executeTool('activate_window', { title: targetTitle });
+      actions.push(res);
+      reply = res.message;
+    } catch (e) {
+      reply = `⚠️ ไม่พบหน้าต่างที่ตรงกับ "${targetTitle}" บนระบบครับ`;
+    }
+    return { skill, actions, reply };
+  }
+
+  // 4. Quit App
+  if (/ปิดโปรแกรม|quit\s*app|exit\s*app/i.test(text)) {
+    const res = await executeTool('quit_app', { force: /force|บังคับ/i.test(text) });
+    actions.push(res);
+    reply = res.message;
     return { skill, actions, reply };
   }
 

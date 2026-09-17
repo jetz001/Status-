@@ -135,6 +135,18 @@ function initSchema() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS mcp_activity_logs (
+      id TEXT PRIMARY KEY,
+      client_name TEXT DEFAULT 'External AI',
+      action_type TEXT DEFAULT 'tool_execution', -- 'execution_report' or 'tool_execution'
+      tool_name TEXT NOT NULL,
+      input_params TEXT DEFAULT '',
+      result_summary TEXT DEFAULT '',
+      report_text TEXT DEFAULT '',
+      status TEXT DEFAULT 'success',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 
   // Clean up legacy mock test case columns if present
@@ -325,7 +337,54 @@ function seedDefaultData() {
 
 initSchema();
 
+function logMcpActivity({ client_name = 'External AI', action_type = 'tool_execution', tool_name, input_params = '', result_summary = '', report_text = '', status = 'success' }) {
+  try {
+    const id = `mcp-log-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const stmt = db.prepare(`
+      INSERT INTO mcp_activity_logs (id, client_name, action_type, tool_name, input_params, result_summary, report_text, status, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `);
+    stmt.run(
+      id,
+      client_name || 'External AI',
+      action_type || 'tool_execution',
+      tool_name || 'unknown',
+      typeof input_params === 'object' ? JSON.stringify(input_params) : String(input_params || ''),
+      typeof result_summary === 'object' ? JSON.stringify(result_summary) : String(result_summary || ''),
+      report_text || '',
+      status || 'success'
+    );
+    return id;
+  } catch (err) {
+    console.error('Error logging MCP activity:', err);
+    return null;
+  }
+}
+
+function getMcpLogs(limit = 100) {
+  try {
+    return db.prepare('SELECT * FROM mcp_activity_logs ORDER BY created_at DESC LIMIT ?').all(limit);
+  } catch (err) {
+    console.error('Error getting MCP logs:', err);
+    return [];
+  }
+}
+
+function clearMcpLogs() {
+  try {
+    db.prepare('DELETE FROM mcp_activity_logs').run();
+    return true;
+  } catch (err) {
+    console.error('Error clearing MCP logs:', err);
+    return false;
+  }
+}
+
 module.exports = {
   db,
-  initSchema
+  initSchema,
+  logMcpActivity,
+  getMcpLogs,
+  clearMcpLogs
 };
+
