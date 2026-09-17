@@ -5,7 +5,6 @@ import {
   Image as ImageIcon, 
   Printer, 
   SlidersHorizontal, 
-  Plus, 
   List, 
   Kanban, 
   CalendarRange, 
@@ -119,15 +118,6 @@ export default function Header({
                 {notificationCount > 9 ? '9+' : notificationCount}
               </span>
             )}
-          </button>
-
-          {/* Add Item Button */}
-          <button 
-            onClick={onQuickAddTask}
-            className="flex items-center space-x-1 px-3 py-1.5 bg-[#7b68ee] hover:bg-[#6a55e0] text-white text-xs font-semibold rounded shadow-sm transition"
-          >
-            <Plus size={14} />
-            <span>Add Item</span>
           </button>
         </div>
       </div>

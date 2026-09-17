@@ -780,39 +780,85 @@ app.get('/api/notifications', (req, res) => {
     const todayStr = new Date().toISOString().split('T')[0];
     const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
 
+    // Read/dismissed notification IDs
+    let readSet = new Set();
+    try {
+      const readRows = db.prepare('SELECT id FROM read_notifications').all();
+      readSet = new Set(readRows.map(r => r.id));
+    } catch (e) {
+      // Table will be created on startup
+    }
+
     const notifications = [];
 
     for (const t of tasks) {
       if (t.due_date < todayStr) {
-        notifications.push({
-          id: `notif-overdue-${t.id}`,
-          taskId: t.id,
-          listId: t.list_id,
-          listName: t.list_name || '',
-          priority: t.priority || 'Normal',
-          status: t.status,
-          title: '⚠️ งานเกินกำหนดส่ง (Overdue)',
-          message: `งาน "${t.name}" ครบกำหนดส่งเมื่อ ${t.due_date}`,
-          type: 'overdue',
-          date: t.due_date
-        });
+        const notifId = `notif-overdue-${t.id}`;
+        if (!readSet.has(notifId)) {
+          notifications.push({
+            id: notifId,
+            taskId: t.id,
+            listId: t.list_id,
+            listName: t.list_name || '',
+            priority: t.priority || 'Normal',
+            status: t.status,
+            title: '⚠️ งานเกินกำหนดส่ง (Overdue)',
+            message: `งาน "${t.name}" ครบกำหนดส่งเมื่อ ${t.due_date}`,
+            type: 'overdue',
+            date: t.due_date
+          });
+        }
       } else if (t.due_date === todayStr || t.due_date === tomorrow) {
-        notifications.push({
-          id: `notif-soon-${t.id}`,
-          taskId: t.id,
-          listId: t.list_id,
-          listName: t.list_name || '',
-          priority: t.priority || 'Normal',
-          status: t.status,
-          title: '⏰ งานใกล้ถึงกำหนดส่ง (Due Soon)',
-          message: `งาน "${t.name}" มีกำหนดส่ง ${t.due_date === todayStr ? 'วันนี้!' : 'พรุ่งนี้'}`,
-          type: 'due_soon',
-          date: t.due_date
-        });
+        const notifId = `notif-soon-${t.id}`;
+        if (!readSet.has(notifId)) {
+          notifications.push({
+            id: notifId,
+            taskId: t.id,
+            listId: t.list_id,
+            listName: t.list_name || '',
+            priority: t.priority || 'Normal',
+            status: t.status,
+            title: '⏰ งานใกล้ถึงกำหนดส่ง (Due Soon)',
+            message: `งาน "${t.name}" มีกำหนดส่ง ${t.due_date === todayStr ? 'วันนี้!' : 'พรุ่งนี้'}`,
+            type: 'due_soon',
+            date: t.due_date
+          });
+        }
       }
     }
 
     res.json(notifications);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Mark notification(s) as read / dismissed
+app.post('/api/notifications/read', (req, res) => {
+  try {
+    const { id, ids } = req.body;
+    const insert = db.prepare('INSERT OR IGNORE INTO read_notifications (id) VALUES (?)');
+
+    if (Array.isArray(ids) && ids.length > 0) {
+      const insertMany = db.transaction((list) => {
+        for (const item of list) insert.run(item);
+      });
+      insertMany(ids);
+    } else if (id) {
+      insert.run(id);
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Clear all read notification records
+app.delete('/api/notifications/read', (req, res) => {
+  try {
+    db.prepare('DELETE FROM read_notifications').run();
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -141,6 +141,33 @@ export default function App() {
     }
   };
 
+  const handleDismissNotification = async (notifId) => {
+    setNotifications(prev => prev.filter(n => n.id !== notifId));
+    try {
+      await fetch('/api/notifications/read', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: notifId })
+      });
+    } catch (err) {
+      console.error('Error dismissing notification:', err);
+    }
+  };
+
+  const handleMarkAllNotificationsRead = async () => {
+    const ids = notifications.map(n => n.id);
+    setNotifications([]);
+    try {
+      await fetch('/api/notifications/read', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids })
+      });
+    } catch (err) {
+      console.error('Error marking all notifications read:', err);
+    }
+  };
+
   useEffect(() => {
     loadSpaces();
     loadAllTasks();
@@ -638,6 +665,8 @@ export default function App() {
         isOpen={showNotificationCenter}
         onClose={() => setShowNotificationCenter(false)}
         notifications={notifications}
+        onDismissNotification={handleDismissNotification}
+        onMarkAllAsRead={handleMarkAllNotificationsRead}
         onSelectTaskById={async (taskId, listId) => {
           if (listId && listId !== activeListId) {
             setActiveListId(listId);

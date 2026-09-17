@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Notification } = require('electron');
+const { app, BrowserWindow, ipcMain, Notification, Menu } = require('electron');
 const path = require('path');
 
 // Launch local Express API server safely if not already running
@@ -11,12 +11,15 @@ try {
 let mainWindow;
 
 function createWindow() {
+  Menu.setApplicationMenu(null);
+
   mainWindow = new BrowserWindow({
     width: 1366,
     height: 860,
     minWidth: 1024,
     minHeight: 640,
     show: false,
+    autoHideMenuBar: true,
     backgroundColor: '#1e1f21',
     title: 'Status+',
     icon: path.join(__dirname, '..', 'public', 'logo.png'),
@@ -26,6 +29,8 @@ function createWindow() {
       contextIsolation: true
     }
   });
+
+  mainWindow.setMenuBarVisibility(false);
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();

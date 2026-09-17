@@ -338,6 +338,46 @@ const tools = {
         listName: t.list_name
       }))
     };
+  },
+
+  /**
+   * 8. GET PROJECT OVERVIEW / TASK SUMMARY
+   */
+  async get_project_overview(args) {
+    const listId = args?.list_id;
+    let query = `
+      SELECT t.id, t.name, t.status, t.priority, t.due_date, t.list_id, l.name as list_name
+      FROM tasks t
+      LEFT JOIN lists l ON t.list_id = l.id
+    `;
+    const params = [];
+    if (listId && listId !== 'all') {
+      query += ' WHERE t.list_id = ?';
+      params.push(listId);
+    }
+    query += ' ORDER BY t.due_date ASC, t.created_at DESC';
+    const allTasks = db.prepare(query).all(...params);
+
+    const total = allTasks.length;
+    const completed = allTasks.filter(t => t.status === 'COMPLETED').length;
+    const inProgress = allTasks.filter(t => t.status === 'IN PROGRESS').length;
+    const notStarted = allTasks.filter(t => t.status !== 'COMPLETED' && t.status !== 'IN PROGRESS').length;
+    const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+    return {
+      success: true,
+      action: 'project_overview',
+      stats: { total, completed, inProgress, notStarted, percent },
+      tasks: allTasks.map(t => ({
+        id: t.id,
+        name: t.name,
+        status: t.status,
+        priority: t.priority,
+        dueDate: t.due_date,
+        listId: t.list_id,
+        listName: t.list_name || 'ทั่วไป'
+      }))
+    };
   }
 };
 

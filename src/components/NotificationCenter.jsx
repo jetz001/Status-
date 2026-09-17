@@ -1,11 +1,13 @@
 import React, { useEffect } from 'react';
-import { Bell, AlertTriangle, Clock, X, ExternalLink, Calendar, CheckCircle2 } from 'lucide-react';
+import { Bell, AlertTriangle, Clock, X, ExternalLink, Calendar, CheckCircle2, CheckCheck } from 'lucide-react';
 
 export default function NotificationCenter({
   isOpen,
   onClose,
   notifications = [],
-  onSelectTaskById
+  onSelectTaskById,
+  onDismissNotification,
+  onMarkAllAsRead
 }) {
   // Close on Escape key
   useEffect(() => {
@@ -32,7 +34,7 @@ export default function NotificationCenter({
       />
 
       {/* Dropdown Panel */}
-      <div className="fixed top-13 right-4 sm:right-14 w-88 max-w-[calc(100vw-2rem)] bg-[#1a1b1e] border border-[#383a3e] rounded-xl shadow-2xl z-50 overflow-hidden text-xs select-none animate-in fade-in zoom-in-95 duration-150">
+      <div className="fixed top-13 right-4 sm:right-14 w-92 max-w-[calc(100vw-2rem)] bg-[#1a1b1e] border border-[#383a3e] rounded-xl shadow-2xl z-50 overflow-hidden text-xs select-none animate-in fade-in zoom-in-95 duration-150">
         {/* Header */}
         <div className="p-3.5 border-b border-[#2e3033] flex items-center justify-between bg-[#141517]">
           <div className="flex items-center space-x-2">
@@ -48,13 +50,25 @@ export default function NotificationCenter({
               </p>
             </div>
           </div>
-          <button 
-            onClick={onClose}
-            className="p-1.5 text-gray-400 hover:text-white rounded-lg hover:bg-[#2a2b2d] transition"
-            title="ปิด (Esc)"
-          >
-            <X size={15} />
-          </button>
+          <div className="flex items-center space-x-1.5">
+            {notifications.length > 0 && onMarkAllAsRead && (
+              <button 
+                onClick={onMarkAllAsRead}
+                className="flex items-center space-x-1 px-2.5 py-1 rounded bg-[#24262b] hover:bg-[#2e3137] text-gray-300 hover:text-cyan-300 border border-[#383a3e] text-[10px] font-medium transition cursor-pointer"
+                title="ทำเครื่องหมายว่าอ่านแล้วทั้งหมด"
+              >
+                <CheckCheck size={12} className="text-cyan-400" />
+                <span>อ่านทั้งหมด</span>
+              </button>
+            )}
+            <button 
+              onClick={onClose}
+              className="p-1.5 text-gray-400 hover:text-white rounded-lg hover:bg-[#2a2b2d] transition"
+              title="ปิด (Esc)"
+            >
+              <X size={15} />
+            </button>
+          </div>
         </div>
 
         {/* Quick summary pill tags */}
@@ -83,10 +97,11 @@ export default function NotificationCenter({
                 <div 
                   key={notif.id}
                   onClick={() => {
+                    if (onDismissNotification) onDismissNotification(notif.id);
                     onSelectTaskById(notif.taskId, notif.listId);
                     onClose();
                   }}
-                  className="p-3 hover:bg-[#24262a] cursor-pointer rounded-lg transition space-y-1.5 group border border-transparent hover:border-[#383a3e]"
+                  className="p-3 hover:bg-[#24262a] cursor-pointer rounded-lg transition space-y-1.5 group border border-transparent hover:border-[#383a3e] relative"
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-1.5 font-semibold">
@@ -100,11 +115,25 @@ export default function NotificationCenter({
                       </span>
                     </div>
 
-                    {notif.listName && (
-                      <span className="px-1.5 py-0.5 rounded bg-[#2a2b2d] text-gray-400 text-[9px]">
-                        {notif.listName}
-                      </span>
-                    )}
+                    <div className="flex items-center space-x-1.5">
+                      {notif.listName && (
+                        <span className="px-1.5 py-0.5 rounded bg-[#2a2b2d] text-gray-400 text-[9px]">
+                          {notif.listName}
+                        </span>
+                      )}
+                      {onDismissNotification && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDismissNotification(notif.id);
+                          }}
+                          className="p-1 rounded text-gray-500 hover:text-gray-200 hover:bg-[#34363a] transition"
+                          title="ทำเครื่องหมายว่าอ่านแล้ว / ปิดการแจ้งเตือนนี้"
+                        >
+                          <X size={12} />
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   <p className="text-gray-200 text-xs font-medium leading-relaxed group-hover:text-cyan-300 transition">
@@ -129,7 +158,7 @@ export default function NotificationCenter({
               <CheckCircle2 size={28} className="mx-auto text-emerald-400/70" />
               <div>
                 <p className="font-semibold text-gray-300 text-xs">ไม่มีงานค้างเตือน</p>
-                <p className="text-[11px] text-gray-500 mt-0.5">งานทั้งหมดส่งตรงเวลา หรือยังไม่ถึงกำหนดส่ง</p>
+                <p className="text-[11px] text-gray-500 mt-0.5">งานทั้งหมดส่งตรงเวลา หรือตรวจสอบการแจ้งเตือนครบแล้ว</p>
               </div>
             </div>
           )}

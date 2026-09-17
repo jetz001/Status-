@@ -163,10 +163,51 @@ async function fallbackRuleExecution(skill, query, fileProcessed = null, activeL
     }
   }
 
-  // Default query / advisory fallback
-  const ragResults = semanticSearch(text, 4);
-  const ragSnippet = ragResults.map(r => `• ${r.name} (สถานะ: ${r.status}, ลิสต์: ${r.listName})`).join('\n');
-  reply = `ผมได้รับคำสั่งแล้วครับ จากการตรวจสอบข้อมูลงานในระบบที่เกี่ยวข้อง:\n\n${ragSnippet || 'ยังไม่พบข้อมูลงานที่ตรงกับคำค้นหาโดยตรง'}\n\nคุณสามารถสั่งให้ผม: สร้างงานใหม่, แก้ไขข้อมูล, ลบงาน หรือแนบไฟล์ PDF/รูปภาพ เพื่อให้ผมแยกงานให้ได้เลยครับ!`;
+  // 5. PROJECT OVERVIEW / STATUS SUMMARY QUERY
+  if (/สรุป|ภาพรวม|สถานะ|งานทั้งหมด|รายงาน|overview|dashboard|kpi|งานในระบบ/i.test(text)) {
+    const overview = await executeTool('get_project_overview', { list_id: activeListId });
+    actions.push(overview);
+    const { total, completed, inProgress, notStarted, percent } = overview.stats;
+
+    let taskListStr = '';
+    if (overview.tasks.length > 0) {
+      taskListStr = overview.tasks.map(t => 
+        `• **${t.name}** (สถานะ: ${t.status}, ลิสต์: ${t.listName}${t.dueDate ? `, กำหนดส่ง: ${t.dueDate}` : ''})`
+      ).join('\n');
+    } else {
+      taskListStr = 'ยังไม่มีรายการงานในระบบ';
+    }
+
+    reply = `### 📊 สรุปภาพรวมและสถานะงานในระบบ
+
+[STATS: total=${total}, completed=${completed}, inProgress=${inProgress}, notStarted=${notStarted}, percent=${percent}]
+
+พบงานทั้งหมด **${total} รายการ** ในระบบ (อัตราความสำเร็จ **${percent}%**)
+
+#### 📋 รายการงานปัจจุบัน:
+${taskListStr}
+
+> 💡 **แนะนำคำสั่งถัดไป:** คุณสามารถพิมพ์สั่ง *สร้างงานใหม่*, *อัปเดตสถานะงาน*, หรือแนบไฟล์เอกสาร PDF/รูปภาพ เพื่อให้ AI ดำเนินการวิเคราะห์และแยกงานได้ทันที`;
+
+    return { skill, actions, reply };
+  }
+
+  // 6. Default query / advisory fallback
+  const ragResults = semanticSearch(text, 5);
+  let ragSnippet = '';
+  if (ragResults.length > 0) {
+    ragSnippet = ragResults.map(r => `• **${r.name}** (สถานะ: ${r.status}, ลิสต์: ${r.listName})`).join('\n');
+  }
+
+  reply = `### 🔍 ข้อมูลงานที่เกี่ยวข้องในระบบ
+
+${ragSnippet || 'ยังไม่พบข้อมูลงานที่ตรงกับคำค้นหาโดยตรง'}
+
+> 💡 **คุณสามารถสั่งให้ผม:**
+> 1. สร้างงานใหม่ หรือ โครงการใหม่
+> 2. สรุปภาพรวมงาน หรือ งานที่ใกล้ถึงกำหนดส่ง
+> 3. แก้ไขข้อมูลผู้รับผิดชอบ และความสำคัญ
+> 4. แนบไฟล์ PDF หรือ รูปภาพ เพื่อสกัดงานอัตโนมัติ`;
 
   return { skill, actions, reply };
 }

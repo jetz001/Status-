@@ -9,18 +9,235 @@ import {
   CheckCircle2, 
   Clock, 
   ExternalLink,
-  Plus,
-  RotateCcw,
-  MessageSquare,
-  Paperclip,
-  FileText,
-  Image as ImageIcon,
-  AlertTriangle,
-  Trash2,
-  FolderPlus,
-  UploadCloud,
-  Check
+  Plus, 
+  RotateCcw, 
+  MessageSquare, 
+  Paperclip, 
+  FileText, 
+  Image as ImageIcon, 
+  AlertTriangle, 
+  Trash2, 
+  FolderPlus, 
+  UploadCloud, 
+  Check,
+  Circle
 } from 'lucide-react';
+
+// Helper to format inline markdown like **bold**, *italic*
+function formatInlineMarkup(text) {
+  if (!text) return '';
+  const parts = text.split(/(\*\*[^*]+?\*\*)/g);
+  return parts.map((part, idx) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return (
+        <strong key={idx} className="text-white font-semibold">
+          {part.slice(2, -2)}
+        </strong>
+      );
+    }
+    return part;
+  });
+}
+
+// Rich Visual Formatter for AI Responses
+function FormattedAiMessage({ content, onSelectTaskById }) {
+  if (!content) return null;
+
+  const lines = content.split('\n');
+  const renderedBlocks = [];
+  let currentTaskGroup = [];
+
+  const flushTaskGroup = () => {
+    if (currentTaskGroup.length > 0) {
+      const tasksToRender = [...currentTaskGroup];
+      currentTaskGroup = [];
+      renderedBlocks.push(
+        <div key={`task-group-${renderedBlocks.length}`} className="my-2 space-y-1.5">
+          {tasksToRender.map((taskItem, tIdx) => (
+            <div 
+              key={tIdx}
+              onClick={() => {
+                if (taskItem.taskId && onSelectTaskById) {
+                  onSelectTaskById(taskItem.taskId);
+                }
+              }}
+              className="flex items-center justify-between p-2.5 rounded-lg bg-[#151619] hover:bg-[#1e2024] border border-[#2c2f34] hover:border-cyan-500/40 transition group cursor-pointer shadow-xs"
+              title={taskItem.taskId ? 'คลิกเพื่อเปิดดูงาน' : ''}
+            >
+              <div className="flex items-center space-x-2 truncate flex-1">
+                {taskItem.status === 'COMPLETED' ? (
+                  <CheckCircle2 size={14} className="text-emerald-400 flex-shrink-0" />
+                ) : taskItem.status === 'IN PROGRESS' ? (
+                  <Clock size={14} className="text-blue-400 flex-shrink-0" />
+                ) : (
+                  <Circle size={13} className="text-rose-400/80 flex-shrink-0" />
+                )}
+                <span className={`text-xs font-medium truncate ${
+                  taskItem.status === 'COMPLETED' ? 'line-through text-gray-500' : 'text-gray-100 group-hover:text-cyan-300 transition'
+                }`}>
+                  {taskItem.name}
+                </span>
+              </div>
+
+              <div className="flex items-center space-x-1.5 flex-shrink-0 ml-2">
+                {taskItem.status && (
+                  <span className={`px-1.5 py-0.2 rounded text-[9px] font-semibold tracking-wide ${
+                    taskItem.status === 'COMPLETED' 
+                      ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30' 
+                      : taskItem.status === 'IN PROGRESS'
+                      ? 'bg-blue-500/15 text-blue-300 border border-blue-500/30'
+                      : 'bg-rose-500/15 text-rose-300 border border-rose-500/30'
+                  }`}>
+                    {taskItem.status}
+                  </span>
+                )}
+                {taskItem.listName && (
+                  <span className="px-1.5 py-0.2 rounded bg-[#222428] text-gray-400 text-[9px] border border-[#34373d]">
+                    {taskItem.listName}
+                  </span>
+                )}
+                {taskItem.dueDate && (
+                  <span className="text-[9px] text-gray-400 hidden sm:inline">
+                    📅 {taskItem.dueDate}
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+    }
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+
+    // 1. STATS BANNER: [STATS: total=4, completed=2, inProgress=1, notStarted=1, percent=50]
+    const statsMatch = line.match(/\[STATS:\s*total=(\d+),\s*completed=(\d+),\s*inProgress=(\d+),\s*notStarted=(\d+),\s*percent=(\d+)\]/i);
+    if (statsMatch) {
+      flushTaskGroup();
+      const total = parseInt(statsMatch[1]);
+      const completed = parseInt(statsMatch[2]);
+      const inProgress = parseInt(statsMatch[3]);
+      const notStarted = parseInt(statsMatch[4]);
+      const percent = parseInt(statsMatch[5]);
+
+      renderedBlocks.push(
+        <div key={`stats-${i}`} className="p-3 bg-[#151619] border border-[#2c2f34] rounded-xl space-y-2.5 my-2.5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-white flex items-center space-x-1.5">
+              <Sparkles size={13} className="text-cyan-400" />
+              <span>ภาพรวมความคืบหน้า (KPI Stats)</span>
+            </span>
+            <span className="text-xs font-bold text-cyan-400">{percent}% สำเร็จ</span>
+          </div>
+          
+          {/* Progress Bar */}
+          <div className="w-full h-2 bg-[#24262a] rounded-full overflow-hidden">
+            <div 
+              className="h-full bg-gradient-to-r from-cyan-500 via-indigo-500 to-emerald-400 rounded-full transition-all duration-500" 
+              style={{ width: `${percent}%` }}
+            />
+          </div>
+
+          {/* 4 Metric Pills */}
+          <div className="grid grid-cols-4 gap-1.5 text-center text-[10px]">
+            <div className="p-1.5 rounded-lg bg-[#1e2023] border border-[#2d3034]">
+              <span className="text-gray-400 block text-[9px]">ทั้งหมด</span>
+              <span className="font-bold text-white text-xs">{total}</span>
+            </div>
+            <div className="p-1.5 rounded-lg bg-emerald-950/30 border border-emerald-500/30">
+              <span className="text-emerald-400 block text-[9px]">เสร็จสิ้น</span>
+              <span className="font-bold text-emerald-300 text-xs">{completed}</span>
+            </div>
+            <div className="p-1.5 rounded-lg bg-blue-950/30 border border-blue-500/30">
+              <span className="text-blue-400 block text-[9px]">กำลังทำ</span>
+              <span className="font-bold text-blue-300 text-xs">{inProgress}</span>
+            </div>
+            <div className="p-1.5 rounded-lg bg-rose-950/30 border border-rose-500/30">
+              <span className="text-rose-400 block text-[9px]">ยังไม่เริ่ม</span>
+              <span className="font-bold text-rose-300 text-xs">{notStarted}</span>
+            </div>
+          </div>
+        </div>
+      );
+      continue;
+    }
+
+    // 2. Heading 3: ### Title
+    if (line.startsWith('### ')) {
+      flushTaskGroup();
+      const title = line.replace(/^###\s+/, '');
+      renderedBlocks.push(
+        <div key={`h3-${i}`} className="pt-2 pb-1 border-b border-[#2d3035] mb-1.5">
+          <h4 className="text-xs font-bold text-white flex items-center space-x-1.5">
+            <span>{title}</span>
+          </h4>
+        </div>
+      );
+      continue;
+    }
+
+    // 3. Heading 4: #### Title
+    if (line.startsWith('#### ')) {
+      flushTaskGroup();
+      const subtitle = line.replace(/^####\s+/, '');
+      renderedBlocks.push(
+        <div key={`h4-${i}`} className="pt-1.5 pb-0.5">
+          <h5 className="text-[11px] font-semibold text-gray-300">{subtitle}</h5>
+        </div>
+      );
+      continue;
+    }
+
+    // 4. Task Bullet Item: e.g. "• แจก % ... (สถานะ: COMPLETED, ลิสต์: QMS26)"
+    const taskBulletMatch = line.match(/^[•\-\*]\s*(.+?)(?:\s*\((?:สถานะ|status):\s*([^,]+?)(?:,\s*(?:ลิสต์|list):\s*([^,\)]+?))?(?:,\s*(?:กำหนดส่ง|due):\s*([^\)]+?))?\))?$/i);
+    if (taskBulletMatch && (taskBulletMatch[2] || taskBulletMatch[1].length > 5)) {
+      const rawName = taskBulletMatch[1].replace(/\*\*/g, '').trim();
+      const status = taskBulletMatch[2]?.trim().toUpperCase();
+      const listName = taskBulletMatch[3]?.trim();
+      const dueDate = taskBulletMatch[4]?.trim();
+
+      currentTaskGroup.push({
+        name: rawName,
+        status: status || null,
+        listName: listName || null,
+        dueDate: dueDate || null
+      });
+      continue;
+    }
+
+    // 5. Callout Block: starts with "> " or "💡" or "คุณสามารถสั่งให้ผม:"
+    if (line.startsWith('> ') || line.startsWith('💡') || line.startsWith('คุณสามารถสั่งให้ผม:')) {
+      flushTaskGroup();
+      const cleanCallout = line.replace(/^>\s*/, '');
+      renderedBlocks.push(
+        <div key={`callout-${i}`} className="p-2.5 rounded-lg bg-gradient-to-r from-purple-950/20 to-indigo-950/20 border border-purple-500/30 text-[11px] text-gray-300 space-y-1 my-2">
+          {formatInlineMarkup(cleanCallout)}
+        </div>
+      );
+      continue;
+    }
+
+    // 6. Regular Empty line
+    if (!line) {
+      flushTaskGroup();
+      continue;
+    }
+
+    // 7. Regular paragraph / text line
+    flushTaskGroup();
+    renderedBlocks.push(
+      <p key={`p-${i}`} className="text-[11.5px] text-gray-200 leading-relaxed my-1">
+        {formatInlineMarkup(line)}
+      </p>
+    );
+  }
+
+  flushTaskGroup();
+
+  return <div className="space-y-1">{renderedBlocks}</div>;
+}
 
 export default function AISidebarRAG({
   isOpen,
@@ -305,19 +522,10 @@ export default function AISidebarRAG({
           </div>
 
           <div className="flex items-center space-x-1">
-            <button
-              type="button"
-              onClick={handleStartNewChat}
-              title="เริ่มแชทใหม่ (+ New Chat)"
-              className="flex items-center space-x-1 px-2.5 py-1 rounded bg-[#242629] hover:bg-[#2d3034] text-cyan-300 text-[11px] font-medium transition cursor-pointer border border-[#383a3e]"
-            >
-              <Plus size={12} />
-              <span>แชทใหม่</span>
-            </button>
-
             <button 
               onClick={onClose}
-              className="p-1 text-gray-400 hover:text-white rounded hover:bg-[#2a2b2d] transition cursor-pointer ml-1"
+              className="p-1 text-gray-400 hover:text-white rounded hover:bg-[#2a2b2d] transition cursor-pointer"
+              title="ปิด (Esc)"
             >
               <X size={17} />
             </button>
@@ -361,7 +569,11 @@ export default function AISidebarRAG({
                   )}
 
                   {/* Main Message Text */}
-                  <p className="whitespace-pre-wrap text-[11.5px] leading-relaxed">{m.content}</p>
+                  {m.role === 'assistant' ? (
+                    <FormattedAiMessage content={m.content} onSelectTaskById={onSelectTaskById} />
+                  ) : (
+                    <p className="whitespace-pre-wrap text-[11.5px] leading-relaxed">{m.content}</p>
+                  )}
 
                   {/* Action Cards (Tool Results & Confirmation) */}
                   {m.actions && m.actions.length > 0 && (
@@ -457,7 +669,10 @@ export default function AISidebarRAG({
                           );
                         }
 
-                        // 5. Updated / General Action Card
+                        // 5. Ignore project_overview since it is already rendered in message
+                        if (act.action === 'project_overview') return null;
+
+                        // 6. Updated / General Action Card
                         return (
                           <div key={actIdx} className="p-2 bg-[#18191b] border border-[#333538] rounded text-[11px] text-gray-300 flex items-center space-x-1.5">
                             <CheckCircle2 size={13} className="text-emerald-400" />
