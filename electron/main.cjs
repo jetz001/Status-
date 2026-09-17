@@ -13,7 +13,7 @@ function createWindow() {
     minWidth: 1024,
     minHeight: 640,
     backgroundColor: '#1e1f21',
-    title: 'ClickUp - Local Project Management',
+    title: 'Status+',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       nodeIntegration: false,
@@ -43,7 +43,7 @@ function createWindow() {
 ipcMain.on('show-notification', (event, { title, body }) => {
   if (Notification.isSupported()) {
     new Notification({
-      title: title || 'ClickUp Project Manager',
+      title: title || 'Status+ Project Manager',
       body: body || '',
       icon: path.join(__dirname, '..', 'public', 'icon.png')
     }).show();

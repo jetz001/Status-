@@ -131,6 +131,30 @@ app.get('/api/tasks', (req, res) => {
   }
 });
 
+app.get('/api/tasks/all', (req, res) => {
+  try {
+    const tasks = db.prepare(`
+      SELECT t.*, l.name as list_name, l.color as list_color, s.name as space_name, s.color as space_color
+      FROM tasks t
+      LEFT JOIN lists l ON t.list_id = l.id
+      LEFT JOIN spaces s ON l.space_id = s.id
+      ORDER BY t.due_date ASC, t.created_at DESC
+    `).all();
+
+    const enrichedTasks = tasks.map(t => {
+      const subtasks = db.prepare('SELECT * FROM subtasks WHERE task_id = ? ORDER BY position ASC').all(t.id);
+      return {
+        ...t,
+        subtasks
+      };
+    });
+
+    res.json(enrichedTasks);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/tasks', (req, res) => {
   try {
     const {

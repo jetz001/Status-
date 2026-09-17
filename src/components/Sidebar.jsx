@@ -22,7 +22,9 @@ import {
 export default function Sidebar({ 
   spaces, 
   activeListId, 
+  activeView,
   onSelectList, 
+  onSelectHome,
   onCreateSpace, 
   onCreateList,
   onOpenAISidebar,
@@ -58,12 +60,18 @@ export default function Sidebar({
   return (
     <aside className="w-64 bg-[#18191b] border-r border-[#333538] flex flex-col h-screen select-none text-[#cfd3d8] flex-shrink-0 z-10 text-xs">
       {/* Workspace Header */}
-      <div className="p-3 border-b border-[#333538] flex items-center justify-between hover:bg-[#222427] cursor-pointer transition">
+      <div 
+        onClick={onSelectHome}
+        className="p-3 border-b border-[#333538] flex items-center justify-between hover:bg-[#222427] cursor-pointer transition"
+      >
         <div className="flex items-center space-x-2 truncate">
-          <div className="w-5 h-5 rounded bg-gradient-to-tr from-purple-600 to-indigo-500 flex items-center justify-center text-white font-bold text-[10px] shadow-sm">
-            J
+          <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-purple-600 to-indigo-500 flex items-center justify-center text-white font-black text-[11px] shadow-sm">
+            S+
           </div>
-          <span className="font-semibold text-white truncate text-xs">Jet mut's Workspace</span>
+          <div className="flex flex-col truncate leading-tight">
+            <span className="font-bold text-white truncate text-xs">Status+</span>
+            <span className="text-[10px] text-gray-400 truncate">Jet mut's Workspace</span>
+          </div>
         </div>
         <ChevronDown size={14} className="text-gray-400" />
       </div>
@@ -72,13 +80,16 @@ export default function Sidebar({
       <div className="flex-1 overflow-y-auto px-2 py-3 space-y-4">
         {/* Core Nav items */}
         <div className="space-y-0.5">
-          <div className="flex items-center space-x-2.5 px-2 py-1.5 rounded hover:bg-[#2a2b2d] text-gray-300 hover:text-white cursor-pointer font-medium">
-            <Home size={15} className="text-gray-400" />
+          <div 
+            onClick={onSelectHome}
+            className={`flex items-center space-x-2.5 px-2 py-1.5 rounded cursor-pointer font-medium transition ${
+              activeView === 'home'
+                ? 'bg-[#7b68ee]/20 text-white font-semibold border-l-2 border-[#7b68ee]'
+                : 'hover:bg-[#2a2b2d] text-gray-300 hover:text-white'
+            }`}
+          >
+            <Home size={15} className={activeView === 'home' ? 'text-[#7b68ee]' : 'text-gray-400'} />
             <span>Home</span>
-          </div>
-          <div className="flex items-center space-x-2.5 px-2 py-1.5 rounded hover:bg-[#2a2b2d] text-gray-300 hover:text-white cursor-pointer font-medium">
-            <CheckSquare size={15} className="text-gray-400" />
-            <span>My Tasks</span>
           </div>
         </div>
 

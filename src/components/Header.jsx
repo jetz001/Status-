@@ -13,7 +13,8 @@ import {
   Share2,
   ChevronDown,
   Download,
-  Database
+  Database,
+  Home
 } from 'lucide-react';
 
 export default function Header({
@@ -38,15 +39,26 @@ export default function Header({
       {/* Top row: Breadcrumbs, Search, AI bar, Quick Actions */}
       <div className="flex items-center justify-between">
         {/* Breadcrumb */}
-        <div className="flex items-center space-x-2 text-xs">
-          <span className="text-gray-400 font-medium">{spaceName || 'Team Space'}</span>
-          <span className="text-gray-500">/</span>
-          <div className="flex items-center space-x-1.5 text-white font-semibold">
-            <span className="w-2 h-2 rounded-sm bg-[#7b68ee]"></span>
-            <span>{listName || 'IQA26'}</span>
-            <ChevronDown size={13} className="text-gray-400" />
+        {activeView === 'home' ? (
+          <div className="flex items-center space-x-2 text-xs">
+            <span className="text-purple-400 font-bold">Status+</span>
+            <span className="text-gray-500">/</span>
+            <div className="flex items-center space-x-1.5 text-white font-semibold">
+              <span className="w-2 h-2 rounded-sm bg-[#7b68ee]"></span>
+              <span>Home Dashboard</span>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="flex items-center space-x-2 text-xs">
+            <span className="text-gray-400 font-medium">{spaceName || 'Team Space'}</span>
+            <span className="text-gray-500">/</span>
+            <div className="flex items-center space-x-1.5 text-white font-semibold">
+              <span className="w-2 h-2 rounded-sm bg-[#7b68ee]"></span>
+              <span>{listName || 'IQA26'}</span>
+              <ChevronDown size={13} className="text-gray-400" />
+            </div>
+          </div>
+        )}
 
         {/* Center: Search & AI Semantic Search */}
         <div className="flex items-center space-x-2 flex-1 max-w-md mx-6">
@@ -140,9 +152,21 @@ export default function Header({
         </div>
       </div>
 
-      {/* Bottom row: View Switcher Tabs (List View, Board View, Timeline View) */}
+      {/* Bottom row: View Switcher Tabs (Home, List View, Board View, Timeline View) */}
       <div className="flex items-center justify-between pt-1 border-t border-[#2a2b2d]">
         <div className="flex items-center space-x-1 text-xs">
+          <button 
+            onClick={() => onSelectView('home')}
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded font-medium transition ${
+              activeView === 'home' 
+                ? 'bg-[#2a2b2d] text-white border-b-2 border-[#7b68ee]' 
+                : 'text-gray-400 hover:text-gray-200 hover:bg-[#222427]'
+            }`}
+          >
+            <Home size={14} className={activeView === 'home' ? 'text-[#7b68ee]' : ''} />
+            <span>Home</span>
+          </button>
+
           <button 
             onClick={() => onSelectView('list')}
             className={`flex items-center space-x-1.5 px-3 py-1.5 rounded font-medium transition ${

@@ -1,7 +1,7 @@
 {
-  "name": "clickup-project-management",
+  "name": "status-plus",
   "version": "1.0.0",
-  "description": "ClickUp-style local project management desktop app with SQLite and RAG Vector Database",
+  "description": "Status+ local project management desktop app with SQLite and RAG Vector Database",
   "main": "electron/main.cjs",
   "scripts": {
     "dev": "concurrently -k -p \"[{name}]\" -n \"SERVER,VITE\" -c \"cyan,magenta\" \"node server/server.js\" \"vite\"",
@@ -15,7 +15,7 @@
     "package:exe": "npm run build && electron-builder --win"
   },
   "keywords": [
-    "clickup",
+    "status-plus",
     "project-management",
     "electron",
     "sqlite",
@@ -48,8 +48,8 @@
     "vite": "^8.3.0"
   },
   "build": {
-    "appId": "com.clickup.localpm",
-    "productName": "ClickUp Local Project Management",
+    "appId": "com.jetmut.statusplus",
+    "productName": "Status+",
     "directories": {
       "output": "release"
     },

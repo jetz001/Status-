@@ -14,13 +14,15 @@ import SettingsModal from './components/SettingsModal.jsx';
 import ImageLightboxModal from './components/ImageLightboxModal.jsx';
 import PrintReportView from './components/PrintReportView.jsx';
 import BackupDataModal from './components/BackupDataModal.jsx';
+import HomeView from './components/HomeView.jsx';
 
 export default function App() {
   const [spaces, setSpaces] = useState([]);
   const [activeListId, setActiveListId] = useState('list-iqa26');
   const [tasks, setTasks] = useState([]);
+  const [allTasks, setAllTasks] = useState([]);
   const [fields, setFields] = useState([]);
-  const [activeView, setActiveView] = useState('list'); // 'list' | 'board' | 'timeline'
+  const [activeView, setActiveView] = useState('home'); // 'home' | 'list' | 'board' | 'timeline'
   const [searchQuery, setSearchQuery] = useState('');
   
   // Modals & Panels
@@ -65,6 +67,17 @@ export default function App() {
     }
   };
 
+  // Load all tasks across all lists for Home Dashboard & Cross-project views
+  const loadAllTasks = async () => {
+    try {
+      const res = await fetch('/api/tasks/all');
+      const data = await res.json();
+      setAllTasks(data || []);
+    } catch (err) {
+      console.error('Error loading all tasks:', err);
+    }
+  };
+
   // Load Notifications
   const checkNotifications = async () => {
     try {
@@ -77,7 +90,7 @@ export default function App() {
         const overdue = data.filter(d => d.type === 'overdue');
         if (overdue.length > 0) {
           window.electronAPI.showNotification(
-            '⚠️ มีงานเกินกำหนดส่ง (ClickUp Alert)',
+            '⚠️ มีงานเกินกำหนดส่ง (Status+ Alert)',
             `พบงานเกินกำหนด ${overdue.length} รายการ: ${overdue[0].title}`
           );
         }
@@ -89,6 +102,7 @@ export default function App() {
 
   useEffect(() => {
     loadSpaces();
+    loadAllTasks();
     checkNotifications();
     const interval = setInterval(checkNotifications, 60000); // Check every minute
     return () => clearInterval(interval);
@@ -143,18 +157,23 @@ export default function App() {
   };
 
   // Task Mutations
-  const handleQuickAddTask = async ({ name, status }) => {
+  const handleQuickAddTask = async (taskData) => {
     try {
+      const data = typeof taskData === 'string' ? { name: taskData } : taskData;
+      const targetList = data.list_id || activeListId || 'list-iqa26';
       await fetch('/api/tasks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          list_id: activeListId,
-          name,
-          status: status || 'NOT STARTED'
+          list_id: targetList,
+          name: data.name,
+          description: data.description || '',
+          status: data.status || 'NOT STARTED',
+          priority: data.priority || 'Normal'
         })
       });
       loadTasks();
+      loadAllTasks();
       loadSpaces();
     } catch (err) {
       console.error(err);
@@ -169,6 +188,7 @@ export default function App() {
         body: JSON.stringify(updates)
       });
       loadTasks();
+      loadAllTasks();
       if (selectedTask && selectedTask.id === taskId) {
         setSelectedTask(prev => ({ ...prev, ...updates }));
       }
@@ -185,6 +205,7 @@ export default function App() {
     try {
       await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
       loadTasks();
+      loadAllTasks();
       loadSpaces();
       if (selectedTask?.id === taskId) setSelectedTask(null);
     } catch (err) {
@@ -201,6 +222,7 @@ export default function App() {
         body: JSON.stringify({ target_list_id: targetListId })
       });
       loadTasks();
+      loadAllTasks();
       loadSpaces();
     } catch (err) {
       console.error(err);
@@ -219,6 +241,7 @@ export default function App() {
         })
       });
       loadTasks();
+      loadAllTasks();
       loadSpaces();
     } catch (err) {
       console.error(err);
@@ -268,7 +291,12 @@ export default function App() {
       <Sidebar 
         spaces={spaces}
         activeListId={activeListId}
-        onSelectList={setActiveListId}
+        activeView={activeView}
+        onSelectList={(listId) => {
+          setActiveListId(listId);
+          setActiveView('list');
+        }}
+        onSelectHome={() => setActiveView('home')}
         onCreateSpace={handleCreateSpace}
         onCreateList={handleCreateList}
         onOpenAISidebar={() => setShowAISidebar(true)}
@@ -298,6 +326,23 @@ export default function App() {
 
         {/* View Routing */}
         <div className="flex-1 flex overflow-hidden">
+          {activeView === 'home' && (
+            <HomeView 
+              allTasks={allTasks}
+              spaces={spaces}
+              onSelectTask={setSelectedTask}
+              onUpdateTaskStatus={handleUpdateTaskStatus}
+              onQuickAddTask={handleQuickAddTask}
+              onSelectList={(listId) => {
+                setActiveListId(listId);
+                setActiveView('list');
+              }}
+              onOpenAISidebar={() => setShowAISidebar(true)}
+              onOpenWallpaperModal={() => setShowWallpaperModal(true)}
+              onOpenBackupModal={() => setShowBackupModal(true)}
+            />
+          )}
+
           {activeView === 'list' && (
             <ListView 
               tasks={filteredTasks}
