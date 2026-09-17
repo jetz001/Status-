@@ -11,6 +11,7 @@ const { setWindowsWallpaper, saveWallpaperDataUrl, STOCK_WALLPAPERS } = require(
 const { processAgentQuery } = require('./aiSkills');
 const { processFileForAI, saveFileBuffer } = require('./fileProcessor');
 const { executeTool } = require('./aiTools');
+const { cleanupTempFiles, getTempFilesStatus } = require('../mcp/desktopController');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -928,6 +929,28 @@ app.delete('/api/mcp/logs', (req, res) => {
   try {
     clearMcpLogs();
     res.json({ success: true, message: 'ล้างประวัติการทำงานของ AI เรียบร้อยแล้ว' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// 8.2. TEMP FILES & CACHE CLEANUP
+// ==========================================
+
+app.get('/api/temp/status', (req, res) => {
+  try {
+    const status = getTempFilesStatus();
+    res.json(status);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/temp/cleanup', (req, res) => {
+  try {
+    const result = cleanupTempFiles(req.body || {});
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

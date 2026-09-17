@@ -21,7 +21,9 @@ const {
   activateWindow,
   launchStatusPlusApp,
   focusStatusPlusApp,
-  quitStatusPlusApp
+  quitStatusPlusApp,
+  cleanupTempFiles,
+  getTempFilesStatus
 } = require('./desktopController');
 
 // Direct DB & Tool fallbacks for Offline Mode
@@ -273,7 +275,7 @@ const TOOLS = [
   // 4. Mandatory Audit & Execution Reporting
   {
     name: 'status_submit_execution_report',
-    description: '🔴 กฎบังคับ (MANDATORY RULE): AI ภายนอกทุกตัวที่เข้ามาปฏิบัติการในระบบ Status+ จะต้องเรียกใช้เครื่องมือนี้เพื่อส่งรายงานสรุปผลการทำงานทุกครั้งหลังจากทำงานเสร็จสิ้น เพื่อบันทึกประวัติการใช้งานให้ผู้ใช้ตรวจสอบได้ที่เมนู Settings (การตั้งค่า) > ประวัติ AI ภายนอก',
+    description: '🔴 กฎบังคับ (MANDATORY RULE): AI ภายนอกทุกตัวที่เข้ามาปฏิบัติการในระบบ Status+ จะต้องเรียกใช้เครื่องมือนี้เพื่อส่งรายงานสรุปผลการทำงานทุกครั้งหลังจากทำงานเสร็จสิ้น เพื่อบันทึกประวัติการใช้งานให้ผู้ใช้ตรวจสอบได้ที่เมนู Settings (การตั้งค่า) > ประวัติ AI ภายนอก (ระบบจะล้างไฟล์ภาพหน้าจอชั่วคราวที่ใช้ในการวิเคราะห์ข้อมูลให้อัตโนมัติ)',
     inputSchema: {
       type: 'object',
       properties: {
@@ -292,6 +294,18 @@ const TOOLS = [
         }
       },
       required: ['summary_of_work']
+    }
+  },
+
+  // 5. Temp Files & Cache Management
+  {
+    name: 'status_clean_temp_files',
+    description: 'ล้างไฟล์ชั่วคราว ภาพแคปหน้าจอ (Screenshots) ที่ใช้ในการวิเคราะห์ข้อมูล และแคชที่ไม่จำเป็นทั้งหมด เพื่อคืนพื้นที่ฮาร์ดดิสก์และป้องกันการบวมของข้อมูล (Disk Bloat)',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        keep_recent: { type: 'boolean', description: 'เก็บภาพล่าสุดไว้ 1 ภาพหรือไม่ (ค่าเริ่มต้น false ล้างทั้งหมด)' }
+      }
     }
   }
 ];
@@ -446,14 +460,25 @@ async function handleToolCall(name, args) {
         status: execStatus === 'failed' ? 'error' : 'success'
       });
 
+      // Auto-purge temporary analysis screenshots and temp files upon session finish
+      let cleanupRes = null;
+      try {
+        cleanupRes = cleanupTempFiles();
+      } catch (e) {}
+
       return {
         success: true,
-        message: `✅ ได้รับและบันทึกรายงานสรุปผลการทำงานของ ${clientName} เรียบร้อยแล้ว`,
+        message: `✅ ได้รับและบันทึกรายงานสรุปผลการทำงานของ ${clientName} เรียบร้อยแล้ว (ล้างไฟล์แคชและภาพหน้าจอชั่วคราวแล้ว ${cleanupRes?.deletedCount || 0} ไฟล์)`,
         stored_in: 'Settings > บันทึกการทำงาน AI ภายนอก (MCP Logs)',
         timestamp: new Date().toISOString(),
-        tasks_recorded: tasksModified.length
+        tasks_recorded: tasksModified.length,
+        temp_files_cleaned: cleanupRes?.deletedCount || 0,
+        freed_disk_space: cleanupRes?.freedFormatted || '0 B'
       };
     }
+
+    case 'status_clean_temp_files':
+      return cleanupTempFiles({ keepRecent: args?.keep_recent === true });
 
     default:
       throw new Error(`ไม่พบเครื่องมือ "${name}" ในระบบ Status+ MCP Server`);

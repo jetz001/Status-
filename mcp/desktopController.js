@@ -19,17 +19,132 @@ function runPowerShell(script) {
   });
 }
 
+const TEMP_SCREENSHOTS_DIR = path.join(PROJECT_DIR, 'data', 'temp_screenshots');
+if (!fs.existsSync(TEMP_SCREENSHOTS_DIR)) {
+  fs.mkdirSync(TEMP_SCREENSHOTS_DIR, { recursive: true });
+}
+
+function formatBytes(bytes) {
+  if (!bytes || bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+/**
+ * Get current temp files statistics
+ */
+function getTempFilesStatus() {
+  let totalBytes = 0;
+  let fileCount = 0;
+  const files = [];
+
+  // Check TEMP_SCREENSHOTS_DIR
+  if (fs.existsSync(TEMP_SCREENSHOTS_DIR)) {
+    const list = fs.readdirSync(TEMP_SCREENSHOTS_DIR);
+    list.forEach(f => {
+      const fullPath = path.join(TEMP_SCREENSHOTS_DIR, f);
+      try {
+        const stat = fs.statSync(fullPath);
+        if (stat.isFile()) {
+          totalBytes += stat.size;
+          fileCount++;
+          files.push({ name: f, path: fullPath, size: stat.size, mtime: stat.mtime });
+        }
+      } catch (e) {}
+    });
+  }
+
+  // Check loose screenshots in data/
+  const dataDir = path.join(PROJECT_DIR, 'data');
+  if (fs.existsSync(dataDir)) {
+    const list = fs.readdirSync(dataDir);
+    list.forEach(f => {
+      if (f.startsWith('screenshot-') && f.endsWith('.png')) {
+        const fullPath = path.join(dataDir, f);
+        try {
+          const stat = fs.statSync(fullPath);
+          if (stat.isFile()) {
+            totalBytes += stat.size;
+            fileCount++;
+            files.push({ name: f, path: fullPath, size: stat.size, mtime: stat.mtime });
+          }
+        } catch (e) {}
+      }
+    });
+  }
+
+  return {
+    fileCount,
+    totalBytes,
+    formattedSize: formatBytes(totalBytes),
+    files
+  };
+}
+
+/**
+ * Clean temporary files and screenshots to prevent disk bloat
+ */
+function cleanupTempFiles(options = {}) {
+  const { keepRecent = false, maxAgeMs = 0 } = options;
+  const now = Date.now();
+  let deletedCount = 0;
+  let freedBytes = 0;
+
+  const status = getTempFilesStatus();
+  let filesToDelete = status.files;
+
+  // If keepRecent is true, sort by mtime desc and keep the newest 1 file
+  if (keepRecent && filesToDelete.length > 1) {
+    filesToDelete.sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
+    filesToDelete = filesToDelete.slice(1);
+  }
+
+  filesToDelete.forEach(file => {
+    if (maxAgeMs > 0 && (now - file.mtime.getTime()) < maxAgeMs) {
+      return;
+    }
+    try {
+      if (fs.existsSync(file.path)) {
+        fs.unlinkSync(file.path);
+        deletedCount++;
+        freedBytes += file.size;
+      }
+    } catch (err) {
+      // Ignore files in-use
+    }
+  });
+
+  return {
+    success: true,
+    deletedCount,
+    freedBytes,
+    freedFormatted: formatBytes(freedBytes),
+    message: `ล้างไฟล์ชั่วคราวสำเร็จ ${deletedCount} ไฟล์ (คืนพื้นที่ดิสก์ ${formatBytes(freedBytes)})`
+  };
+}
+
 /**
  * 1. TAKE SCREENSHOT
  * Captures full desktop or primary display, returns base64 and saves file
+ * Auto-cleans old temporary screenshots to prevent disk bloat
  */
 async function takeScreenshot(options = {}) {
-  const { outputPath } = options;
-  const tempFile = outputPath || path.join(PROJECT_DIR, 'data', `screenshot-${Date.now()}.png`);
+  const { outputPath, keepFile = false, autoDeleteAfterSeconds = 120 } = options;
+  const isCustomPath = !!outputPath;
+  const tempFile = outputPath || path.join(TEMP_SCREENSHOTS_DIR, `screenshot-${Date.now()}.png`);
   
   const dataDir = path.dirname(tempFile);
   if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
+  }
+
+  // Pre-cleanup: If more than 2 temporary screenshots already exist, clean older ones
+  if (!isCustomPath) {
+    try {
+      cleanupTempFiles({ keepRecent: true });
+    } catch (e) {}
   }
 
   const psScript = `
@@ -53,10 +168,21 @@ async function takeScreenshot(options = {}) {
   if (fs.existsSync(tempFile)) {
     const fileBuffer = fs.readFileSync(tempFile);
     const base64 = fileBuffer.toString('base64');
+
+    // Auto-delete temporary screenshot after timeout if caller does not need permanent file
+    if (!isCustomPath && !keepFile && autoDeleteAfterSeconds > 0) {
+      setTimeout(() => {
+        try {
+          if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
+        } catch (e) {}
+      }, autoDeleteAfterSeconds * 1000);
+    }
+
     return {
       success: true,
       filePath: tempFile,
       base64Image: `data:image/png;base64,${base64}`,
+      isTemporary: !isCustomPath && !keepFile,
       message: `บันทึกภาพหน้าจอเรียบร้อย: ${tempFile}`
     };
   } else {
@@ -367,10 +493,16 @@ async function quitStatusPlusApp(options = {}) {
   `;
 
   const res = await runPowerShell(psScript);
+
+  // Auto clean temporary files on quit
+  try {
+    cleanupTempFiles();
+  } catch (e) {}
+
   return {
     success: true,
     force,
-    message: res === 'CLOSED' ? 'ปิดโปรแกรม Status+ เรียบร้อยแล้ว' : 'โปรแกรม Status+ ไม่ได้กำลังเปิดอยู่'
+    message: res === 'CLOSED' ? 'ปิดโปรแกรม Status+ เรียบร้อยแล้ว (ล้างไฟล์แคชชั่วคราวแล้ว)' : 'โปรแกรม Status+ ไม่ได้กำลังเปิดอยู่'
   };
 }
 
@@ -382,5 +514,7 @@ module.exports = {
   activateWindow,
   launchStatusPlusApp,
   focusStatusPlusApp,
-  quitStatusPlusApp
+  quitStatusPlusApp,
+  cleanupTempFiles,
+  getTempFilesStatus
 };

@@ -468,6 +468,21 @@ const tools = {
       action: 'quit_app',
       message: res.message
     };
+  },
+
+  /**
+   * 16. CLEAN TEMP FILES
+   */
+  async clean_temp_files(args) {
+    const res = await desktopController.cleanupTempFiles(args || {});
+    return {
+      success: true,
+      action: 'cleaned_temp_files',
+      deletedCount: res.deletedCount,
+      freedBytes: res.freedBytes,
+      freedFormatted: res.freedFormatted,
+      message: res.message
+    };
   }
 };
 

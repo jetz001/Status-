@@ -16,7 +16,8 @@ import {
   Clock, 
   ChevronDown, 
   ChevronRight,
-  ClipboardList
+  ClipboardList,
+  HardDrive
 } from 'lucide-react';
 
 export default function SettingsModal({
@@ -37,6 +38,10 @@ export default function SettingsModal({
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
   const [isClearingLogs, setIsClearingLogs] = useState(false);
   const [expandedLogId, setExpandedLogId] = useState(null);
+
+  // Temp Files & Cache State
+  const [tempStatus, setTempStatus] = useState({ fileCount: 0, formattedSize: '0 B' });
+  const [isCleaningTemp, setIsCleaningTemp] = useState(false);
 
   const CONTEXT_PRESETS = [
     {
@@ -65,6 +70,30 @@ export default function SettingsModal({
       .catch(err => console.error(err));
   };
 
+  const fetchTempStatus = async () => {
+    try {
+      const res = await fetch('/api/temp/status');
+      if (res.ok) {
+        const data = await res.json();
+        setTempStatus(data);
+      }
+    } catch (e) {}
+  };
+
+  const handleCleanupTemp = async () => {
+    setIsCleaningTemp(true);
+    try {
+      const res = await fetch('/api/temp/cleanup', { method: 'POST' });
+      if (res.ok) {
+        await fetchTempStatus();
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsCleaningTemp(false);
+    }
+  };
+
   const fetchMcpLogs = async () => {
     setIsLoadingLogs(true);
     try {
@@ -84,6 +113,7 @@ export default function SettingsModal({
     if (isOpen) {
       fetchSettings();
       fetchMcpLogs();
+      fetchTempStatus();
     }
   }, [isOpen]);
 
@@ -387,6 +417,41 @@ export default function SettingsModal({
                   AI ภายนอก (เช่น Claude Desktop, Cursor AI, หรือ Agent ภายนอก) ที่เชื่อมต่อผ่าน MCP จะต้องเรียกใช้เครื่องมือ <code className="px-1 py-0.5 bg-black/40 text-purple-300 rounded font-mono">status_submit_execution_report</code> ทุกครั้งหลังจบภารกิจ เพื่อบันทึกสรุปผลงานและการปรับปรุง Task ให้ตรวจสอบได้ที่นี่
                 </p>
               </div>
+            </div>
+
+            {/* Temp Files & Screen Cache Control Card */}
+            <div className="p-3 bg-[#17181b] border border-[#2d2f33] rounded-lg flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 rounded-lg bg-[#222428] text-amber-400 border border-amber-500/20">
+                  <HardDrive size={16} />
+                </div>
+                <div>
+                  <div className="font-semibold text-gray-200 text-xs flex items-center space-x-2">
+                    <span>แคชภาพหน้าจอ & ไฟล์ชั่วคราว (Screen & Analysis Cache)</span>
+                    <span className="px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-300 border border-amber-500/30 text-[10px] font-mono">
+                      {tempStatus.fileCount} ไฟล์ ({tempStatus.formattedSize})
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-gray-400 mt-0.5">
+                    ระบบล้างภาพหน้าจอที่ AI นำไปวิเคราะห์ให้อัตโนมัติเมื่อ AI ส่งรายงานสรุปงาน หรือเมื่อเกิน 2 นาที เพื่อป้องกันพื้นที่ฮาร์ดดิสก์บวม
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleCleanupTemp}
+                disabled={isCleaningTemp || tempStatus.fileCount === 0}
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded text-xs font-medium transition cursor-pointer ${
+                  tempStatus.fileCount > 0
+                    ? 'bg-amber-600/20 hover:bg-amber-600/30 border border-amber-500/40 text-amber-200'
+                    : 'bg-[#202225] border border-[#333538] text-gray-500 cursor-not-allowed'
+                }`}
+                title="ล้างภาพหน้าจอและไฟล์แคชชั่วคราวทั้งหมดทันที"
+              >
+                <Trash2 size={13} className={isCleaningTemp ? 'animate-spin' : ''} />
+                <span>{isCleaningTemp ? 'กำลังล้าง...' : 'ล้างแคชทันที'}</span>
+              </button>
             </div>
 
             {/* Filter and Control Bar */}
