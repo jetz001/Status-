@@ -214,7 +214,7 @@ app.get('/api/tasks', (req, res) => {
     const { listId } = req.query;
     let query = 'SELECT * FROM tasks';
     const params = [];
-    if (listId) {
+    if (listId && listId !== 'all') {
       query += ' WHERE list_id = ?';
       params.push(listId);
     }
@@ -223,7 +223,7 @@ app.get('/api/tasks', (req, res) => {
 
     // Fetch custom fields for this list
     let fields = [];
-    if (listId) {
+    if (listId && listId !== 'all') {
       fields = db.prepare('SELECT * FROM custom_fields WHERE list_id = ? ORDER BY position ASC').all(listId);
     }
 
@@ -262,9 +262,16 @@ app.get('/api/tasks/all', (req, res) => {
 
     const enrichedTasks = tasks.map(t => {
       const subtasks = db.prepare('SELECT * FROM subtasks WHERE task_id = ? ORDER BY position ASC').all(t.id);
+      const fieldValues = db.prepare('SELECT * FROM task_field_values WHERE task_id = ?').all(t.id);
+      const attachments = db.prepare('SELECT * FROM attachments WHERE task_id = ? ORDER BY created_at DESC').all(t.id);
+      const valuesMap = {};
+      fieldValues.forEach(fv => { valuesMap[fv.field_id] = fv.value; });
+
       return {
         ...t,
-        subtasks
+        subtasks,
+        fieldValues: valuesMap,
+        attachments
       };
     });
 
@@ -1282,8 +1289,15 @@ if (fs.existsSync(DIST_DIR)) {
 
 // Start listening
 if (process.env.NODE_ENV !== 'test') {
-  app.listen(PORT, () => {
+  const server = app.listen(PORT, () => {
     console.log(`ClickUp Local Backend running at http://localhost:${PORT}`);
+  });
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.log(`[Backend] Port ${PORT} already active, reusing existing instance.`);
+    } else {
+      console.error('Server error:', err);
+    }
   });
 }
 

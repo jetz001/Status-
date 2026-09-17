@@ -94,6 +94,10 @@ export default function App() {
   // Load Tasks for active list
   const loadTasks = async (listId = activeListId) => {
     if (!listId) return;
+    if (listId === 'all') {
+      loadAllTasks();
+      return;
+    }
     try {
       const res = await fetch(`/api/tasks?listId=${listId}`);
       const data = await res.json();
@@ -264,7 +268,10 @@ export default function App() {
   const handleQuickAddTask = async (taskData) => {
     try {
       const data = typeof taskData === 'string' ? { name: taskData } : taskData;
-      const targetList = data.list_id || activeListId || 'list-iqa26';
+      let targetList = data.list_id || activeListId;
+      if (!targetList || targetList === 'all') {
+        targetList = spaces[0]?.lists?.[0]?.id || 'list-iqa26';
+      }
       await fetch('/api/tasks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -407,17 +414,23 @@ export default function App() {
   // Find active space and list metadata
   let activeSpaceName = 'Team Space';
   let activeListName = 'IQA26';
-  for (const sp of spaces) {
-    const foundList = sp.lists?.find(l => l.id === activeListId);
-    if (foundList) {
-      activeSpaceName = sp.name;
-      activeListName = foundList.name;
-      break;
+  if (activeListId === 'all') {
+    activeSpaceName = "Jet mut's Workspace";
+    activeListName = 'All Tasks';
+  } else {
+    for (const sp of spaces) {
+      const foundList = sp.lists?.find(l => l.id === activeListId);
+      if (foundList) {
+        activeSpaceName = sp.name;
+        activeListName = foundList.name;
+        break;
+      }
     }
   }
 
   // Filter tasks by search query
-  const filteredTasks = tasks.filter(t => {
+  const baseTasks = activeListId === 'all' ? allTasks : tasks;
+  const filteredTasks = baseTasks.filter(t => {
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     return (
@@ -439,6 +452,13 @@ export default function App() {
           setActiveView('list');
         }}
         onSelectHome={() => setActiveView('home')}
+        onSelectAllTasks={() => {
+          setActiveListId('all');
+          if (activeView === 'home') {
+            setActiveView('list');
+          }
+        }}
+        allTasksCount={allTasks.length}
         onCreateSpace={handleCreateSpace}
         onCreateList={handleCreateList}
         onUpdateSpace={handleUpdateSpace}

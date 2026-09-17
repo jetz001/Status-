@@ -420,6 +420,20 @@ export default function ListView({
                                   {task.name}
                                 </span>
 
+                                {task.list_name && (
+                                  <span 
+                                    style={{ borderColor: task.list_color ? `${task.list_color}40` : '#374151' }}
+                                    className="text-[10px] px-1.5 py-0.5 rounded bg-[#22242a] text-gray-400 border flex-shrink-0 flex items-center space-x-1"
+                                    title={`List: ${task.list_name}`}
+                                  >
+                                    <span 
+                                      className="w-1.5 h-1.5 rounded-full inline-block" 
+                                      style={{ backgroundColor: task.list_color || '#7b68ee' }} 
+                                    />
+                                    <span>{task.list_name}</span>
+                                  </span>
+                                )}
+
                                 <button
                                   type="button"
                                   onClick={(e) => startInlineEdit(e, task)}

@@ -43,6 +43,8 @@ export default function Sidebar({
   activeView,
   onSelectList, 
   onSelectHome,
+  onSelectAllTasks,
+  allTasksCount = 0,
   onCreateSpace, 
   onCreateList,
   onUpdateSpace,
@@ -243,10 +245,10 @@ export default function Sidebar({
       {/* Main Navigation Scroll Area */}
       <div className="flex-1 overflow-y-auto px-2 py-3 space-y-4">
         {/* Core Nav items */}
-        <div className="space-y-0.5">
+        <div className="space-y-1">
           <div 
             onClick={onSelectHome}
-            className={`flex items-center space-x-2.5 px-2 py-1.5 rounded cursor-pointer font-medium transition ${
+            className={`flex items-center space-x-2.5 px-2.5 py-1.5 rounded-lg cursor-pointer font-medium transition ${
               activeView === 'home'
                 ? 'bg-[#7b68ee]/20 text-white font-semibold border-l-2 border-[#7b68ee]'
                 : 'hover:bg-[#2a2b2d] text-gray-300 hover:text-white'
@@ -254,6 +256,37 @@ export default function Sidebar({
           >
             <Home size={15} className={activeView === 'home' ? 'text-[#7b68ee]' : 'text-gray-400'} />
             <span>Home</span>
+          </div>
+
+          {/* All Tasks - Jet mut's Workspace */}
+          <div 
+            onClick={onSelectAllTasks}
+            className={`flex items-center space-x-2.5 px-2.5 py-1.5 rounded-lg cursor-pointer font-medium transition group ${
+              activeListId === 'all' && activeView !== 'home'
+                ? 'bg-[#2a2b2d] text-white font-semibold border-l-2 border-cyan-400'
+                : 'hover:bg-[#2a2b2d] text-gray-300 hover:text-white'
+            }`}
+          >
+            <div className="w-5 h-5 rounded bg-[#1e2024] border border-[#383a3e] flex items-center justify-center flex-shrink-0 shadow-xs group-hover:border-cyan-500/50">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-gray-300 group-hover:text-cyan-400">
+                <circle cx="12" cy="12" r="3"></circle>
+                <circle cx="12" cy="3" r="2.5"></circle>
+                <circle cx="12" cy="21" r="2.5"></circle>
+                <circle cx="3" cy="12" r="2.5"></circle>
+                <circle cx="21" cy="12" r="2.5"></circle>
+                <line x1="12" y1="5.5" x2="12" y2="9"></line>
+                <line x1="12" y1="15" x2="12" y2="18.5"></line>
+                <line x1="5.5" y1="12" x2="9" y2="12"></line>
+                <line x1="15" y1="12" x2="18.5" y2="12"></line>
+              </svg>
+            </div>
+            <div className="truncate flex-1">
+              <span className="text-white font-medium">All Tasks</span>
+              <span className="text-[10px] text-gray-400 ml-1.5">- Jet mut's Workspace</span>
+            </div>
+            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-[#242629] text-gray-400 group-hover:text-cyan-300">
+              {allTasksCount || 0}
+            </span>
           </div>
         </div>
 

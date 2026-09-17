@@ -224,10 +224,26 @@ export default function BoardView({
                     )}
 
                     {/* Card Title & 3-dots Menu */}
-                    <div className="flex items-start justify-between">
-                      <h4 className="font-semibold text-white text-xs leading-snug line-clamp-2">
-                        {task.name}
-                      </h4>
+                    <div className="flex items-start justify-between gap-1">
+                      <div className="flex-1">
+                        {task.list_name && (
+                          <div className="mb-1">
+                            <span 
+                              style={{ borderColor: task.list_color ? `${task.list_color}40` : '#374151' }}
+                              className="text-[9px] px-1.5 py-0.2 rounded bg-[#1e2024] text-gray-400 border inline-flex items-center space-x-1"
+                            >
+                              <span 
+                                className="w-1.5 h-1.5 rounded-full inline-block" 
+                                style={{ backgroundColor: task.list_color || '#7b68ee' }} 
+                              />
+                              <span className="truncate max-w-[110px]">{task.list_name}</span>
+                            </span>
+                          </div>
+                        )}
+                        <h4 className="font-semibold text-white text-xs leading-snug line-clamp-2">
+                          {task.name}
+                        </h4>
+                      </div>
                       <div className="relative">
                         <button 
                           onClick={(e) => {

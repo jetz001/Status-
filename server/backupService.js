@@ -217,9 +217,16 @@ function restoreBackupData(backupData, mode = 'replace') {
  * Generates CSV string for a list with UTF-8 BOM for Microsoft Excel compatibility
  */
 function exportListToCSV(listId) {
-  const list = db.prepare('SELECT * FROM lists WHERE id = ?').get(listId);
-  const tasks = db.prepare('SELECT * FROM tasks WHERE list_id = ? ORDER BY position ASC').all(listId);
-  const fields = db.prepare('SELECT * FROM custom_fields WHERE list_id = ? ORDER BY position ASC').all(listId);
+  let tasks = [];
+  let fields = [];
+  const isAll = listId === 'all';
+
+  if (isAll) {
+    tasks = db.prepare('SELECT t.*, l.name as list_name FROM tasks t LEFT JOIN lists l ON t.list_id = l.id ORDER BY t.due_date ASC, t.created_at DESC').all();
+  } else {
+    tasks = db.prepare('SELECT * FROM tasks WHERE list_id = ? ORDER BY position ASC').all(listId);
+    fields = db.prepare('SELECT * FROM custom_fields WHERE list_id = ? ORDER BY position ASC').all(listId);
+  }
 
   const escapeCSV = (str) => {
     if (str === null || str === undefined) return '""';
@@ -228,7 +235,7 @@ function exportListToCSV(listId) {
   };
 
   // Header Row
-  const headers = ['Task ID', 'Name', 'Status', 'Priority', 'Due Date', 'Assignee', 'Description', 'Subtasks Count', 'Completed Subtasks'];
+  const headers = ['Task ID', 'Name', ...(isAll ? ['List'] : []), 'Status', 'Priority', 'Due Date', 'Assignee', 'Description', 'Subtasks Count', 'Completed Subtasks'];
   fields.forEach(f => headers.push(f.name));
 
   const rows = [headers.map(escapeCSV).join(',')];

@@ -1,8 +1,12 @@
 const { app, BrowserWindow, ipcMain, Notification } = require('electron');
 const path = require('path');
 
-// Launch local Express API server in background
-require('../server/server.js');
+// Launch local Express API server safely if not already running
+try {
+  require('../server/server.js');
+} catch (e) {
+  console.log('[Electron] Server init note:', e.message);
+}
 
 let mainWindow;
 
@@ -12,6 +16,7 @@ function createWindow() {
     height: 860,
     minWidth: 1024,
     minHeight: 640,
+    show: false,
     backgroundColor: '#1e1f21',
     title: 'Status+',
     icon: path.join(__dirname, '..', 'public', 'logo.png'),
@@ -22,20 +27,46 @@ function createWindow() {
     }
   });
 
-  // Check if running in dev or built
-  const startUrl = process.env.ELECTRON_START_URL || 'http://localhost:5173';
-  mainWindow.loadURL(startUrl);
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show();
+    mainWindow.focus();
+  });
 
-  // If local dev server isn't up, fallback to built dist/index.html
-  mainWindow.webContents.on('did-fail-load', () => {
-    const distPath = path.join(__dirname, '..', 'dist', 'index.html');
-    const fs = require('fs');
-    if (fs.existsSync(distPath)) {
-      mainWindow.loadFile(distPath);
-    } else {
-      setTimeout(() => {
-        mainWindow.loadURL(startUrl);
-      }, 1500);
+  const startUrl = process.env.ELECTRON_START_URL || 'http://localhost:5173';
+  const http = require('http');
+  const fs = require('fs');
+
+  // Poll for Vite dev server before loading URL
+  const tryConnect = (retries = 40) => {
+    const req = http.get(startUrl, (res) => {
+      mainWindow.loadURL(startUrl);
+      mainWindow.show();
+    });
+    req.on('error', () => {
+      if (retries > 0) {
+        setTimeout(() => tryConnect(retries - 1), 300);
+      } else {
+        const distPath = path.join(__dirname, '..', 'dist', 'index.html');
+        if (fs.existsSync(distPath)) {
+          mainWindow.loadFile(distPath);
+        } else {
+          mainWindow.loadURL(startUrl);
+        }
+        mainWindow.show();
+      }
+    });
+  };
+
+  tryConnect();
+
+  // If local dev server fails later, fallback to built dist/index.html
+  mainWindow.webContents.on('did-fail-load', (event, errorCode) => {
+    if (errorCode !== -3) { // Not an aborted navigation
+      const distPath = path.join(__dirname, '..', 'dist', 'index.html');
+      if (fs.existsSync(distPath)) {
+        mainWindow.loadFile(distPath);
+        mainWindow.show();
+      }
     }
   });
 }
