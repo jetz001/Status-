@@ -23,7 +23,9 @@ import {
   Trash2,
   PlusCircle,
   AlertTriangle,
-  History
+  History,
+  FolderInput,
+  MoreHorizontal
 } from 'lucide-react';
 import ContextMenu from './ContextMenu.jsx';
 
@@ -67,6 +69,10 @@ export default function Sidebar({
   const [newSpaceName, setNewSpaceName] = useState('');
   const [showAddListModal, setShowAddListModal] = useState(null);
   const [newListName, setNewListName] = useState('');
+
+  // Drag and Drop state for Lists
+  const [draggedList, setDraggedList] = useState(null); // { listId, sourceSpaceId }
+  const [dragOverSpaceId, setDragOverSpaceId] = useState(null);
 
   // Context Menu State
   const [contextMenu, setContextMenu] = useState({ isOpen: false, position: { x: 0, y: 0 }, items: [] });
@@ -125,7 +131,7 @@ export default function Sidebar({
         },
         { type: 'separator' },
         {
-          label: 'เพิ่ม List ใน Space นี้',
+          label: 'เพิ่ม List ใหม่...',
           icon: Plus,
           onClick: () => {
             setExpandedSpaces(prev => ({ ...prev, [space.id]: true }));
@@ -143,8 +149,8 @@ export default function Sidebar({
     });
   };
 
-  // Right-click on List
-  const handleListContextMenu = (e, list) => {
+  // Right-click or Menu on List
+  const handleListContextMenu = (e, list, currentSpaceId) => {
     e.preventDefault();
     e.stopPropagation();
 
@@ -156,6 +162,24 @@ export default function Sidebar({
         if (onUpdateList) onUpdateList(list.id, { color: c.value });
       }
     }));
+
+    const targetSpaces = (spaces || []).filter(s => s.id !== (list.space_id || currentSpaceId));
+    const moveSubmenu = targetSpaces.length > 0 ? targetSpaces.map(s => ({
+      label: s.name,
+      colorDot: s.color || '#7b68ee',
+      icon: Folder,
+      onClick: () => {
+        if (onUpdateList) {
+          onUpdateList(list.id, { space_id: s.id });
+          setExpandedSpaces(prev => ({ ...prev, [s.id]: true }));
+        }
+      }
+    })) : [
+      {
+        label: 'ไม่มี Space อื่นให้ย้าย',
+        disabled: true
+      }
+    ];
 
     setContextMenu({
       isOpen: true,
@@ -170,6 +194,11 @@ export default function Sidebar({
           label: 'เปลี่ยนสี List',
           icon: Palette,
           submenu: colorSubmenu
+        },
+        {
+          label: 'ย้าย List ไปที่ Space อื่น',
+          icon: FolderInput,
+          submenu: moveSubmenu
         },
         {
           label: 'ทำสำเนา List (Duplicate)',
@@ -195,6 +224,65 @@ export default function Sidebar({
         }
       ]
     });
+  };
+
+  // Drag & Drop handlers for lists moving between spaces
+  const handleListDragStart = (e, list, currentSpaceId) => {
+    e.stopPropagation();
+    const data = { type: 'list', listId: list.id, sourceSpaceId: list.space_id || currentSpaceId };
+    e.dataTransfer.setData('application/json', JSON.stringify(data));
+    e.dataTransfer.setData('text/plain', list.id);
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggedList(data);
+  };
+
+  const handleListDragEnd = () => {
+    setDraggedList(null);
+    setDragOverSpaceId(null);
+  };
+
+  const handleSpaceDragOver = (e, spaceId) => {
+    if (draggedList && draggedList.sourceSpaceId !== spaceId) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      if (dragOverSpaceId !== spaceId) {
+        setDragOverSpaceId(spaceId);
+      }
+    }
+  };
+
+  const handleSpaceDragLeave = (e, spaceId) => {
+    e.preventDefault();
+    if (e.currentTarget.contains(e.relatedTarget)) return;
+    if (dragOverSpaceId === spaceId) {
+      setDragOverSpaceId(null);
+    }
+  };
+
+  const handleSpaceDrop = (e, targetSpaceId) => {
+    e.preventDefault();
+    setDragOverSpaceId(null);
+    setDraggedList(null);
+
+    let listId = null;
+    let sourceSpaceId = null;
+    try {
+      const raw = e.dataTransfer.getData('application/json');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        listId = parsed.listId;
+        sourceSpaceId = parsed.sourceSpaceId;
+      }
+    } catch {
+      listId = e.dataTransfer.getData('text/plain');
+    }
+
+    if (listId && targetSpaceId && sourceSpaceId !== targetSpaceId) {
+      if (onUpdateList) {
+        onUpdateList(listId, { space_id: targetSpaceId });
+        setExpandedSpaces(prev => ({ ...prev, [targetSpaceId]: true }));
+      }
+    }
   };
 
   const handleRenameSubmit = (e) => {
@@ -306,19 +394,35 @@ export default function Sidebar({
           <div className="space-y-1 mt-1">
             {spaces.map(space => {
               const isExpanded = !!expandedSpaces[space.id];
+              const isDropTarget = dragOverSpaceId === space.id;
               return (
-                <div key={space.id} className="space-y-0.5">
+                <div 
+                  key={space.id} 
+                  onDragOver={(e) => handleSpaceDragOver(e, space.id)}
+                  onDragLeave={(e) => handleSpaceDragLeave(e, space.id)}
+                  onDrop={(e) => handleSpaceDrop(e, space.id)}
+                  className={`space-y-0.5 rounded-lg transition-all ${
+                    isDropTarget ? 'bg-[#7b68ee]/20 ring-2 ring-[#7b68ee] p-1' : ''
+                  }`}
+                >
                   {/* Space Header */}
                   <div 
                     onClick={() => toggleSpace(space.id)}
                     onContextMenu={(e) => handleSpaceContextMenu(e, space)}
-                    className="flex items-center justify-between px-2 py-1.5 rounded hover:bg-[#222427] cursor-pointer text-gray-200 group"
-                    title="คลิกขวาเพื่อจัดการ Space"
+                    className={`flex items-center justify-between px-2 py-1.5 rounded hover:bg-[#222427] cursor-pointer text-gray-200 group ${
+                      isDropTarget ? 'bg-[#7b68ee]/30' : ''
+                    }`}
+                    title="คลิกขวาเพื่อจัดการ Space หรือลาก List มาวางที่นี่"
                   >
                     <div className="flex items-center space-x-2 truncate">
                       {isExpanded ? <ChevronDown size={13} className="text-gray-400" /> : <ChevronRight size={13} className="text-gray-400" />}
                       <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: space.color || '#7b68ee' }} />
                       <span className="font-semibold truncate text-[12px] text-gray-100">{space.name}</span>
+                      {isDropTarget && (
+                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-[#7b68ee] text-white font-medium animate-pulse ml-1">
+                          ปล่อยเพื่อย้าย List
+                        </span>
+                      )}
                     </div>
                     <button 
                       onClick={(e) => { e.stopPropagation(); setShowAddListModal(space.id); }}
@@ -334,17 +438,23 @@ export default function Sidebar({
                     <div className="pl-6 space-y-0.5 border-l border-[#2e3033] ml-3 mt-0.5">
                       {space.lists && space.lists.map(list => {
                         const isActive = list.id === activeListId;
+                        const isBeingDragged = draggedList?.listId === list.id;
                         return (
                           <div 
                             key={list.id}
+                            draggable={true}
+                            onDragStart={(e) => handleListDragStart(e, list, space.id)}
+                            onDragEnd={handleListDragEnd}
                             onClick={() => onSelectList(list.id)}
-                            onContextMenu={(e) => handleListContextMenu(e, list)}
-                            className={`flex items-center justify-between px-2.5 py-1.5 rounded cursor-pointer transition text-xs ${
+                            onContextMenu={(e) => handleListContextMenu(e, list, space.id)}
+                            className={`group/list flex items-center justify-between px-2.5 py-1.5 rounded cursor-pointer transition text-xs ${
+                              isBeingDragged ? 'opacity-40 scale-95 border-dashed border border-[#7b68ee]' : ''
+                            } ${
                               isActive 
                                 ? 'bg-[#2a2b2d] text-white font-semibold border-l-2 border-[#7b68ee]' 
                                 : 'text-gray-300 hover:bg-[#222427] hover:text-white'
                             }`}
-                            title="คลิกขวาเพื่อจัดการ List"
+                            title="ลากเพื่อย้าย Space หรือคลิกขวาเพื่อจัดการ List"
                           >
                             <div className="flex items-center space-x-2 truncate">
                               <span 
@@ -353,13 +463,26 @@ export default function Sidebar({
                               />
                               <span className="truncate">{list.name}</span>
                             </div>
-                            {list.taskCount !== undefined && list.taskCount > 0 && (
-                              <span className={`text-[10px] px-1.5 py-0.2 rounded font-medium ${
-                                isActive ? 'bg-[#3b3d42] text-white' : 'text-gray-400'
-                              }`}>
-                                {list.taskCount}
-                              </span>
-                            )}
+                            <div className="flex items-center space-x-1 flex-shrink-0">
+                              {list.taskCount !== undefined && list.taskCount > 0 && (
+                                <span className={`text-[10px] px-1.5 py-0.2 rounded font-medium ${
+                                  isActive ? 'bg-[#3b3d42] text-white' : 'text-gray-400'
+                                }`}>
+                                  {list.taskCount}
+                                </span>
+                              )}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleListContextMenu(e, list, space.id);
+                                }}
+                                title="จัดการ List"
+                                className="opacity-0 group-hover/list:opacity-100 p-0.5 hover:bg-[#383a3e] rounded text-gray-400 hover:text-white transition cursor-pointer"
+                              >
+                                <MoreHorizontal size={13} />
+                              </button>
+                            </div>
                           </div>
                         );
                       })}

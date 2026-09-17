@@ -142,14 +142,23 @@ app.post('/api/lists', (req, res) => {
 app.put('/api/lists/:id', (req, res) => {
   try {
     const { id } = req.params;
-    const { name, color } = req.body;
+    const { name, color, space_id, position } = req.body;
     db.prepare(`
       UPDATE lists 
       SET name = COALESCE(?, name),
-          color = COALESCE(?, color)
+          color = COALESCE(?, color),
+          space_id = COALESCE(?, space_id),
+          position = COALESCE(?, position)
       WHERE id = ?
-    `).run(name || null, color || null, id);
-    res.json({ success: true });
+    `).run(
+      name !== undefined ? name : null,
+      color !== undefined ? color : null,
+      space_id !== undefined ? space_id : null,
+      position !== undefined ? position : null,
+      id
+    );
+    const updated = db.prepare('SELECT * FROM lists WHERE id = ?').get(id);
+    res.json({ success: true, list: updated });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
