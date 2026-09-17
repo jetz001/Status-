@@ -266,11 +266,85 @@ export default function AISidebarRAG({
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef(null);
   const messagesEndRef = useRef(null);
+  const textareaRef = useRef(null);
 
   // Auto scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isAiReplying]);
+
+  // Auto resize textarea
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 128)}px`;
+    }
+  }, [inputMessage]);
+
+  // Handle Clipboard Paste (Ctrl+V) for cropped images & text
+  const handlePaste = (e) => {
+    const clipboardData = e.clipboardData;
+    if (!clipboardData) return;
+
+    // 1. Check if clipboard has image (e.g. Snipping Tool / cropped screenshot)
+    const items = clipboardData.items;
+    let imageItem = null;
+    if (items && items.length > 0) {
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.type && item.type.startsWith('image/')) {
+          imageItem = item;
+          break;
+        }
+      }
+    }
+
+    if (imageItem) {
+      e.preventDefault();
+      const blob = imageItem.getAsFile();
+      if (!blob) return;
+
+      const ext = blob.type.split('/')[1] || 'png';
+      const timestamp = new Date().toISOString().slice(0, 19).replace(/[-:T]/g, '');
+      const fileName = `clipboard-${timestamp}.${ext}`;
+      const file = new File([blob], fileName, { type: blob.type || 'image/png' });
+      const previewUrl = URL.createObjectURL(file);
+
+      setAttachedFile({
+        file,
+        name: fileName,
+        size: (file.size / 1024).toFixed(1) + ' KB',
+        isPdf: false,
+        isImg: true,
+        previewUrl
+      });
+      return;
+    }
+
+    // 2. If it's text and active element is NOT an input/textarea, paste into inputMessage
+    const activeEl = document.activeElement;
+    const isInputFocused = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA');
+    if (!isInputFocused) {
+      const text = clipboardData.getData('text');
+      if (text) {
+        e.preventDefault();
+        setInputMessage(prev => prev ? `${prev}\n${text}` : text);
+        textareaRef.current?.focus();
+      }
+    }
+  };
+
+  // Global Paste Listener when AI Sidebar is open
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const onGlobalPaste = (e) => {
+      handlePaste(e);
+    };
+
+    window.addEventListener('paste', onGlobalPaste);
+    return () => window.removeEventListener('paste', onGlobalPaste);
+  }, [isOpen]);
 
   // Load session when activeSessionId changes
   useEffect(() => {
@@ -494,9 +568,11 @@ export default function AISidebarRAG({
       />
 
       <div 
+        id="ai-sidebar-panel"
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
+        onPaste={handlePaste}
         className="fixed inset-y-0 right-0 w-[470px] max-w-full bg-[#18191b] border-l border-[#333538] shadow-2xl z-50 flex flex-col text-xs select-none relative"
       >
         {/* Drag Overlay visual indicator */}
@@ -760,7 +836,7 @@ export default function AISidebarRAG({
           {/* Chat Input Box */}
           <form 
             onSubmit={(e) => { e.preventDefault(); handleSendMessage(); }}
-            className="p-3 border-t border-[#2e3034] bg-[#18191b] flex items-center space-x-2"
+            className="p-3 border-t border-[#2e3034] bg-[#18191b] flex items-end space-x-2"
           >
             {/* Hidden File Input */}
             <input 
@@ -775,24 +851,33 @@ export default function AISidebarRAG({
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              title="แนบไฟล์เอกสาร PDF หรือ รูปภาพ"
-              className="p-2 text-gray-400 hover:text-cyan-300 hover:bg-[#25272a] rounded-md transition cursor-pointer flex-shrink-0"
+              title="แนบไฟล์เอกสาร PDF หรือ รูปภาพ (หรือกด Ctrl+V เพื่อวางรูป)"
+              className="p-2 text-gray-400 hover:text-cyan-300 hover:bg-[#25272a] rounded-md transition cursor-pointer flex-shrink-0 mb-0.5"
             >
               <Paperclip size={16} />
             </button>
 
-            <input 
-              type="text"
-              placeholder={attachedFile ? `กดส่งเพื่อวิเคราะห์ไฟล์ "${attachedFile.name}"...` : "พิมพ์คำสั่ง เช่น 'สร้างงาน A', 'ลบงาน B' หรือแนบ PDF..."}
+            <textarea 
+              ref={textareaRef}
+              rows={1}
+              placeholder={attachedFile ? `กดส่งเพื่อวิเคราะห์ไฟล์ "${attachedFile.name}"...` : "พิมพ์คำสั่ง หรือกด Ctrl+V วางรูปภาพ/ข้อความ..."}
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
-              className="flex-1 bg-[#141517] px-3.5 py-2 rounded-md border border-[#333538] text-white text-xs outline-none focus:border-cyan-500 transition"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSendMessage();
+                }
+              }}
+              onPaste={handlePaste}
+              className="flex-1 bg-[#141517] px-3.5 py-2 rounded-md border border-[#333538] text-white text-xs outline-none focus:border-cyan-500 transition resize-none max-h-32 min-h-[38px] leading-relaxed custom-scrollbar"
             />
 
             <button
               type="submit"
               disabled={isAiReplying || (!inputMessage.trim() && !attachedFile)}
-              className="p-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 disabled:opacity-50 text-white rounded-md transition shadow-sm cursor-pointer"
+              className="p-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 disabled:opacity-50 text-white rounded-md transition shadow-sm cursor-pointer flex-shrink-0 mb-0.5"
+              title="ส่งคำสั่ง (Enter)"
             >
               <Send size={14} />
             </button>

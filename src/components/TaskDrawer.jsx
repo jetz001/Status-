@@ -166,10 +166,9 @@ export default function TaskDrawer({
     }
   };
 
-  // Upload file handler
-  const handleFileUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // Upload attachment file (used by file input & clipboard paste)
+  const uploadAttachmentFile = async (file) => {
+    if (!file || !task?.id) return;
 
     const formData = new FormData();
     formData.append('image', file);
@@ -187,6 +186,42 @@ export default function TaskDrawer({
       console.error('File upload failed:', err);
     }
   };
+
+  // Upload file handler from file picker
+  const handleFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    await uploadAttachmentFile(file);
+    e.target.value = '';
+  };
+
+  // Handle Clipboard Paste (Ctrl+V) for Task Images
+  useEffect(() => {
+    const handleTaskPaste = async (e) => {
+      // If AI sidebar is open on top, let AI sidebar handle it
+      if (document.getElementById('ai-sidebar-panel')) return;
+
+      const items = e.clipboardData?.items;
+      if (!items || items.length === 0) return;
+
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.type && item.type.startsWith('image/')) {
+          e.preventDefault();
+          const blob = item.getAsFile();
+          if (blob) {
+            const timestamp = new Date().toISOString().slice(0, 19).replace(/[-:T]/g, '');
+            const file = new File([blob], `task-screenshot-${timestamp}.png`, { type: blob.type || 'image/png' });
+            await uploadAttachmentFile(file);
+          }
+          break;
+        }
+      }
+    };
+
+    window.addEventListener('paste', handleTaskPaste);
+    return () => window.removeEventListener('paste', handleTaskPaste);
+  }, [task?.id]);
 
   const handleDeleteAttachment = async (attId) => {
     try {
