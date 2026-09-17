@@ -2,6 +2,7 @@ const { tools, executeTool, getDefaultListId, getSpacesAndLists } = require('./a
 const { callLLM } = require('./aiService');
 const { processFileForAI } = require('./fileProcessor');
 const { semanticSearch } = require('./ragService');
+const { db } = require('./db');
 
 // Skill Metadata Registry
 const SKILLS = {
@@ -50,7 +51,12 @@ function routeSkill(userText, hasAttachment = false) {
     return SKILLS.doc_analyzer;
   }
 
-  const text = (userText || '').toLowerCase();
+  const text = (userText || '').toLowerCase().trim();
+
+  // 0. Plan confirmation intent (e.g. "จัดมาเลย", "เอาเลย", "อนุมัติ", "ตกลง")
+  if (/^(?:จัดมาเลย|จัดไป|เอาเลย|สร้างเลย|อนุมัติ|ตกลง|โอเค|ลุยเลย|สร้างตามนี้|ตามนั้น|เอาตามนี้|confirm|approve|ok|yes|จัดเลย|ดำเนินการเลย)/i.test(text)) {
+    return SKILLS.task_ops;
+  }
 
   // 0. Desktop Automation / MCP intent
   if (/แคปหน้าจอ|ถ่ายหน้าจอ|ภาพหน้าจอ|screenshot|มองหน้าจอ|เปิดโปรแกรม|ปิดโปรแกรม|สลับหน้าต่าง|รายชื่อหน้าต่าง|คลิกเมาส์|พิมพ์คีย์|desktop\s*control|mcp/i.test(text)) {
@@ -286,7 +292,8 @@ async function processAgentQuery({
   userMessage,
   fileProcessed = null,
   activeListId = null,
-  context = ''
+  context = '',
+  sessionId = null
 }) {
   const skill = routeSkill(userMessage, !!fileProcessed);
 
@@ -298,6 +305,51 @@ async function processAgentQuery({
       flatLists.push({ spaceName: sp.name, listId: l.id, listName: l.name });
     });
   });
+
+  const cleanMsg = (userMessage || '').trim();
+  const isAffirmative = /^(?:จัดมาเลย|จัดไป|เอาเลย|สร้างเลย|อนุมัติ|ตกลง|โอเค|ลุยเลย|สร้างตามนี้|ตามนั้น|เอาตามนี้|confirm|approve|ok|yes|จัดเลย|ดำเนินการเลย)/i.test(cleanMsg);
+
+  // 0. Natural Language Plan Confirmation (e.g. user typed "จัดมาเลย" in chat)
+  if (isAffirmative && !fileProcessed && sessionId) {
+    let pendingPlan = null;
+    try {
+      const sess = db.prepare('SELECT messages_json FROM ai_chat_sessions WHERE id = ?').get(sessionId);
+      if (sess && sess.messages_json) {
+        const msgs = JSON.parse(sess.messages_json);
+        for (let i = msgs.length - 1; i >= 0; i--) {
+          if (msgs[i].role === 'assistant' && Array.isArray(msgs[i].actions)) {
+            const found = msgs[i].actions.find(a => (a.action === 'plan_proposal' || a.type === 'plan_proposal') && a.plan);
+            if (found) {
+              pendingPlan = found.plan;
+              break;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Error fetching pending plan from session:', e.message);
+    }
+
+    if (pendingPlan) {
+      const targetListId = pendingPlan.defaultListId || activeListId || (flatLists[0]?.listId || '');
+      const taskRes = await executeTool('create_task', {
+        list_id: targetListId,
+        name: pendingPlan.name,
+        description: pendingPlan.description,
+        priority: pendingPlan.priority || 'Normal',
+        due_date: pendingPlan.due_date || null,
+        subtasks: pendingPlan.subtasks || []
+      }, pendingPlan.fileInfo);
+
+      const targetListName = taskRes.task?.listName || (flatLists.find(l => l.listId === targetListId)?.listName || 'เป้าหมาย');
+
+      return {
+        skill: SKILLS.task_ops,
+        actions: [taskRes],
+        reply: `🎉 **อนุมัติสร้างงานตามแผนเรียบร้อยแล้วครับ!**\n\n• ชื่องาน: **"${pendingPlan.name}"**\n• นำเข้าสู่ List: **"${targetListName}"**\n• Checklist ย่อย: **${pendingPlan.subtasks?.length || 0} รายการ**\n\nคุณสามารถคลิกเปิดการ์ดงานเพื่อตรวจสอบความคืบหน้าได้ทันทีครับ`
+      };
+    }
+  }
 
   const spacesListText = spacesAndLists.map(sp =>
     `• Space "${sp.name}": Lists: [${sp.lists.map(l => `"${l.name}" (ID: "${l.id}")`).join(', ')}]`
@@ -463,7 +515,34 @@ function safeJsonParse(rawText) {
               continue;
             }
 
-            // B. Direct Tool Execution
+            // B. Direct Tool Execution (Intercept premature create_task when file is attached)
+            if (fileProcessed && act.tool === 'create_task') {
+              act.action = 'plan_proposal';
+              act.title = '📋 ร่างแผนงาน (รออนุมัติก่อนสร้าง)';
+              act.plan = {
+                name: act.args?.name || 'งานที่สกัดจากเอกสาร/ภาพ',
+                description: act.args?.description || '',
+                priority: act.args?.priority || 'Normal',
+                due_date: act.args?.due_date || null,
+                subtasks: act.args?.subtasks || [],
+                defaultListId: act.args?.list_id || activeListId || (flatLists[0]?.listId || ''),
+                fileInfo: fileProcessed ? fileProcessed.fileInfo : null
+              };
+              delete act.tool;
+              delete act.args;
+
+              let cleanName = (act.plan.name || '').trim();
+              cleanName = cleanName.replace(/^(?:จัดทำแผนงานและดำเนิน(?:การ)?ตาม(?:รูปภาพ|ภาพ|เอกสาร)|วิเคราะห์และดำเนิน(?:การ)?ตาม(?:รูปภาพ|ภาพ|เอกสาร)|ตาม(?:รูปภาพ|ภาพ|เอกสาร)|งานตาม(?:รูปภาพ|ภาพ))\s*[:\-]?\s*/i, '');
+              cleanName = cleanName.replace(/clipboard-\d+/gi, '').replace(/^[:\-]\s*/, '').trim();
+              if (!cleanName || cleanName.length < 3) {
+                cleanName = 'งานตรวจสอบและดำเนินการตามข้อมูลที่วิเคราะห์ได้';
+              }
+              act.plan.name = cleanName;
+              act.availableLists = flatLists;
+              executedActions.push(act);
+              continue;
+            }
+
             if (skill.tools.includes(act.tool)) {
               try {
                 if (act.tool === 'create_task' && (!act.args.list_id || act.args.list_id === 'default')) {

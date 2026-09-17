@@ -1152,7 +1152,8 @@ app.post('/api/ai/agent-chat', upload.single('file'), async (req, res) => {
       userMessage: message,
       fileProcessed,
       activeListId,
-      context
+      context,
+      sessionId
     });
 
     // 3. Save conversation to history session
