@@ -116,6 +116,12 @@ function initSchema() {
     );
   `);
 
+  // Clean up legacy mock test case columns if present
+  try {
+    db.prepare("DELETE FROM custom_fields WHERE id IN ('f-tester', 'f-case-id', 'f-severity', 'f-exec-date', 'f-qa-ai')").run();
+    db.prepare("DELETE FROM task_field_values WHERE field_id IN ('f-tester', 'f-case-id', 'f-severity', 'f-exec-date', 'f-qa-ai')").run();
+  } catch (e) {}
+
   seedDefaultData();
 }
 
@@ -132,7 +138,7 @@ function seedDefaultData() {
   db.prepare('INSERT INTO spaces (id, workspace_id, name, color, icon, position) VALUES (?, ?, ?, ?, ?, ?)')
     .run(spaceId, wsId, 'Team Space', '#7b68ee', 'users', 0);
 
-  // Lists matching the user's screenshot
+  // Lists matching the user's workflow
   const listIQA26 = 'list-iqa26';
   const listFSC = 'list-fsc';
   const listRoutine = 'list-routine';
@@ -146,21 +152,7 @@ function seedDefaultData() {
   insertList.run(listSafety, spaceId, 'งาน Safety', '#f59e0b', 3);
   insertList.run(listDocs, spaceId, 'Team Docs', '#8b5cf6', 4);
 
-  // Custom Fields for IQA26 matching the screenshot columns
-  const fields = [
-    { id: 'f-tester', name: 'Tester Assigned', type: 'text', position: 0 },
-    { id: 'f-case-id', name: 'Test Case ID', type: 'text', position: 1 },
-    { id: 'f-severity', name: 'Defect Severity Level', type: 'select', position: 2, options: '["Critical", "Major", "Minor", "Low"]' },
-    { id: 'f-exec-date', name: 'Test Execution Date', type: 'date', position: 3 },
-    { id: 'f-qa-ai', name: 'Quality Assurance ... AI', type: 'text', position: 4 }
-  ];
-
-  const insertField = db.prepare('INSERT INTO custom_fields (id, list_id, name, type, options_json, position) VALUES (?, ?, ?, ?, ?, ?)');
-  for (const f of fields) {
-    insertField.run(f.id, listIQA26, f.name, f.type, f.options || '[]', f.position);
-  }
-
-  // The 10 Tasks from the screenshot
+  // The 10 Tasks from the user's project
   const initialTasks = [
     {
       id: 'task-1',

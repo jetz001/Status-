@@ -267,6 +267,44 @@ export default function App() {
     handleUpdateTask(taskId, { status: nextStatus });
   };
 
+  const handleToggleSubtask = async (subtaskId, completed) => {
+    try {
+      await fetch(`/api/subtasks/${subtaskId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ completed })
+      });
+      loadTasks();
+      loadAllTasks();
+      if (selectedTask) {
+        const updatedSubs = (selectedTask.subtasks || []).map(s => 
+          s.id === subtaskId ? { ...s, completed: completed ? 1 : 0 } : s
+        );
+        setSelectedTask(prev => ({ ...prev, subtasks: updatedSubs }));
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleAddSubtask = async (taskId, title) => {
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/subtasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title })
+      });
+      const newSub = await res.json();
+      loadTasks();
+      loadAllTasks();
+      if (selectedTask && selectedTask.id === taskId) {
+        setSelectedTask(prev => ({ ...prev, subtasks: [...(prev.subtasks || []), newSub] }));
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const handleDeleteTask = async (taskId) => {
     try {
       await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
@@ -428,6 +466,7 @@ export default function App() {
               tasks={filteredTasks}
               fields={fields}
               onSelectTask={setSelectedTask}
+              onUpdateTask={handleUpdateTask}
               onUpdateTaskStatus={handleUpdateTaskStatus}
               onUpdateTaskPriority={(taskId, priority) => handleUpdateTask(taskId, { priority })}
               onDeleteTask={handleDeleteTask}
@@ -439,6 +478,8 @@ export default function App() {
                 setShowMoveCopyModal(true);
               }}
               onOpenAddColumn={() => setShowCustomFieldModal(true)}
+              onToggleSubtask={handleToggleSubtask}
+              onAddSubtask={handleAddSubtask}
             />
           )}
 
@@ -473,6 +514,8 @@ export default function App() {
         <TaskDrawer 
           task={selectedTask}
           fields={fields}
+          listName={activeListName}
+          spaceName={activeSpaceName}
           onClose={() => setSelectedTask(null)}
           onUpdateTask={handleUpdateTask}
           onDeleteTask={handleDeleteTask}
@@ -489,6 +532,7 @@ export default function App() {
       <AISidebarRAG 
         isOpen={showAISidebar}
         onClose={() => setShowAISidebar(false)}
+        context={[activeSpaceName ? `Space: ${activeSpaceName}` : '', activeListName ? `List: ${activeListName}` : ''].filter(Boolean).join(', ')}
         onSelectTaskById={(taskId) => {
           const t = tasks.find(item => item.id === taskId);
           if (t) setSelectedTask(t);

@@ -59,48 +59,109 @@ function saveWallpaperDataUrl(dataUrl, filename = 'current_wallpaper.png') {
 }
 
 /**
- * Curated preset stock wallpapers (SVG data URLs / gradients so they are 100% offline and look stunning!)
+ * Curated preset stock wallpapers (12 high-resolution HD 1080p offline wallpapers)
  */
 const STOCK_WALLPAPERS = [
+  // 1. Dark Minimalist
   {
-    id: 'stock-clickup-dark',
-    name: 'ClickUp Slate Studio',
+    id: 'stock-dark-obsidian',
+    name: 'Dark Obsidian Glass',
     category: 'Dark Minimalist',
-    thumbnail: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="300" height="180" viewBox="0 0 300 180"><defs><linearGradient id="g1" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="%23141517"/><stop offset="50%" stop-color="%231e1f21"/><stop offset="100%" stop-color="%232a2b2d"/></linearGradient></defs><rect width="300" height="180" fill="url(%23g1)"/><circle cx="240" cy="50" r="80" fill="%237b68ee" opacity="0.15"/><path d="M0 140 Q150 90 300 130" stroke="%237b68ee" stroke-width="2" fill="none" opacity="0.3"/></svg>',
-    bgType: 'gradient',
-    bgColor1: '#141517',
-    bgColor2: '#2a2b2d',
+    imageUrl: '/wallpapers/dark-obsidian.jpg',
+    thumbnail: '/wallpapers/dark-obsidian.jpg',
     accent: '#7b68ee'
   },
   {
-    id: 'stock-cyber-neon',
-    name: 'Cyber Neon Purple',
-    category: 'Sci-Fi / Cyber',
-    thumbnail: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="300" height="180" viewBox="0 0 300 180"><defs><linearGradient id="g2" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="%230b0b14"/><stop offset="100%" stop-color="%231a102f"/></linearGradient></defs><rect width="300" height="180" fill="url(%23g2)"/><circle cx="60" cy="120" r="100" fill="%23ec4899" opacity="0.2"/><circle cx="250" cy="40" r="90" fill="%2306b6d4" opacity="0.2"/><line x1="0" y1="160" x2="300" y2="160" stroke="%23a855f7" stroke-width="2" opacity="0.4"/></svg>',
-    bgType: 'gradient',
-    bgColor1: '#0b0b14',
-    bgColor2: '#1a102f',
+    id: 'stock-dark-polygon',
+    name: 'Geometric Polygonal Mesh',
+    category: 'Dark Minimalist',
+    imageUrl: '/wallpapers/dark-polygon.jpg',
+    thumbnail: '/wallpapers/dark-polygon.jpg',
+    accent: '#3b82f6'
+  },
+  // 2. Cyber & Neon
+  {
+    id: 'stock-cyber-city',
+    name: 'Tokyo Cyberpunk Rain',
+    category: 'Cyber Neon',
+    imageUrl: '/wallpapers/cyber-neon-city.jpg',
+    thumbnail: '/wallpapers/cyber-neon-city.jpg',
     accent: '#06b6d4'
   },
   {
-    id: 'stock-nature-peaks',
+    id: 'stock-neon-horizon',
+    name: 'Neon Violet Horizon',
+    category: 'Cyber Neon',
+    imageUrl: '/wallpapers/neon-horizon.jpg',
+    thumbnail: '/wallpapers/neon-horizon.jpg',
+    accent: '#ec4899'
+  },
+  // 3. Deep Nature & Mountains
+  {
+    id: 'stock-midnight-mountain',
     name: 'Deep Midnight Mountain',
     category: 'Nature & Landscape',
-    thumbnail: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="300" height="180" viewBox="0 0 300 180"><defs><linearGradient id="g3" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="%230f172a"/><stop offset="100%" stop-color="%231e293b"/></linearGradient></defs><rect width="300" height="180" fill="url(%23g3)"/><polygon points="0,180 80,80 160,180" fill="%23334155" opacity="0.6"/><polygon points="100,180 200,60 300,180" fill="%23475569" opacity="0.8"/><circle cx="230" cy="45" r="18" fill="%23f8fafc" opacity="0.7"/></svg>',
-    bgType: 'gradient',
-    bgColor1: '#0f172a',
-    bgColor2: '#1e293b',
+    imageUrl: '/wallpapers/midnight-mountain.jpg',
+    thumbnail: '/wallpapers/midnight-mountain.jpg',
     accent: '#38bdf8'
   },
   {
-    id: 'stock-warm-obsidian',
-    name: 'Warm Productivity Glow',
-    category: 'Abstract Gradients',
-    thumbnail: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="300" height="180" viewBox="0 0 300 180"><defs><linearGradient id="g4" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="%231c1917"/><stop offset="100%" stop-color="%23292524"/></linearGradient></defs><rect width="300" height="180" fill="url(%23g4)"/><circle cx="260" cy="150" r="110" fill="%23f59e0b" opacity="0.2"/><circle cx="40" cy="30" r="70" fill="%23ef4444" opacity="0.15"/></svg>',
-    bgType: 'gradient',
-    bgColor1: '#1c1917',
-    bgColor2: '#292524',
+    id: 'stock-pine-forest',
+    name: 'Nordic Pine Forest Mist',
+    category: 'Nature & Landscape',
+    imageUrl: '/wallpapers/pine-forest-mist.jpg',
+    thumbnail: '/wallpapers/pine-forest-mist.jpg',
+    accent: '#10b981'
+  },
+  {
+    id: 'stock-milky-way',
+    name: 'Milky Way Starry Night',
+    category: 'Nature & Landscape',
+    imageUrl: '/wallpapers/milky-way-galaxy.jpg',
+    thumbnail: '/wallpapers/milky-way-galaxy.jpg',
+    accent: '#818cf8'
+  },
+  // 4. Architecture & Workspace
+  {
+    id: 'stock-minimalist-desk',
+    name: 'Clean Workspace Studio',
+    category: 'Architecture & Desk',
+    imageUrl: '/wallpapers/minimalist-desk.jpg',
+    thumbnail: '/wallpapers/minimalist-desk.jpg',
     accent: '#f59e0b'
+  },
+  {
+    id: 'stock-modern-architecture',
+    name: 'Modern Geometric Architecture',
+    category: 'Architecture & Desk',
+    imageUrl: '/wallpapers/modern-architecture.jpg',
+    thumbnail: '/wallpapers/modern-architecture.jpg',
+    accent: '#64748b'
+  },
+  // 5. Abstract 3D
+  {
+    id: 'stock-purple-spheres',
+    name: '3D Purple Liquid Spheres',
+    category: 'Abstract 3D',
+    imageUrl: '/wallpapers/purple-liquid-spheres.jpg',
+    thumbnail: '/wallpapers/purple-liquid-spheres.jpg',
+    accent: '#a855f7'
+  },
+  {
+    id: 'stock-silk-flow',
+    name: 'Silk Flow Gradient Wave',
+    category: 'Abstract 3D',
+    imageUrl: '/wallpapers/silk-gradient-flow.jpg',
+    thumbnail: '/wallpapers/silk-gradient-flow.jpg',
+    accent: '#ec4899'
+  },
+  {
+    id: 'stock-cyber-sunset',
+    name: 'Cyber Sunset Horizon',
+    category: 'Abstract 3D',
+    imageUrl: '/wallpapers/cyber-sunset.jpg',
+    thumbnail: '/wallpapers/cyber-sunset.jpg',
+    accent: '#f97316'
   }
 ];
 

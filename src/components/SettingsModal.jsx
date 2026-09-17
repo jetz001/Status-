@@ -8,8 +8,24 @@ export default function SettingsModal({
   const [provider, setProvider] = useState('gemini');
   const [apiKey, setApiKey] = useState('');
   const [model, setModel] = useState('gemini-1.5-flash');
+  const [workspaceContext, setWorkspaceContext] = useState('');
   const [isSaved, setIsSaved] = useState(false);
   const [showKey, setShowKey] = useState(false);
+
+  const CONTEXT_PRESETS = [
+    {
+      label: '🏭 QA, IQA & ISO Compliance',
+      context: 'ทีมงานฝ่ายคุณภาพ (QA/QC) และผู้ตรวจประเมินภายใน (IQA) สำหรับโรงงานและองค์กรที่ปฏิบัติตามมาตรฐาน ISO 9001:2015, ISO 14001, มาตรฐาน FSC, ตรวจสอบรถขนส่ง, ประเมินคู่ค้า Supplier List, ตรวจนับ Stockcard, ติดตามข้อบกพร่อง CAR/PAR และบริหาร KPI ทุกแผนก'
+    },
+    {
+      label: '💻 Software & Tech Startup',
+      context: 'ทีมพัฒนาซอฟต์แวร์และเทคโนโลยี ทำงานแบบ Agile/Scrum, Sprint Planning, Code Review, CI/CD Pipeline, Bug Tracking, Automated Testing, API Design และ Product Release Roadmap'
+    },
+    {
+      label: '🏢 General Business & Ops',
+      context: 'องค์กรธุรกิจและงานบริหารทั่วไป ติดตาม OKR/KPI ของทุกแผนก, งานการตลาด, ฝ่ายขาย, บริหารทรัพยากรบุคคล (HR), การเงินบัญชี, จัดซื้อจัดจ้าง และการจัดทำรายงานสรุปประจำเดือน'
+    }
+  ];
 
   useEffect(() => {
     if (isOpen) {
@@ -19,6 +35,7 @@ export default function SettingsModal({
           if (data.ai_provider) setProvider(data.ai_provider);
           if (data.ai_api_key) setApiKey(data.ai_api_key);
           if (data.ai_model) setModel(data.ai_model);
+          if (data.workspace_context) setWorkspaceContext(data.workspace_context);
         })
         .catch(err => console.error(err));
     }
@@ -33,7 +50,8 @@ export default function SettingsModal({
         body: JSON.stringify({
           ai_provider: provider,
           ai_api_key: apiKey,
-          ai_model: model
+          ai_model: model,
+          workspace_context: workspaceContext
         })
       });
       setIsSaved(true);
@@ -143,6 +161,44 @@ export default function SettingsModal({
               />
             </div>
           )}
+
+          {/* Workspace & Team Domain Context */}
+          <div className="space-y-1.5 pt-1 border-t border-[#333538]/60">
+            <div className="flex items-center justify-between">
+              <label className="text-gray-300 font-semibold flex items-center space-x-1.5">
+                <Sparkles size={14} className="text-purple-400" />
+                <span>บริบทองค์กรและมาตรฐานการทำงาน (Workspace Context)</span>
+              </label>
+              <span className="text-[10px] text-gray-400">ช่วยให้ AI ตอบได้ตรงสายงาน</span>
+            </div>
+
+            <p className="text-[11px] text-gray-400">
+              ระบุประเภทธุรกิจ ข้อกำหนด แผนก หรือมาตรฐานของทีมคุณ เพื่อให้ AI ปรับปรุงข้อความ แตกซับทาสก์ และสนทนาได้อย่างเฉียบคมและเข้าใจเนื้องานจริง:
+            </p>
+
+            {/* Context Preset Buttons */}
+            <div className="flex flex-wrap gap-1.5 pb-1">
+              {CONTEXT_PRESETS.map((preset, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => setWorkspaceContext(preset.context)}
+                  className="px-2 py-1 rounded bg-[#18191b] hover:bg-purple-950/40 border border-[#383a3e] hover:border-purple-500/50 text-gray-300 hover:text-purple-200 text-[10px] transition cursor-pointer"
+                  title="คลิกเพื่อใช้บริบทนี้"
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+
+            <textarea
+              rows={3}
+              value={workspaceContext}
+              onChange={(e) => setWorkspaceContext(e.target.value)}
+              placeholder="ตัวอย่าง: เราเป็นทีม QA/IQA โรงงานอุตสาหกรรม มาตรฐาน ISO 9001:2015, FSC, มีการตรวจนับ Stockcard, รถขนส่ง, ประเมิน Supplier..."
+              className="w-full p-2 bg-[#18191b] border border-[#383a3e] rounded-lg text-white outline-none focus:border-[#7b68ee] text-xs resize-none"
+            />
+          </div>
 
           {/* Security Note */}
           <div className="p-3 bg-[#18191b] border border-[#2e3034] rounded-lg flex items-start space-x-2 text-[11px] text-gray-400">

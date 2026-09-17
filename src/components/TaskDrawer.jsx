@@ -27,7 +27,9 @@ export default function TaskDrawer({
   onDeleteTask,
   onOpenMoveCopy,
   onOpenPrintSingleTask,
-  onOpenLightbox
+  onOpenLightbox,
+  listName = '',
+  spaceName = ''
 }) {
   const [name, setName] = useState(task.name || '');
   const [description, setDescription] = useState(task.description || '');
@@ -174,6 +176,15 @@ export default function TaskDrawer({
     }
   };
 
+  // Helper to build contextual string for AI
+  const getContextString = () => {
+    const parts = [];
+    if (spaceName) parts.push(`Space: ${spaceName}`);
+    if (listName) parts.push(`List: ${listName}`);
+    if (name) parts.push(`Task: ${name}`);
+    return parts.join(', ');
+  };
+
   // AI Assistance triggers
   const handleAiPolishTitle = async () => {
     if (!name) return;
@@ -183,7 +194,7 @@ export default function TaskDrawer({
       const res = await fetch('/api/ai/polish', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: name })
+        body: JSON.stringify({ text: name, context: getContextString() })
       });
       const data = await res.json();
       if (data.text) {
@@ -207,7 +218,7 @@ export default function TaskDrawer({
       const res = await fetch('/api/ai/generate-subtasks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: name, description })
+        body: JSON.stringify({ title: name, description, context: getContextString() })
       });
       const data = await res.json();
       if (data.subtasks && data.subtasks.length > 0) {
@@ -238,7 +249,7 @@ export default function TaskDrawer({
       const res = await fetch('/api/ai/autofill', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: name, description })
+        body: JSON.stringify({ title: name, description, context: getContextString() })
       });
       const data = await res.json();
       const updates = {};

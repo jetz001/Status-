@@ -19,12 +19,25 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 // Ensure upload folders exist
 const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
 const ATTACHMENTS_DIR = path.join(UPLOADS_DIR, 'attachments');
+const WALLPAPERS_UPLOAD_DIR = path.join(UPLOADS_DIR, 'wallpapers');
 if (!fs.existsSync(ATTACHMENTS_DIR)) {
   fs.mkdirSync(ATTACHMENTS_DIR, { recursive: true });
 }
+if (!fs.existsSync(WALLPAPERS_UPLOAD_DIR)) {
+  fs.mkdirSync(WALLPAPERS_UPLOAD_DIR, { recursive: true });
+}
 
-// Serve uploaded static files
+// Serve uploaded and static files
 app.use('/uploads', express.static(UPLOADS_DIR));
+const PUBLIC_DIR = path.join(__dirname, '..', 'public');
+if (fs.existsSync(PUBLIC_DIR)) {
+  app.use(express.static(PUBLIC_DIR));
+  app.use('/wallpapers', express.static(path.join(PUBLIC_DIR, 'wallpapers')));
+}
+const DIST_WALLPAPERS = path.join(__dirname, '..', 'dist', 'wallpapers');
+if (fs.existsSync(DIST_WALLPAPERS)) {
+  app.use('/wallpapers', express.static(DIST_WALLPAPERS));
+}
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -604,6 +617,61 @@ app.post('/api/wallpaper/upload-custom', upload.single('wallpaper'), (req, res) 
   }
 });
 
+// Generate dynamic AI wallpaper from online prompt (Pollinations AI)
+app.post('/api/wallpaper/generate-ai', async (req, res) => {
+  try {
+    const { prompt } = req.body;
+    if (!prompt || !prompt.trim()) {
+      return res.status(400).json({ error: 'Prompt is required' });
+    }
+
+    const safePrompt = prompt.trim();
+    const encodedPrompt = encodeURIComponent(`${safePrompt} 8k desktop wallpaper cinematic ultra detailed high resolution`);
+    const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1920&height=1080&nologo=true&seed=${Date.now()}`;
+
+    const filename = `ai-wall-${Date.now()}.jpg`;
+    const targetPath = path.join(UPLOADS_DIR, 'wallpapers', filename);
+
+    const https = require('https');
+    const http = require('http');
+
+    const downloadImage = (url, dest) => {
+      return new Promise((resolve, reject) => {
+        const client = url.startsWith('https') ? https : http;
+        client.get(url, (response) => {
+          if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+            return downloadImage(response.headers.location, dest).then(resolve).catch(reject);
+          }
+          if (response.statusCode !== 200) {
+            return reject(new Error(`Failed to download wallpaper: HTTP ${response.statusCode}`));
+          }
+          const fileStream = fs.createWriteStream(dest);
+          response.pipe(fileStream);
+          fileStream.on('finish', () => {
+            fileStream.close();
+            resolve();
+          });
+        }).on('error', reject);
+      });
+    };
+
+    await downloadImage(pollinationsUrl, targetPath);
+
+    const imageUrl = `/uploads/wallpapers/${filename}`;
+    res.json({
+      success: true,
+      imageUrl,
+      thumbnail: imageUrl,
+      name: `AI: ${safePrompt}`,
+      category: 'AI Generated',
+      accent: '#a855f7'
+    });
+  } catch (err) {
+    console.error('Error in /api/wallpaper/generate-ai:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ==========================================
 // 7. NOTIFICATIONS
 // ==========================================
@@ -692,7 +760,7 @@ app.get('/api/rag/search', (req, res) => {
 // AI Conversational Assistant with RAG context
 app.post('/api/ai/chat', async (req, res) => {
   try {
-    const { messages } = req.body;
+    const { messages, context = '' } = req.body;
     if (!messages || !Array.isArray(messages)) {
       return res.status(400).json({ error: 'Messages array is required.' });
     }
@@ -700,7 +768,7 @@ app.post('/api/ai/chat', async (req, res) => {
     const ragResults = semanticSearch(lastUserMsg, 5);
     const ragContext = ragResults.map(r => `- [${r.status}] ${r.name} (Priority: ${r.priority || 'Normal'}, List: ${r.listName}): ${r.textChunk || ''}`).join('\n');
     
-    const reply = await chatAssistant(messages, ragContext);
+    const reply = await chatAssistant(messages, ragContext, context);
     res.json({
       reply: reply || 'ขออภัยครับ ไม่สามารถประมวลผลข้อความได้ในขณะนี้',
       sources: ragResults
@@ -714,9 +782,9 @@ app.post('/api/ai/chat', async (req, res) => {
 // AI Polish Title or Text
 app.post('/api/ai/polish', async (req, res) => {
   try {
-    const { text } = req.body;
+    const { text, context = '' } = req.body;
     if (!text || !text.trim()) return res.json({ text: '' });
-    const polished = await polishText(text.trim());
+    const polished = await polishText(text.trim(), context);
     res.json({ text: polished || text.trim() });
   } catch (err) {
     console.error('Error in /api/ai/polish:', err);
@@ -727,9 +795,9 @@ app.post('/api/ai/polish', async (req, res) => {
 // AI Generate Subtasks Checklist
 app.post('/api/ai/generate-subtasks', async (req, res) => {
   try {
-    const { title, description = '' } = req.body;
+    const { title, description = '', context = '' } = req.body;
     if (!title || !title.trim()) return res.json({ subtasks: [] });
-    const subtasks = await generateSubtasks(title.trim(), description.trim());
+    const subtasks = await generateSubtasks(title.trim(), description.trim(), context);
     res.json({ subtasks: subtasks || [] });
   } catch (err) {
     console.error('Error in /api/ai/generate-subtasks:', err);
@@ -740,15 +808,15 @@ app.post('/api/ai/generate-subtasks', async (req, res) => {
 // AI Smart Auto-Fill (Priority, Severity, Suggested Days, and Auto Description)
 app.post('/api/ai/autofill', async (req, res) => {
   try {
-    const { title, description = '' } = req.body;
+    const { title, description = '', context = '' } = req.body;
     if (!title || !title.trim()) {
       return res.json({ priority: 'Normal', severity: 'Low', suggestedDays: 7, description: '' });
     }
-    const metadata = await autofillMetadata(title.trim());
+    const metadata = await autofillMetadata(title.trim(), context);
 
     // Generate or enhance task description
     let enhancedDescription = '';
-    const descPrompt = `วิเคราะห์ชื่องาน: "${title.trim()}" ${description ? 'รายละเอียดเดิม: ' + description.trim() : ''}
+    const descPrompt = `${context ? '[บริบทงาน]: ' + context + '\n\n' : ''}วิเคราะห์ชื่องาน: "${title.trim()}" ${description ? 'รายละเอียดเดิม: ' + description.trim() : ''}
 กรุณาเขียนคำอธิบายงานและแนวทางการปฏิบัติงาน (Scope of Work & Key Deliverables) สำหรับชิ้นงานนี้
 สรุปเป็น 2-4 บรรทัด หรือรายการข้อที่กระชับ ชัดเจน เป็นภาษาไทยสำหรับฝ่ายบริหารและทีมงาน
 ตอบเฉพาะเนื้อหาคำอธิบายเท่านั้น ไม่ต้องมีคำเกริ่น`;

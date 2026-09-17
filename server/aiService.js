@@ -182,11 +182,27 @@ async function callLLM(prompt, systemInstruction = '') {
 }
 
 /**
+ * Helper to build comprehensive workspace and project context
+ */
+function getFullContext(extraContext = '') {
+  const wsContext = getSetting('workspace_context', '');
+  const parts = [];
+  if (wsContext && wsContext.trim()) {
+    parts.push(`[บริบทองค์กรและมาตรฐานการทำงาน]:\n${wsContext.trim()}`);
+  }
+  if (extraContext && extraContext.trim()) {
+    parts.push(`[บริบทรายการงานปัจจุบัน]:\n${extraContext.trim()}`);
+  }
+  return parts.join('\n\n');
+}
+
+/**
  * Polish / improve text wording
  */
-async function polishText(text) {
+async function polishText(text, extraContext = '') {
   if (!text || !text.trim()) return text;
-  const prompt = `กรุณาปรับปรุงข้อความต่อไปนี้ให้เป็นภาษาไทย/อังกฤษที่กระชับ สละสลวย เป็นทางการ ชัดเจน และถูกต้องตามหลักการบริหารโครงการ:\n"${text.trim()}"\nตอบกลับเฉพาะข้อความที่ปรับแก้แล้วเท่านั้น ไม่ต้องมีคำนำหรือคำลงท้ายหรือเครื่องหมายคำพูด`;
+  const contextStr = getFullContext(extraContext);
+  const prompt = `${contextStr ? contextStr + '\n\n' : ''}กรุณาปรับปรุงข้อความต่อไปนี้ให้เป็นภาษาไทย/อังกฤษที่กระชับ สละสลวย เป็นทางการ ชัดเจน และสอดคล้องกับบริบทงาน:\n"${text.trim()}"\nตอบกลับเฉพาะข้อความที่ปรับแก้แล้วเท่านั้น ไม่ต้องมีคำนำหรือคำลงท้ายหรือเครื่องหมายคำพูด`;
   const llmResult = await callLLM(prompt, 'คุณคือผู้ช่วยบริหารโครงการมืออาชีพ');
   if (llmResult && llmResult.trim()) {
     return llmResult.trim().replace(/^["'“”‘’]|["'“”‘’]$/g, '');
@@ -216,8 +232,9 @@ async function polishText(text) {
 /**
  * Generate subtask checklist items from task title
  */
-async function generateSubtasks(title, description = '') {
-  const prompt = `วิเคราะห์ชื่องาน: "${title}" ${description ? 'รายละเอียด: ' + description : ''}\nแตกเป็นขั้นตอนย่อย (Subtasks Checklist) สำหรับการทำงานจริง 3 ถึง 5 ข้อ\nตอบกลับในรูปแบบรายการ 1 บรรทัดต่อ 1 ข้อความเท่านั้น โดยขึ้นต้นด้วยขีด (-) หรือตัวเลข`;
+async function generateSubtasks(title, description = '', extraContext = '') {
+  const contextStr = getFullContext(extraContext);
+  const prompt = `${contextStr ? contextStr + '\n\n' : ''}วิเคราะห์ชื่องาน: "${title}" ${description ? 'รายละเอียด: ' + description : ''}\nแตกเป็นขั้นตอนย่อย (Subtasks Checklist) สำหรับการทำงานจริง 3 ถึง 5 ข้อ ที่สอดคล้องกับมาตรฐานและบริบทงาน\nตอบกลับในรูปแบบรายการ 1 บรรทัดต่อ 1 ข้อความเท่านั้น โดยขึ้นต้นด้วยขีด (-) หรือตัวเลข`;
   const llmResult = await callLLM(prompt, 'คุณคือ AI Project Planner');
   
   if (llmResult) {
@@ -274,8 +291,9 @@ async function generateSubtasks(title, description = '') {
 /**
  * Smart Auto-fill metadata (Priority, Defect Severity, suggested due days)
  */
-async function autofillMetadata(title) {
-  const prompt = `วิเคราะห์ชื่องาน: "${title}"\nให้แนะนำค่าในรูปแบบ JSON ดังนี้:\n{"priority": "Urgent"|"High"|"Normal"|"Low", "severity": "Critical"|"Major"|"Minor"|"Low", "suggestedDays": 3}\nตอบเฉพาะ JSON เท่านั้น`;
+async function autofillMetadata(title, extraContext = '') {
+  const contextStr = getFullContext(extraContext);
+  const prompt = `${contextStr ? contextStr + '\n\n' : ''}วิเคราะห์ชื่องาน: "${title}"\nให้แนะนำค่าในรูปแบบ JSON ดังนี้:\n{"priority": "Urgent"|"High"|"Normal"|"Low", "severity": "Critical"|"Major"|"Minor"|"Low", "suggestedDays": 3}\nตอบเฉพาะ JSON เท่านั้น`;
   const llmResult = await callLLM(prompt);
   if (llmResult) {
     try {
@@ -314,11 +332,13 @@ async function autofillMetadata(title) {
 /**
  * Conversational Assistant with Project & RAG Context
  */
-async function chatAssistant(messages, ragContext) {
+async function chatAssistant(messages, ragContext, extraContext = '') {
+  const contextStr = getFullContext(extraContext);
   const systemInstruction = `คุณคือ AI Project Assistant ผู้เชี่ยวชาญด้านการบริหารจัดการโครงการ (Project Manager AI)
-ทำงานร่วมกับโปรแกรม ClickUp Local โดยช่วยผู้ใช้ตอบคำถาม สรุปงาน ติดตามสถานะงาน และวางแผนงาน
+ทำงานร่วมกับโปรแกรม Status+ Project Manager โดยช่วยผู้ใช้ตอบคำถาม สรุปงาน ติดตามสถานะงาน และวางแผนงาน
+${contextStr ? `\n${contextStr}\n` : ''}
 ข้อมูลบริบทงานในระบบปัจจุบันที่ค้นหาพบจาก Vector Database:\n${ragContext || 'ไม่มีข้อมูลเพิ่มเติม'}\n
-ให้ตอบคำถามอย่างกระชับ สุภาพ เป็นภาษาไทย/อังกฤษที่ชัดเจน และอ้างอิงข้อมูลทาสก์ที่มีในระบบอย่างแม่นยำ`;
+ให้ตอบคำถามอย่างกระชับ สุภาพ เป็นภาษาไทย/อังกฤษที่ชัดเจน ตรงกับบริบทการทำงาน และอ้างอิงข้อมูลทาสก์ที่มีในระบบอย่างแม่นยำ`;
 
   const lastUserMsg = messages[messages.length - 1]?.content || '';
   const llmResult = await callLLM(lastUserMsg, systemInstruction);
