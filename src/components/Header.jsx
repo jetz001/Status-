@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { 
   Search, 
-  Sparkles, 
   Bell, 
   Image as ImageIcon, 
   Printer, 
@@ -59,7 +58,7 @@ export default function Header({
           </div>
         )}
 
-        {/* Center: Search & AI Assistant */}
+        {/* Center: Search */}
         <div className="flex items-center space-x-2 flex-1 max-w-md mx-6">
           <div className="relative w-full">
             <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -74,14 +73,6 @@ export default function Header({
               Ctrl+K
             </span>
           </div>
-
-          <button 
-            onClick={onOpenAISidebar}
-            className="flex items-center space-x-1.5 px-3 py-1.5 bg-gradient-to-r from-purple-900/60 to-indigo-900/60 hover:from-purple-800/80 hover:to-indigo-800/80 border border-purple-500/40 rounded-full text-purple-200 text-xs font-medium transition shadow-sm flex-shrink-0"
-          >
-            <Sparkles size={13} className="text-purple-300" />
-            <span>AI Assistant</span>
-          </button>
         </div>
 
         {/* Right action icons */}
