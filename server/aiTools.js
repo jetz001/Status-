@@ -64,10 +64,11 @@ const tools = {
       });
     }
 
-    // Auto-attach file if provided
+    // Auto-attach file if provided directly or via args payload
+    const attachmentSource = fileInfo || args.fileInfo;
     let attachmentId = null;
-    if (fileInfo) {
-      attachmentId = attachFileToTask(id, fileInfo);
+    if (attachmentSource) {
+      attachmentId = attachFileToTask(id, attachmentSource);
     }
 
     // Index vector search
@@ -487,6 +488,23 @@ const tools = {
 };
 
 /**
+ * Get all spaces and their child lists
+ */
+function getSpacesAndLists() {
+  const spaces = db.prepare('SELECT id, name, color, icon FROM spaces ORDER BY position ASC, created_at ASC').all();
+  return spaces.map(sp => {
+    const lists = db.prepare('SELECT id, name, color FROM lists WHERE space_id = ? ORDER BY position ASC, created_at ASC').all(sp.id);
+    return {
+      id: sp.id,
+      name: sp.name,
+      color: sp.color,
+      icon: sp.icon,
+      lists: lists.map(l => ({ id: l.id, name: l.name, color: l.color }))
+    };
+  });
+}
+
+/**
  * Execute a named tool with arguments
  */
 async function executeTool(toolName, args, fileInfo = null) {
@@ -501,5 +519,6 @@ module.exports = {
   tools,
   executeTool,
   findTask,
-  getDefaultListId
+  getDefaultListId,
+  getSpacesAndLists
 };

@@ -556,6 +556,48 @@ export default function AISidebarRAG({
     }
   };
 
+  // Execute approved plan (create task in selected list)
+  const handleExecuteApprovedPlan = async (msgIdx, actIdx, plan, targetListId) => {
+    try {
+      const res = await fetch('/api/ai/confirm-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          actionType: 'create_task',
+          payload: {
+            list_id: targetListId || plan.defaultListId,
+            name: plan.name,
+            description: plan.description || '',
+            priority: plan.priority || 'Normal',
+            due_date: plan.due_date || null,
+            subtasks: plan.subtasks || [],
+            fileInfo: plan.fileInfo || null
+          }
+        })
+      });
+      const result = await res.json();
+
+      if (result.success) {
+        setMessages(prev => {
+          const cloned = [...prev];
+          if (cloned[msgIdx]?.actions?.[actIdx]) {
+            cloned[msgIdx].actions[actIdx] = {
+              ...result,
+              action: 'created_task',
+              resolvedMessage: result.message || `สร้างงาน "${plan.name}" สำเร็จแล้ว`
+            };
+          }
+          return cloned;
+        });
+
+        if (onDataChanged) onDataChanged();
+        if (onHistoryUpdated) onHistoryUpdated();
+      }
+    } catch (err) {
+      console.error('Error executing approved plan:', err);
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -655,6 +697,85 @@ export default function AISidebarRAG({
                   {m.actions && m.actions.length > 0 && (
                     <div className="pt-2 border-t border-[#333538] space-y-2">
                       {m.actions.map((act, actIdx) => {
+                        // 0. Plan Proposal Card (Grill-me & Approval)
+                        if (act.action === 'plan_proposal' && act.plan) {
+                          return (
+                            <div key={actIdx} className="p-3 bg-[#16181b] border border-cyan-500/40 rounded-xl space-y-2.5 shadow-md">
+                              <div className="flex items-center justify-between border-b border-[#2d3035] pb-2">
+                                <span className="text-xs font-bold text-cyan-300 flex items-center space-x-1.5">
+                                  <Sparkles size={14} className="text-cyan-400" />
+                                  <span>📋 ร่างแผนงาน (รออนุมัติก่อนสร้าง)</span>
+                                </span>
+                                <span className="text-[10px] px-2 py-0.5 rounded bg-cyan-950/60 text-cyan-300 border border-cyan-500/30 font-semibold">
+                                  Grill-me Plan
+                                </span>
+                              </div>
+
+                              {/* Plan Details */}
+                              <div className="space-y-1.5 text-[11px]">
+                                <div>
+                                  <span className="text-gray-400 font-medium">ชื่องานที่แนะนำ:</span>{' '}
+                                  <span className="text-white font-semibold">{act.plan.name}</span>
+                                </div>
+                                {act.plan.description && (
+                                  <div className="text-gray-300 bg-[#1f2126] p-2 rounded border border-[#2f3238] text-[10.5px] leading-relaxed">
+                                    {act.plan.description}
+                                  </div>
+                                )}
+                                {act.plan.subtasks && act.plan.subtasks.length > 0 && (
+                                  <div className="space-y-1 pt-1">
+                                    <span className="text-gray-400 font-medium text-[10.5px]">Checklist แนะนำ ({act.plan.subtasks.length} ข้อ):</span>
+                                    <div className="space-y-1 pl-1">
+                                      {act.plan.subtasks.map((st, sIdx) => (
+                                        <div key={sIdx} className="flex items-center space-x-1.5 text-gray-300 text-[10.5px]">
+                                          <Circle size={8} className="text-cyan-400/80 flex-shrink-0" />
+                                          <span>{typeof st === 'string' ? st : st.title}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Target Space & List Selector / Quick Selection */}
+                              {act.availableLists && act.availableLists.length > 0 && (
+                                <div className="pt-2 border-t border-[#2d3035] space-y-1.5">
+                                  <span className="text-[10.5px] text-gray-400 block font-medium">
+                                    🎯 เลือก Space / List ที่ต้องการนำงานนี้ไปบรรจุ:
+                                  </span>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {act.availableLists.map((item, lIdx) => (
+                                      <button
+                                        key={lIdx}
+                                        type="button"
+                                        onClick={() => handleExecuteApprovedPlan(msgIdx, actIdx, act.plan, item.listId)}
+                                        className="px-2.5 py-1 rounded-md bg-[#222428] hover:bg-cyan-600 hover:text-white text-gray-200 border border-[#363a40] hover:border-cyan-400 transition text-[10.5px] flex items-center space-x-1 cursor-pointer"
+                                        title={`คลิกเพื่อสร้างงานใน "${item.spaceName} › ${item.listName}"`}
+                                      >
+                                        <span className="text-cyan-400 text-[9px] font-semibold">{item.spaceName} ›</span>
+                                        <span className="font-medium">{item.listName}</span>
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Action Footer */}
+                              <div className="flex items-center justify-between pt-2 border-t border-[#2d3035]">
+                                <span className="text-[10px] text-gray-500 italic">* สามารถพิมพ์บอก AI เพื่อปรับแก้แผนก่อนได้ครับ</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleExecuteApprovedPlan(msgIdx, actIdx, act.plan, act.plan.defaultListId || act.availableLists?.[0]?.listId)}
+                                  className="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-lg font-bold text-[11px] transition shadow-sm cursor-pointer flex items-center space-x-1"
+                                >
+                                  <Check size={13} />
+                                  <span>อนุมัติสร้างงานตามแผน</span>
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        }
+
                         // 1. Pending Confirmation Card (Destructive Delete Action)
                         if (act.requiresConfirmation) {
                           return (

@@ -1,4 +1,4 @@
-const { tools, executeTool, getDefaultListId } = require('./aiTools');
+const { tools, executeTool, getDefaultListId, getSpacesAndLists } = require('./aiTools');
 const { callLLM } = require('./aiService');
 const { processFileForAI } = require('./fileProcessor');
 const { semanticSearch } = require('./ragService');
@@ -84,40 +84,45 @@ async function fallbackRuleExecution(skill, query, fileProcessed = null, activeL
   let reply = '';
   const text = query.trim();
 
-  // Document extraction fallback
+  // Document extraction fallback -> PROPOSE PLAN FIRST (Grill-me)
   if (fileProcessed) {
-    const listId = activeListId || getDefaultListId();
+    const spacesAndLists = getSpacesAndLists();
+    const flatLists = [];
+    spacesAndLists.forEach(sp => {
+      sp.lists.forEach(l => {
+        flatLists.push({ spaceName: sp.name, listId: l.id, listName: l.name });
+      });
+    });
+
     const docText = fileProcessed.text || '';
-    const lines = docText.split('\n')
+    const cleanLines = docText.split('\n')
       .map(l => l.trim())
       .filter(l => l.length > 5 && (/^(\d+[\.\)]|[-*•])/.test(l) || /task|งาน|จัดทำ|ตรวจสอบ|ดำเนินการ/i.test(l)))
-      .slice(0, 10);
+      .slice(0, 5);
 
-    if (lines.length > 0) {
-      for (const line of lines) {
-        const cleanName = line.replace(/^(\d+[\.\)]|[-*•])\s*/, '').slice(0, 80);
-        const res = await executeTool('create_task', {
-          list_id: listId,
-          name: cleanName,
-          description: `แยกงานอัตโนมัติจากไฟล์: ${fileProcessed.originalName}`,
-          priority: 'Normal'
-        }, fileProcessed.fileInfo);
-        actions.push(res);
-      }
-      reply = `วิเคราะห์ไฟล์ "${fileProcessed.originalName}" สำเร็จ และแยกเป็นงานให้เรียบร้อยแล้วจำนวน ${lines.length} งาน (พร้อมแนบไฟล์ต้นฉบับเข้าการ์ดงานแล้วครับ)`;
-    } else {
-      // Create single parent task for document
-      const res = await executeTool('create_task', {
-        list_id: listId,
-        name: `ดำเนินการตามเอกสาร: ${fileProcessed.originalName}`,
-        description: `สรุปเอกสาร:\n${docText.slice(0, 300)}...`,
+    const planTitle = cleanLines[0]?.replace(/^(\d+[\.\)]|[-*•])\s*/, '') || (fileProcessed.type === 'image' ? `วิเคราะห์และดำเนินงานตามรูปภาพ: ${fileProcessed.originalName}` : `ดำเนินการตามเอกสาร: ${fileProcessed.originalName}`);
+    const subtasks = cleanLines.length > 1 
+      ? cleanLines.slice(1).map(l => l.replace(/^(\d+[\.\)]|[-*•])\s*/, ''))
+      : ['ตรวจสอบความถูกต้องและรายละเอียดในภาพ/เอกสาร', 'แบ่งหน้าที่และมอบหมายผู้รับผิดชอบ', 'ติดตามผลการดำเนินงาน'];
+
+    const targetListId = activeListId || (flatLists[0]?.listId || '');
+
+    actions.push({
+      action: 'plan_proposal',
+      title: '📋 ร่างแผนงาน (รออนุมัติก่อนสร้าง)',
+      plan: {
+        name: planTitle,
+        description: `วิเคราะห์จาก: ${fileProcessed.originalName}\n${docText ? docText.slice(0, 300) : 'เอกสาร/ภาพแนบ'}`,
         priority: 'Normal',
-        subtasks: ['ตรวจสอบความถูกต้องของเอกสาร', 'แบ่งงานให้ผู้รับผิดชอบ', 'ติดตามผลการดำเนินงาน']
-      }, fileProcessed.fileInfo);
-      actions.push(res);
-      reply = `สร้างงานหลักสำหรับเอกสาร "${fileProcessed.originalName}" พร้อม Checklist เริ่มต้นเรียบร้อยแล้วครับ`;
-    }
+        subtasks,
+        defaultListId: targetListId,
+        fileInfo: fileProcessed.fileInfo
+      },
+      availableLists: flatLists
+    });
 
+    const listNamesStr = flatLists.map(l => `• **${l.spaceName}** › ${l.listName}`).join('\n');
+    reply = `ผมได้วิเคราะห์และร่างแผนงานเบื้องต้นมาให้ตรวจสอบแล้วครับ (ยังไม่ได้สร้างลงระบบ)\n\n🎯 **กรุณาเลือก Space หรือ List ปลายทาง** ที่ต้องการนำงานนี้ไปบรรจุ หรือกดปุ่มอนุมัติสร้างงานตามแผนด้านล่างได้เลยครับ:\n\n${listNamesStr}`;
     return { skill, actions, reply };
   }
 
@@ -283,6 +288,19 @@ async function processAgentQuery({
 }) {
   const skill = routeSkill(userMessage, !!fileProcessed);
 
+  // Fetch real-time spaces & lists to ground the AI
+  const spacesAndLists = getSpacesAndLists();
+  const flatLists = [];
+  spacesAndLists.forEach(sp => {
+    sp.lists.forEach(l => {
+      flatLists.push({ spaceName: sp.name, listId: l.id, listName: l.name });
+    });
+  });
+
+  const spacesListText = spacesAndLists.map(sp =>
+    `• Space "${sp.name}": Lists: [${sp.lists.map(l => `"${l.name}" (ID: "${l.id}")`).join(', ')}]`
+  ).join('\n');
+
   // System instructions for structured tool execution
   const systemInstruction = `
 คุณคือ Status+ AI Agent ผู้ช่วยอัจฉริยะในการบริหารจัดการโปรเจกต์และงาน
@@ -291,53 +309,148 @@ async function processAgentQuery({
 
 บริบทโปรเจกต์ปัจจุบัน: ${context || 'ทั่วไป'} (Active List ID: ${activeListId || 'default'})
 
+โครงสร้าง Spaces และ Lists ในระบบปัจจุบัน:
+${spacesListText}
+
 ${fileProcessed ? `
 มีไฟล์แนบเข้ามา: "${fileProcessed.originalName}" (${fileProcessed.type})
-${fileProcessed.text ? `เนื้อหาในเอกสารที่สกัดได้:\n"""\n${fileProcessed.text.slice(0, 3000)}\n"""` : 'ไฟล์รูปภาพ (วิเคราะห์ภาพและองค์ประกอบของงาน)'}
-หน้าที่ของคุณ: วิเคราะห์เนื้อหาในเอกสาร แล้วแยกเป็นงาน (create_task) หรือโปรเจกต์ (create_project) พร้อมระบุ Subtasks ที่เหมาะสม
+${fileProcessed.text ? `เนื้อหาในเอกสารที่สกัดได้:\n"""\n${fileProcessed.text.slice(0, 3000)}\n"""` : 'ไฟล์รูปภาพ (ให้วิเคราะห์ภาพ อ่านข้อความ OCR และสรุปองค์ประกอบงาน)'}
 ` : ''}
 
-หากผู้ใช้สั่งให้ เพิ่ม/สร้าง/แก้ไข/ลบ ข้อมูล หรือต้องการแยกงาน ให้ตอบกลับเป็น JSON ในรูปแบบนี้เท่านั้น:
-{
-  "actions": [
-    {
-      "tool": "create_task",
-      "args": {
-        "list_id": "${activeListId || ''}",
-        "name": "ชื่องาน",
-        "description": "รายละเอียดงาน",
-        "priority": "Normal/High/Urgent/Low",
-        "due_date": "YYYY-MM-DD หรือ null",
-        "subtasks": ["ข้อย่อย 1", "ข้อย่อย 2"]
-      }
-    }
-  ],
-  "reply": "ข้อความสรุปการดำเนินงานที่สุภาพ เป็นมิตร และชัดเจนในภาษาไทย"
-}
+## กฎเหล็กในการทำงาน (Grill-Me & Plan-First Principle):
+1. เมื่อมีเอกสารหรือรูปภาพแนบเข้ามา หรือผู้ใช้สั่งให้ "จัดงาน", "แยกงาน", "วิเคราะห์", "วางแผน" (และยังไม่ได้ระบุยืนยันว่าให้สร้างลง Space/List ใดชัดเจน):
+   - **ห้ามเรียกใช้ "create_task" ทันทีโดยเด็ดขาด!**
+   - ให้วิเคราะห์ข้อความ/ภาพอย่างละเอียด สกัดชื่องานจริง (ห้ามตั้งชื่อ dummy เช่น ดำเนินการตามเอกสาร: ...)
+   - สรุปรายละเอียดงาน และจัดทำรายการ Checklist (subtasks) 3-5 ข้อ
+   - ให้ส่งผลลัพธ์เป็น Action ชนิด "plan_proposal" เท่านั้น เพื่อให้ผู้ใช้ตรวจทานและเลือก Space/List ก่อนสร้าง:
+   {
+     "actions": [
+       {
+         "action": "plan_proposal",
+         "title": "📋 ร่างแผนงาน (รออนุมัติก่อนสร้าง)",
+         "plan": {
+           "name": "ชื่องานจริงที่สกัดได้จากเอกสารหรือภาพ",
+           "description": "รายละเอียดงานและขอบเขต",
+           "priority": "Normal/High/Urgent/Low",
+           "due_date": "YYYY-MM-DD หรือ null",
+           "subtasks": ["Checklist 1", "Checklist 2", "Checklist 3"]
+         }
+       }
+     ],
+     "reply": "ข้อความสรุปสิ่งที่อ่านได้จากเอกสาร/ภาพ พร้อมนำเสนอแผนงาน และถามผู้ใช้ (Grill-me) ชัดเจนว่าต้องการให้นำเข้า Space หรือ List ใดในระบบ"
+   }
 
-หากเป็นการปรึกษาหรือถามทั่วไปที่ไม่ต้องปรับแก้ข้อมูล:
-{
-  "actions": [],
-  "reply": "คำตอบและคำแนะนำของคุณ..."
-}
+2. หากผู้ใช้สั่ง "สร้างงานใหม่ X โดยตรง" (ระบุชื่อและต้องการสร้างทันที) หรือ "อนุมัติสร้างแผนงาน" หรือ "สร้างลงใน Space/List Y":
+   - ให้ตอบกลับเป็น JSON เพื่อเรียกใช้ Tool "create_task":
+   {
+     "actions": [
+       {
+         "tool": "create_task",
+         "args": {
+           "list_id": "ID ของ List ที่ถูกต้องจากรายชื่อ Lists ในระบบ",
+           "name": "ชื่องาน",
+           "description": "รายละเอียดงาน",
+           "priority": "Normal/High/Urgent/Low",
+           "due_date": "YYYY-MM-DD หรือ null",
+           "subtasks": ["ข้อย่อย 1", "ข้อย่อย 2"]
+         }
+       }
+     ],
+     "reply": "ข้อความสรุปการสร้างงานที่เรียบร้อยและชัดเจน"
+   }
+
+3. หากเป็นการปรึกษา สรุปภาพรวม หรือถามทั่วไปที่ไม่ต้องสร้างหรือแก้ไขงาน:
+   {
+     "actions": [],
+     "reply": "คำตอบและคำแนะนำของคุณ..."
+   }
 `;
+
+// Safe JSON parser that handles markdown fences and unescaped newlines from LLMs
+function safeJsonParse(rawText) {
+  if (!rawText) return null;
+  let text = rawText.trim();
+
+  // Strip ```json ... ``` or ``` ... ```
+  text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+
+  const firstBrace = text.indexOf('{');
+  const lastBrace = text.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    text = text.substring(firstBrace, lastBrace + 1);
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch (e) {}
+
+  try {
+    let inString = false;
+    let escaped = false;
+    let cleaned = '';
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i];
+      if (char === '"' && !escaped) {
+        inString = !inString;
+      }
+      if (inString && (char === '\n' || char === '\r')) {
+        cleaned += '\\n';
+      } else if (inString && char === '\t') {
+        cleaned += '\\t';
+      } else {
+        cleaned += char;
+      }
+      escaped = char === '\\' && !escaped;
+    }
+    return JSON.parse(cleaned);
+  } catch (e) {}
+
+  return null;
+}
 
   // Attempt LLM execution
   try {
     const prompt = userMessage || (fileProcessed ? `ช่วยวิเคราะห์และแยกงานจากไฟล์ ${fileProcessed.originalName}` : 'สรุปงาน');
-    const llmResponse = await callLLM(prompt, systemInstruction);
+    const llmResponse = await callLLM(prompt, systemInstruction, fileProcessed);
 
     if (llmResponse) {
-      // Parse JSON from LLM response
-      const jsonMatch = llmResponse.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
+      const parsed = safeJsonParse(llmResponse);
+      if (parsed) {
         const executedActions = [];
 
         if (Array.isArray(parsed.actions)) {
           for (const act of parsed.actions) {
+            // Convert task_creation or non-standard plan into plan_proposal if plan_proposal is requested
+            if (act.type === 'task_creation' || (!act.action && act.task)) {
+              act.action = 'plan_proposal';
+              act.plan = {
+                name: act.task?.name || act.task?.project_name || 'งานที่สกัดจากเอกสาร/ภาพ',
+                description: act.task?.description || act.task?.notes || 'สกัดจากเอกสาร/ภาพ',
+                priority: act.task?.priority || 'Normal',
+                subtasks: (act.task?.subtasks || []).map(s => typeof s === 'string' ? s : (s.description || s.action || s.title || ''))
+              };
+            }
+
+            // A. Plan Proposal Action (Grill-me / Approval Card)
+            if (act.action === 'plan_proposal' || act.type === 'plan_proposal') {
+              act.action = 'plan_proposal';
+              act.availableLists = flatLists;
+              if (act.plan) {
+                act.plan.defaultListId = activeListId || (flatLists[0]?.listId || '');
+                if (fileProcessed) {
+                  act.plan.fileInfo = fileProcessed.fileInfo;
+                }
+              }
+              executedActions.push(act);
+              continue;
+            }
+
+            // B. Direct Tool Execution
             if (skill.tools.includes(act.tool)) {
               try {
+                if (act.tool === 'create_task' && (!act.args.list_id || act.args.list_id === 'default')) {
+                  act.args.list_id = activeListId || (flatLists[0]?.listId || '');
+                }
                 const res = await executeTool(act.tool, act.args, fileProcessed ? fileProcessed.fileInfo : null);
                 executedActions.push(res);
               } catch (toolErr) {
@@ -348,10 +461,14 @@ ${fileProcessed.text ? `เนื้อหาในเอกสารที่�
           }
         }
 
+        const replyText = typeof parsed.reply === 'string' 
+          ? parsed.reply 
+          : (parsed.reply?.text || 'วิเคราะห์ข้อมูลและร่างแผนงานเรียบร้อยแล้วครับ');
+
         return {
           skill,
           actions: executedActions,
-          reply: parsed.reply || 'ดำเนินการตามคำสั่งเรียบร้อยแล้วครับ'
+          reply: replyText
         };
       }
     }

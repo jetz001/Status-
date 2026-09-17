@@ -257,7 +257,7 @@ export default function SettingsModal({
                   { id: 'gemini', label: 'Google Gemini', defaultModel: 'gemini-1.5-flash', hint: 'AIzaSy...' },
                   { id: 'openai', label: 'OpenAI (ChatGPT)', defaultModel: 'gpt-4o-mini', hint: 'sk-proj-...' },
                   { id: 'claude', label: 'Claude (Anthropic)', defaultModel: 'claude-3-5-sonnet-20241022', hint: 'sk-ant-...' },
-                  { id: 'mistral', label: 'Mistral AI', defaultModel: 'mistral-large-latest', hint: 'apiKey...' },
+                  { id: 'mistral', label: 'Mistral AI', defaultModel: 'pixtral-12b-2409', hint: 'apiKey...' },
                   { id: 'qwen', label: 'Qwen (Alibaba)', defaultModel: 'qwen-plus', hint: 'sk-...' },
                   { id: 'kimi', label: 'Kimi (Moonshot)', defaultModel: 'moonshot-v1-8k', hint: 'sk-...' },
                   { id: 'ollama', label: 'Local Ollama', defaultModel: 'llama3', hint: 'ไม่ต้องใช้ Key' }

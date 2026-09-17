@@ -8,7 +8,7 @@ function getSetting(key, defaultValue = '') {
 /**
  * Calls the configured AI Provider (Gemini / OpenAI / Ollama)
  */
-async function callLLM(prompt, systemInstruction = '') {
+async function callLLM(prompt, systemInstruction = '', fileProcessed = null) {
   const provider = getSetting('ai_provider', 'gemini');
   const apiKey = getSetting('ai_api_key', '');
 
@@ -16,13 +16,21 @@ async function callLLM(prompt, systemInstruction = '') {
     gemini: 'gemini-1.5-flash',
     openai: 'gpt-4o-mini',
     claude: 'claude-3-5-sonnet-20241022',
-    mistral: 'mistral-large-latest',
+    mistral: 'pixtral-12b-2409',
     qwen: 'qwen-plus',
     kimi: 'moonshot-v1-8k',
     ollama: 'llama3'
   };
 
-  const model = getSetting('ai_model', defaultModelMap[provider] || 'gemini-1.5-flash');
+  let model = getSetting('ai_model', defaultModelMap[provider] || 'gemini-1.5-flash');
+
+  // Auto-upgrade legacy or tier-restricted mistral model to vision-capable pixtral
+  if (provider === 'mistral' && (model === 'mistral-large-latest' || !model)) {
+    model = 'pixtral-12b-2409';
+    try {
+      db.prepare('UPDATE app_settings SET value = ? WHERE key = ?').run(model, 'ai_model');
+    } catch (e) {}
+  }
 
   // If no API key is set for cloud providers, use our intelligent local rule-based fallback
   if (provider !== 'ollama' && !apiKey) {
@@ -30,15 +38,27 @@ async function callLLM(prompt, systemInstruction = '') {
   }
 
   try {
+    const hasImage = fileProcessed && fileProcessed.type === 'image' && fileProcessed.base64;
+
     // 1. Google Gemini
     if (provider === 'gemini') {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+      const parts = [];
+      const textContent = `${systemInstruction ? systemInstruction + '\n\n' : ''}${prompt}`;
+      parts.push({ text: textContent });
+      if (hasImage) {
+        parts.push({
+          inlineData: {
+            mimeType: fileProcessed.mimeType || 'image/png',
+            data: fileProcessed.base64
+          }
+        });
+      }
+
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: `${systemInstruction ? systemInstruction + '\n\n' : ''}${prompt}` }] }]
-        })
+        body: JSON.stringify({ contents: [{ parts }] })
       });
       const data = await res.json();
       if (data.candidates && data.candidates[0]?.content?.parts?.[0]?.text) {
@@ -52,7 +72,21 @@ async function callLLM(prompt, systemInstruction = '') {
       const url = 'https://api.openai.com/v1/chat/completions';
       const messages = [];
       if (systemInstruction) messages.push({ role: 'system', content: systemInstruction });
-      messages.push({ role: 'user', content: prompt });
+
+      if (hasImage) {
+        messages.push({
+          role: 'user',
+          content: [
+            { type: 'text', text: prompt },
+            {
+              type: 'image_url',
+              image_url: { url: `data:${fileProcessed.mimeType || 'image/png'};base64,${fileProcessed.base64}` }
+            }
+          ]
+        });
+      } else {
+        messages.push({ role: 'user', content: prompt });
+      }
 
       const res = await fetch(url, {
         method: 'POST',
@@ -72,6 +106,27 @@ async function callLLM(prompt, systemInstruction = '') {
     // 3. Anthropic Claude
     if (provider === 'claude') {
       const url = 'https://api.anthropic.com/v1/messages';
+      const messages = [];
+
+      if (hasImage) {
+        messages.push({
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: fileProcessed.mimeType || 'image/png',
+                data: fileProcessed.base64
+              }
+            },
+            { type: 'text', text: prompt }
+          ]
+        });
+      } else {
+        messages.push({ role: 'user', content: prompt });
+      }
+
       const res = await fetch(url, {
         method: 'POST',
         headers: {
@@ -83,7 +138,7 @@ async function callLLM(prompt, systemInstruction = '') {
           model: model || 'claude-3-5-sonnet-20241022',
           max_tokens: 1024,
           system: systemInstruction || undefined,
-          messages: [{ role: 'user', content: prompt }]
+          messages
         })
       });
       const data = await res.json();
@@ -98,21 +153,46 @@ async function callLLM(prompt, systemInstruction = '') {
       const url = 'https://api.mistral.ai/v1/chat/completions';
       const messages = [];
       if (systemInstruction) messages.push({ role: 'system', content: systemInstruction });
-      messages.push({ role: 'user', content: prompt });
 
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({ model: model || 'mistral-large-latest', messages, temperature: 0.7 })
-      });
+      if (hasImage) {
+        messages.push({
+          role: 'user',
+          content: [
+            { type: 'text', text: prompt },
+            {
+              type: 'image_url',
+              image_url: `data:${fileProcessed.mimeType || 'image/png'};base64,${fileProcessed.base64}`
+            }
+          ]
+        });
+      } else {
+        messages.push({ role: 'user', content: prompt });
+      }
+
+      const sendMistral = async (targetModel) => {
+        return fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({ model: targetModel, messages, temperature: 0.7 })
+        });
+      };
+
+      let res = await sendMistral(model);
+      if (res.status === 403 && model !== 'pixtral-12b-2409') {
+        // Fallback to pixtral-12b-2409 if subscription tier disallows current model
+        model = 'pixtral-12b-2409';
+        db.prepare('UPDATE app_settings SET value = ? WHERE key = ?').run(model, 'ai_model');
+        res = await sendMistral(model);
+      }
+
       const data = await res.json();
       if (data.choices && data.choices[0]?.message?.content) {
         return data.choices[0].message.content.trim();
       }
-      throw new Error(data.error?.message || 'Mistral API Error');
+      throw new Error(data.error?.message || data.message || 'Mistral API Error');
     }
 
     // 5. Qwen (Alibaba Cloud DashScope)
