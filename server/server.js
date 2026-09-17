@@ -584,6 +584,64 @@ app.get('/api/rag/search', (req, res) => {
 });
 
 // ==========================================
+// 5.5 TEAM MEMBERS (ผู้รับผิดชอบงาน)
+// ==========================================
+
+app.get('/api/team-members', (req, res) => {
+  try {
+    const members = db.prepare('SELECT * FROM team_members ORDER BY created_at ASC').all();
+    res.json(members);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/team-members', (req, res) => {
+  try {
+    const { name, label, color = '#7b68ee' } = req.body;
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: 'Name is required' });
+    }
+    const id = `tm-${Date.now()}`;
+    const trimmedName = name.trim();
+    const displayLabel = (label && label.trim()) ? label.trim() : trimmedName;
+    db.prepare('INSERT INTO team_members (id, name, label, color) VALUES (?, ?, ?, ?)').run(id, trimmedName, displayLabel, color);
+    const member = db.prepare('SELECT * FROM team_members WHERE id = ?').get(id);
+    res.json(member);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/team-members/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, label, color } = req.body;
+    db.prepare(`
+      UPDATE team_members
+      SET name = COALESCE(?, name),
+          label = COALESCE(?, label),
+          color = COALESCE(?, color)
+      WHERE id = ?
+    `).run(name ? name.trim() : null, label ? label.trim() : null, color || null, id);
+    const member = db.prepare('SELECT * FROM team_members WHERE id = ?').get(id);
+    res.json(member);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/team-members/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    db.prepare('DELETE FROM team_members WHERE id = ?').run(id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
 // 6. WINDOWS WALLPAPER
 // ==========================================
 

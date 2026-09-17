@@ -44,7 +44,28 @@ export default function TaskDrawer({
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [aiNotice, setAiNotice] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [teamMembers, setTeamMembers] = useState([]);
   const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    fetch('/api/team-members')
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) setTeamMembers(data);
+      })
+      .catch(console.error);
+  }, []);
+
+  // Listen for Escape key to close drawer
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
 
   useEffect(() => {
     setName(task.name || '');
@@ -290,8 +311,15 @@ export default function TaskDrawer({
   const progressPercent = subtasks.length > 0 ? Math.round((completedCount / subtasks.length) * 100) : 0;
 
   return (
-    <div className="fixed inset-y-0 right-0 w-[580px] max-w-full bg-[#1e1f21] border-l border-[#333538] shadow-2xl z-40 flex flex-col text-xs select-none">
-      {/* Header Bar */}
+    <>
+      {/* Backdrop overlay: click outside to close drawer */}
+      <div 
+        onClick={onClose}
+        className="fixed inset-0 bg-black/60 backdrop-blur-[1px] z-40 transition-opacity"
+        title="คลิกด้านนอกเพื่อปิดหน้าต่างงาน"
+      />
+      <div className="fixed inset-y-0 right-0 w-[580px] max-w-full bg-[#1e1f21] border-l border-[#333538] shadow-2xl z-50 flex flex-col text-xs select-none">
+        {/* Header Bar */}
       <div className="p-3 border-b border-[#333538] flex items-center justify-between bg-[#18191b]">
         <div className="flex items-center space-x-2">
           {/* Status Dropdown */}
@@ -405,12 +433,29 @@ export default function TaskDrawer({
               <User size={12} />
               <span>ผู้รับผิดชอบ (Assignee)</span>
             </label>
-            <input 
-              type="text"
-              value={assignee}
-              onChange={(e) => setAssignee(e.target.value)}
-              className="w-full bg-[#141517] p-2 rounded border border-[#333538] text-white outline-none"
-            />
+            <div className="flex space-x-1.5">
+              <select 
+                value={teamMembers.some(m => m.name === assignee) ? assignee : ''}
+                onChange={(e) => {
+                  if (e.target.value) {
+                    setAssignee(e.target.value);
+                  }
+                }}
+                className="w-1/2 bg-[#141517] p-2 rounded border border-[#333538] text-white outline-none text-xs"
+              >
+                <option value="">-- เลือกทีม --</option>
+                {teamMembers.map(m => (
+                  <option key={m.id} value={m.name}>{m.label || m.name}</option>
+                ))}
+              </select>
+              <input 
+                type="text"
+                value={assignee}
+                onChange={(e) => setAssignee(e.target.value)}
+                placeholder="ระบุชื่อย่อ..."
+                className="w-1/2 bg-[#141517] p-2 rounded border border-[#333538] text-white outline-none text-xs"
+              />
+            </div>
           </div>
 
           <div className="space-y-1">
@@ -679,5 +724,6 @@ export default function TaskDrawer({
         </div>
       )}
     </div>
+    </>
   );
 }

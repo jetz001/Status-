@@ -8,7 +8,8 @@ if (!fs.existsSync(WALLPAPER_DIR)) {
 }
 
 /**
- * Sets the desktop wallpaper on Windows using PowerShell SystemParametersInfo API
+ * Sets the desktop wallpaper on Windows using modern IDesktopWallpaper COM API
+ * (supports PNG, JPG, multi-monitor, high-DPI fill) with fallback to SystemParametersInfo
  */
 function setWindowsWallpaper(imagePath) {
   return new Promise((resolve, reject) => {
@@ -24,12 +25,57 @@ function setWindowsWallpaper(imagePath) {
 Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
-public class Wallpaper {
+
+[ComImport]
+[Guid("B92B56A9-8B55-4E14-9A89-0199BBB6F93B")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+public interface IDesktopWallpaper
+{
+    void SetWallpaper([MarshalAs(UnmanagedType.LPWStr)] string monitorID, [MarshalAs(UnmanagedType.LPWStr)] string wallpaper);
+    [return: MarshalAs(UnmanagedType.LPWStr)]
+    string GetWallpaper([MarshalAs(UnmanagedType.LPWStr)] string monitorID);
+    [return: MarshalAs(UnmanagedType.LPWStr)]
+    string GetMonitorDevicePathAt(uint monitorIndex);
+    uint GetMonitorDevicePathCount();
+    void GetMonitorRECT([MarshalAs(UnmanagedType.LPWStr)] string monitorID, [Out] IntPtr rect);
+    void SetBackgroundColor(uint color);
+    uint GetBackgroundColor();
+    void SetPosition(uint position);
+    uint GetPosition();
+    void SetSlideshow([MarshalAs(UnmanagedType.Interface)] IntPtr items);
+    IntPtr GetSlideshow();
+    void SetSlideshowOptions(uint options, uint slideshowTick);
+    void GetSlideshowOptions(out uint options, out uint slideshowTick);
+    void AdvanceSlideshow([MarshalAs(UnmanagedType.LPWStr)] string monitorID, uint direction);
+    uint GetStatus();
+    void Enable(bool enable);
+}
+
+[ComImport]
+[Guid("C2CF3110-460E-4FC1-B9D0-8A1C0C9CC4BD")]
+public class DesktopWallpaperCoClass {}
+
+public class WallpaperManager
+{
     [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
     public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
+
+    public static void SetWallpaper(string path)
+    {
+        try {
+            var wallpaper = (IDesktopWallpaper)new DesktopWallpaperCoClass();
+            wallpaper.SetPosition(4); // 4 = DWPO_FILL
+            wallpaper.SetWallpaper(null, path); // null = all monitors
+        } catch {
+            // Fallback for older Windows
+            SystemParametersInfo(0x0014, 0, path, 0x01 | 0x02);
+        }
+    }
 }
 "@
-[Wallpaper]::SystemParametersInfo(0x0014, 0, "${safePath}", 0x01 -bor 0x02)
+Set-ItemProperty -Path 'HKCU:\\Control Panel\\Desktop' -Name WallpaperStyle -Value "10"
+Set-ItemProperty -Path 'HKCU:\\Control Panel\\Desktop' -Name TileWallpaper -Value "0"
+[WallpaperManager]::SetWallpaper("${safePath}")
 `;
 
     // Encode to base64 for safe powershell -EncodedCommand execution

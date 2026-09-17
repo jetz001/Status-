@@ -114,12 +114,28 @@ function initSchema() {
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS team_members (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      label TEXT NOT NULL,
+      color TEXT DEFAULT '#7b68ee',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 
   // Clean up legacy mock test case columns if present
   try {
     db.prepare("DELETE FROM custom_fields WHERE id IN ('f-tester', 'f-case-id', 'f-severity', 'f-exec-date', 'f-qa-ai')").run();
     db.prepare("DELETE FROM task_field_values WHERE field_id IN ('f-tester', 'f-case-id', 'f-severity', 'f-exec-date', 'f-qa-ai')").run();
+  } catch (e) {}
+
+  // Seed default team member if empty
+  try {
+    const tmCount = db.prepare('SELECT COUNT(*) as count FROM team_members').get().count;
+    if (tmCount === 0) {
+      db.prepare('INSERT INTO team_members (id, name, label, color) VALUES (?, ?, ?, ?)').run('tm-1', 'JM', 'JM (Jet Mut)', '#7b68ee');
+    }
   } catch (e) {}
 
   seedDefaultData();

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   CheckCircle2, 
   Circle, 
@@ -17,7 +17,8 @@ import {
   CheckSquare,
   ListTodo,
   User,
-  Check
+  Check,
+  X
 } from 'lucide-react';
 import ContextMenu from './ContextMenu.jsx';
 
@@ -52,14 +53,6 @@ const PRIORITIES = [
   { id: 'Low', label: 'Low (ต่ำ)', color: '#94a3b8', iconColor: 'text-gray-400' }
 ];
 
-const ASSIGNEE_PRESETS = [
-  { name: 'JM', label: 'JM (Jet Mut)' },
-  { name: 'QA', label: 'QA Lead' },
-  { name: 'AUDIT', label: 'Auditor' },
-  { name: 'ADMIN', label: 'Admin' },
-  { name: 'DEV', label: 'Dev Team' }
-];
-
 export default function ListView({
   tasks,
   fields = [],
@@ -81,12 +74,101 @@ export default function ListView({
   const [taskToDelete, setTaskToDelete] = useState(null);
   const [contextMenu, setContextMenu] = useState({ isOpen: false, position: { x: 0, y: 0 }, items: [] });
 
+  // Dynamic team members from database
+  const [teamMembers, setTeamMembers] = useState([]);
+  const [editingMember, setEditingMember] = useState(null); // { id, name, label }
+  const [newMemberName, setNewMemberName] = useState('');
+  const [newMemberLabel, setNewMemberLabel] = useState('');
+
+  const fetchTeamMembers = async () => {
+    try {
+      const res = await fetch('/api/team-members');
+      const data = await res.json();
+      if (Array.isArray(data)) setTeamMembers(data);
+    } catch (err) {
+      console.error('Failed to fetch team members:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchTeamMembers();
+  }, []);
+
+  const handleAddMember = async () => {
+    if (!newMemberName.trim()) return;
+    try {
+      const res = await fetch('/api/team-members', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          name: newMemberName.trim(), 
+          label: newMemberLabel.trim() || newMemberName.trim() 
+        })
+      });
+      if (res.ok) {
+        setNewMemberName('');
+        setNewMemberLabel('');
+        fetchTeamMembers();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleUpdateMember = async (id) => {
+    if (!editingMember || !editingMember.name.trim()) return;
+    try {
+      const res = await fetch(`/api/team-members/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editingMember.name.trim(),
+          label: editingMember.label.trim() || editingMember.name.trim()
+        })
+      });
+      if (res.ok) {
+        setEditingMember(null);
+        fetchTeamMembers();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleDeleteMember = async (id, e) => {
+    e.stopPropagation();
+    try {
+      const res = await fetch(`/api/team-members/${id}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        fetchTeamMembers();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   // Popover state for live inline cell editing
   // format: { taskId, type: 'assignee' | 'dueDate' | 'priority' | 'subtasks' | 'status' }
   const [activePopover, setActivePopover] = useState(null);
   const [customAssigneeInput, setCustomAssigneeInput] = useState('');
   const [customDateInput, setCustomDateInput] = useState('');
   const [newSubtaskInput, setNewSubtaskInput] = useState('');
+
+  // Close popovers on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setActivePopover(null);
+        setEditingMember(null);
+      }
+    };
+    if (activePopover) {
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [activePopover]);
 
   // Inline rename state
   const [inlineEditingTaskId, setInlineEditingTaskId] = useState(null);
@@ -218,12 +300,28 @@ export default function ListView({
   };
 
   return (
-    <div 
-      className="flex-1 overflow-x-auto overflow-y-auto p-4 space-y-6 text-xs select-none relative"
-      onClick={() => {
-        if (activePopover) setActivePopover(null);
-      }}
-    >
+    <>
+      {/* Invisible backdrop overlay to catch any click outside of popovers */}
+      {activePopover && (
+        <div 
+          className="fixed inset-0 z-40 bg-transparent"
+          onClick={(e) => {
+            e.stopPropagation();
+            setActivePopover(null);
+            setEditingMember(null);
+          }}
+        />
+      )}
+
+      <div 
+        className="flex-1 overflow-x-auto overflow-y-auto p-4 space-y-6 text-xs select-none relative"
+        onClick={() => {
+          if (activePopover) {
+            setActivePopover(null);
+            setEditingMember(null);
+          }
+        }}
+      >
       {statuses.map(status => {
         const config = STATUS_CONFIG[status];
         const groupTasks = groupedTasks[status] || [];
@@ -363,64 +461,154 @@ export default function ListView({
                           {activePopover?.taskId === task.id && activePopover?.type === 'assignee' && (
                             <div 
                               onClick={(e) => e.stopPropagation()}
-                              className="absolute top-full left-0 mt-1 z-50 w-52 bg-[#222427] border border-[#383a3e] rounded-lg shadow-2xl p-2 space-y-2 text-xs"
+                              className="absolute top-full left-0 mt-1 z-50 w-64 bg-[#222427] border border-[#383a3e] rounded-lg shadow-2xl p-2.5 space-y-2 text-xs"
                             >
-                              <div className="text-[11px] font-bold text-gray-400 px-1 border-b border-[#333538] pb-1">
-                                เลือกผู้รับผิดชอบ (Assignee)
+                              <div className="flex items-center justify-between text-[11px] font-bold text-gray-400 border-b border-[#333538] pb-1.5">
+                                <span>ผู้รับผิดชอบงาน (Assignee)</span>
+                                <span className="text-[10px] text-gray-500 font-normal">แก้ไข/ลบ ได้</span>
                               </div>
 
-                              <div className="space-y-1">
-                                {ASSIGNEE_PRESETS.map(member => (
-                                  <button
-                                    key={member.name}
-                                    type="button"
-                                    onClick={() => {
-                                      onUpdateTask && onUpdateTask(task.id, { assignee: member.name });
-                                      setActivePopover(null);
-                                    }}
-                                    className={`w-full text-left px-2 py-1.5 rounded flex items-center justify-between hover:bg-[#2e3035] transition ${
-                                      task.assignee === member.name ? 'bg-purple-950/40 text-purple-300 font-bold' : 'text-gray-200'
-                                    }`}
-                                  >
-                                    <span className="flex items-center space-x-2">
-                                      <span className="w-5 h-5 rounded-full bg-[#3b3d45] flex items-center justify-center text-[9px] font-bold">
-                                        {member.name}
-                                      </span>
-                                      <span>{member.label}</span>
-                                    </span>
-                                    {task.assignee === member.name && <Check size={13} className="text-purple-400" />}
-                                  </button>
+                              {/* Member list */}
+                              <div className="max-h-48 overflow-y-auto space-y-1 pr-0.5">
+                                {teamMembers.map(member => (
+                                  <div key={member.id}>
+                                    {editingMember?.id === member.id ? (
+                                      <div className="p-1.5 bg-[#1a1b1d] rounded border border-purple-500/50 space-y-1.5">
+                                        <div className="flex space-x-1">
+                                          <input 
+                                            type="text"
+                                            value={editingMember.name}
+                                            onChange={(e) => setEditingMember(prev => ({ ...prev, name: e.target.value }))}
+                                            placeholder="ย่อ (เช่น JM)"
+                                            className="w-1/3 px-1.5 py-1 bg-[#26282c] border border-[#444] rounded text-white text-[11px] outline-none"
+                                          />
+                                          <input 
+                                            type="text"
+                                            value={editingMember.label}
+                                            onChange={(e) => setEditingMember(prev => ({ ...prev, label: e.target.value }))}
+                                            placeholder="ชื่อเต็ม / แผนก"
+                                            className="w-2/3 px-1.5 py-1 bg-[#26282c] border border-[#444] rounded text-white text-[11px] outline-none"
+                                          />
+                                        </div>
+                                        <div className="flex justify-end space-x-1.5">
+                                          <button
+                                            type="button"
+                                            onClick={() => setEditingMember(null)}
+                                            className="px-2 py-0.5 text-gray-400 hover:text-white text-[10px]"
+                                          >
+                                            ยกเลิก
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleUpdateMember(member.id)}
+                                            className="px-2 py-0.5 bg-purple-600 hover:bg-purple-500 text-white rounded text-[10px] font-bold"
+                                          >
+                                            บันทึก
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <div
+                                        className={`group w-full px-2 py-1.5 rounded flex items-center justify-between hover:bg-[#2e3035] transition ${
+                                          task.assignee === member.name ? 'bg-purple-950/40 text-purple-300 font-bold' : 'text-gray-200'
+                                        }`}
+                                      >
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            onUpdateTask && onUpdateTask(task.id, { assignee: member.name });
+                                            setActivePopover(null);
+                                          }}
+                                          className="flex-1 flex items-center space-x-2 text-left overflow-hidden mr-1"
+                                        >
+                                          <span 
+                                            className="w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center text-[9px] font-bold text-white shadow-sm"
+                                            style={{ backgroundColor: member.color || '#7b68ee' }}
+                                          >
+                                            {member.name.slice(0, 2).toUpperCase()}
+                                          </span>
+                                          <span className="truncate text-[11px]" title={member.label}>{member.label}</span>
+                                        </button>
+
+                                        <div className="flex items-center space-x-1">
+                                          {task.assignee === member.name && <Check size={13} className="text-purple-400 mr-0.5" />}
+                                          <button
+                                            type="button"
+                                            title="แก้ไขชื่อผู้รับผิดชอบนี้"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setEditingMember({ id: member.id, name: member.name, label: member.label });
+                                            }}
+                                            className="p-1 opacity-0 group-hover:opacity-100 hover:text-blue-400 text-gray-400 transition rounded hover:bg-[#383a3f]"
+                                          >
+                                            <Edit3 size={11} />
+                                          </button>
+                                          <button
+                                            type="button"
+                                            title="ลบผู้รับผิดชอบนี้ออกจากระบบ"
+                                            onClick={(e) => handleDeleteMember(member.id, e)}
+                                            className="p-1 opacity-0 group-hover:opacity-100 hover:text-red-400 text-gray-400 transition rounded hover:bg-[#383a3f]"
+                                          >
+                                            <Trash2 size={11} />
+                                          </button>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
                                 ))}
+
+                                {teamMembers.length === 0 && (
+                                  <div className="text-[11px] text-gray-500 py-2 text-center">
+                                    ยังไม่มีรายชื่อสมาชิกในทีม
+                                  </div>
+                                )}
                               </div>
 
-                              {/* Custom input */}
-                              <div className="pt-1 border-t border-[#333538] flex space-x-1">
-                                <input 
-                                  type="text"
-                                  value={customAssigneeInput}
-                                  onChange={(e) => setCustomAssigneeInput(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter' && customAssigneeInput.trim()) {
-                                      onUpdateTask && onUpdateTask(task.id, { assignee: customAssigneeInput.trim() });
-                                      setCustomAssigneeInput('');
-                                      setActivePopover(null);
-                                    }
-                                  }}
-                                  placeholder="ระบุชื่อย่อใหม่..."
-                                  className="w-full px-2 py-1 bg-[#18191b] border border-[#383a3e] rounded text-white text-[11px] outline-none"
-                                />
+                              {/* Unassign button */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  onUpdateTask && onUpdateTask(task.id, { assignee: '' });
+                                  setActivePopover(null);
+                                }}
+                                className="w-full text-left px-2 py-1 text-gray-400 hover:text-gray-200 hover:bg-[#2a2b2e] rounded flex items-center space-x-1.5 transition text-[11px] border-t border-[#333538] pt-1.5"
+                              >
+                                <span className="text-[11px]">⚪</span>
+                                <span>ไม่ระบุผู้รับผิดชอบ (Unassign)</span>
+                              </button>
+
+                              {/* Add new member form */}
+                              <div className="pt-2 border-t border-[#333538] space-y-1.5">
+                                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                                  + เพิ่มสมาชิกใหม่
+                                </div>
+                                <div className="flex space-x-1">
+                                  <input 
+                                    type="text"
+                                    value={newMemberName}
+                                    onChange={(e) => setNewMemberName(e.target.value)}
+                                    placeholder="ชื่อย่อ (JM)"
+                                    className="w-1/3 px-1.5 py-1 bg-[#18191b] border border-[#383a3e] rounded text-white text-[11px] outline-none"
+                                  />
+                                  <input 
+                                    type="text"
+                                    value={newMemberLabel}
+                                    onChange={(e) => setNewMemberLabel(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') handleAddMember();
+                                    }}
+                                    placeholder="ชื่อเต็ม (Jet Mut)"
+                                    className="w-2/3 px-1.5 py-1 bg-[#18191b] border border-[#383a3e] rounded text-white text-[11px] outline-none"
+                                  />
+                                </div>
                                 <button
                                   type="button"
-                                  onClick={() => {
-                                    if (customAssigneeInput.trim()) {
-                                      onUpdateTask && onUpdateTask(task.id, { assignee: customAssigneeInput.trim() });
-                                      setCustomAssigneeInput('');
-                                      setActivePopover(null);
-                                    }
-                                  }}
-                                  className="px-2 py-1 bg-[#7b68ee] text-white rounded text-[10px] font-bold"
+                                  onClick={handleAddMember}
+                                  disabled={!newMemberName.trim()}
+                                  className="w-full py-1 bg-[#7b68ee] hover:bg-[#6852e6] disabled:opacity-50 text-white rounded text-[11px] font-bold transition flex items-center justify-center space-x-1 shadow-sm"
                                 >
-                                  ตั้ง
+                                  <Plus size={12} />
+                                  <span>เพิ่มสมาชิกใหม่</span>
                                 </button>
                               </div>
                             </div>
@@ -870,5 +1058,6 @@ export default function ListView({
         onClose={() => setContextMenu(prev => ({ ...prev, isOpen: false }))}
       />
     </div>
+    </>
   );
 }
