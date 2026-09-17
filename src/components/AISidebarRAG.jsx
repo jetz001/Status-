@@ -17,41 +17,27 @@ export default function AISidebarRAG({
   onClose,
   onSelectTaskById
 }) {
-  const [activeTab, setActiveTab] = useState('chat'); // 'chat' or 'search'
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
-  const [isSearching, setIsSearching] = useState(false);
-
   // Chat State
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
-      content: 'สวัสดีครับ! ผมคือ AI Project Assistant มีอะไรให้ผมช่วยเหลือในการจัดการงาน ติดตามความคืบหน้า หรือค้นหาข้อมูลในระบบ ClickUp Local ไหมครับ?'
+      content: 'สวัสดีครับ! ผมคือ AI Project Assistant มีอะไรให้ผมช่วยเหลือในการวางแผน วิเคราะห์ สรุปสถานะ หรือค้นหาข้อมูลในระบบ ClickUp ไหมครับ?'
     }
   ]);
   const [inputMessage, setInputMessage] = useState('');
   const [isAiReplying, setIsAiReplying] = useState(false);
   const messagesEndRef = useRef(null);
 
+  // Close on Escape key
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
-  // Semantic Vector Search
-  const handleSemanticSearch = async (e) => {
-    e?.preventDefault();
-    if (!searchQuery.trim()) return;
-    setIsSearching(true);
-    try {
-      const res = await fetch(`/api/rag/search?q=${encodeURIComponent(searchQuery.trim())}&limit=6`);
-      const data = await res.json();
-      setSearchResults(data);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsSearching(false);
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
+    if (isOpen) {
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
     }
-  };
+  }, [isOpen, onClose]);
 
   // Chat Send
   const handleSendMessage = async (textToSend) => {
@@ -95,53 +81,38 @@ export default function AISidebarRAG({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-y-0 right-0 w-[460px] max-w-full bg-[#18191b] border-l border-[#333538] shadow-2xl z-50 flex flex-col text-xs select-none">
-      {/* Header */}
-      <div className="p-3.5 border-b border-[#2e3034] flex items-center justify-between bg-[#141517]">
-        <div className="flex items-center space-x-2">
-          <div className="w-6 h-6 rounded-md bg-gradient-to-tr from-purple-600 to-indigo-500 flex items-center justify-center text-white shadow-sm">
-            <Sparkles size={14} />
+    <>
+      {/* Backdrop overlay: click outside to close */}
+      <div 
+        onClick={onClose} 
+        className="fixed inset-0 bg-black/50 backdrop-blur-[1px] z-40 transition-opacity"
+        title="คลิกด้านนอกเพื่อปิด AI Assistant"
+      />
+
+      <div className="fixed inset-y-0 right-0 w-[460px] max-w-full bg-[#18191b] border-l border-[#333538] shadow-2xl z-50 flex flex-col text-xs select-none">
+        {/* Header */}
+        <div className="p-3.5 border-b border-[#2e3034] flex items-center justify-between bg-[#141517]">
+          <div className="flex items-center space-x-2">
+            <div className="w-7 h-7 rounded-md bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-white shadow-sm">
+              <Sparkles size={15} />
+            </div>
+            <div>
+              <h3 className="font-bold text-white text-xs flex items-center space-x-1.5">
+                <span>AI Project Assistant</span>
+              </h3>
+              <span className="text-[10px] text-gray-400">ผู้ช่วยอัจฉริยะวิเคราะห์และสรุปงาน</span>
+            </div>
           </div>
-          <div>
-            <h3 className="font-bold text-white text-xs">AI Project Hub & RAG</h3>
-            <span className="text-[10px] text-gray-400">Semantic Search & Intelligent Assistant</span>
-          </div>
+
+          <button 
+            onClick={onClose}
+            className="p-1 text-gray-400 hover:text-white rounded hover:bg-[#2a2b2d] transition cursor-pointer"
+          >
+            <X size={17} />
+          </button>
         </div>
 
-        <button 
-          onClick={onClose}
-          className="p-1 text-gray-400 hover:text-white rounded hover:bg-[#2a2b2d] transition"
-        >
-          <X size={17} />
-        </button>
-      </div>
-
-      {/* Tabs Switcher: Chat vs Vector Search */}
-      <div className="flex border-b border-[#2e3034] bg-[#1a1b1e]">
-        <button
-          onClick={() => setActiveTab('chat')}
-          className={`flex-1 py-2 font-medium text-xs border-b-2 transition ${
-            activeTab === 'chat' 
-              ? 'border-[#7b68ee] text-white bg-[#222427]' 
-              : 'border-transparent text-gray-400 hover:text-gray-200'
-          }`}
-        >
-          AI Chat (คุยกับ AI)
-        </button>
-        <button
-          onClick={() => setActiveTab('search')}
-          className={`flex-1 py-2 font-medium text-xs border-b-2 transition ${
-            activeTab === 'search' 
-              ? 'border-[#7b68ee] text-white bg-[#222427]' 
-              : 'border-transparent text-gray-400 hover:text-gray-200'
-          }`}
-        >
-          Vector Search (ค้นหาความหมาย)
-        </button>
-      </div>
-
-      {/* TAB 1: AI Chat */}
-      {activeTab === 'chat' && (
+        {/* AI Chat Body */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Messages Scroll Area */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -165,24 +136,27 @@ export default function AISidebarRAG({
                   {/* Sources Cards if any */}
                   {m.sources && m.sources.length > 0 && (
                     <div className="pt-2 border-t border-[#383a3e] space-y-1">
-                      <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
-                        ทาสก์ที่เกี่ยวข้องจาก RAG:
+                      <span className="text-[10px] font-semibold text-cyan-400 uppercase tracking-wider">
+                        📌 งานที่เกี่ยวข้อง:
                       </span>
                       {m.sources.map(src => (
                         <div 
                           key={src.taskId}
-                          onClick={() => onSelectTaskById(src.taskId)}
-                          className="p-1.5 bg-[#18191b] rounded border border-[#2e3034] hover:border-purple-500 cursor-pointer flex items-center justify-between text-[11px] group transition"
+                          onClick={() => onSelectTaskById && onSelectTaskById(src.taskId)}
+                          className="p-1.5 bg-[#18191b] rounded border border-[#2e3034] hover:border-cyan-500 cursor-pointer flex items-center justify-between text-[11px] group transition"
                         >
-                          <span className="truncate text-purple-300 group-hover:text-purple-200">{src.name}</span>
-                          <span className="text-[9px] text-gray-500">{(src.score * 100).toFixed(0)}% match</span>
+                          <span className="truncate text-cyan-300 group-hover:text-cyan-200 font-medium">{src.name}</span>
+                          <span className="text-[9px] text-gray-500 flex items-center space-x-0.5">
+                            <span>เปิดดู</span>
+                            <ArrowRight size={10} />
+                          </span>
                         </div>
                       ))}
                     </div>
                   )}
                 </div>
                 {m.role === 'user' && (
-                  <div className="w-6 h-6 rounded-full bg-gray-600 flex items-center justify-center text-white flex-shrink-0 mt-0.5 text-[10px] font-bold">
+                  <div className="w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center text-white flex-shrink-0 mt-0.5 text-[10px] font-bold shadow-sm">
                     U
                   </div>
                 )}
@@ -190,9 +164,9 @@ export default function AISidebarRAG({
             ))}
 
             {isAiReplying && (
-              <div className="flex space-x-2 items-center text-gray-400 text-xs italic">
-                <Sparkles size={13} className="animate-spin text-purple-400" />
-                <span>AI กำลังค้นหาข้อมูลและคิดคำตอบ...</span>
+              <div className="flex space-x-2 items-center text-cyan-300 text-xs italic">
+                <Sparkles size={13} className="animate-spin text-cyan-400" />
+                <span>AI กำลังประมวลผลข้อมูลและคิดคำตอบ...</span>
               </div>
             )}
             <div ref={messagesEndRef} />
@@ -201,22 +175,25 @@ export default function AISidebarRAG({
           {/* Quick Prompts */}
           <div className="px-3 py-1.5 border-t border-[#2e3034] bg-[#161719] flex space-x-1.5 overflow-x-auto text-[11px]">
             <button 
-              onClick={() => handleSendMessage('สรุปสถานะงานทั้งหมดในโปรเจกต์')}
-              className="px-2.5 py-1 bg-[#222427] hover:bg-[#2c2e33] text-gray-300 rounded whitespace-nowrap transition"
+              type="button"
+              onClick={() => handleSendMessage('สรุปภาพรวมและสถานะงานทั้งหมดในระบบ')}
+              className="px-2.5 py-1 bg-[#222427] hover:bg-[#2c2e33] text-gray-300 rounded whitespace-nowrap transition cursor-pointer"
             >
               📊 สรุปงานทั้งหมด
             </button>
             <button 
-              onClick={() => handleSendMessage('มีงานไหนบ้างที่เกี่ยวข้องกับ Supplier')}
-              className="px-2.5 py-1 bg-[#222427] hover:bg-[#2c2e33] text-gray-300 rounded whitespace-nowrap transition"
-            >
-              🏢 งาน Supplier
-            </button>
-            <button 
+              type="button"
               onClick={() => handleSendMessage('งานไหนใกล้ถึงกำหนดส่ง หรือมีความสำคัญระดับ Urgent?')}
-              className="px-2.5 py-1 bg-[#222427] hover:bg-[#2c2e33] text-gray-300 rounded whitespace-nowrap transition"
+              className="px-2.5 py-1 bg-[#222427] hover:bg-[#2c2e33] text-gray-300 rounded whitespace-nowrap transition cursor-pointer"
             >
               ⏰ งานด่วน Due Soon
+            </button>
+            <button 
+              type="button"
+              onClick={() => handleSendMessage('ช่วยวิเคราะห์งานที่ค้างอยู่ และแนะนำสิ่งที่ควรทำก่อน')}
+              className="px-2.5 py-1 bg-[#222427] hover:bg-[#2c2e33] text-gray-300 rounded whitespace-nowrap transition cursor-pointer"
+            >
+              💡 แนะนำงานค้าง
             </button>
           </div>
 
@@ -230,88 +207,18 @@ export default function AISidebarRAG({
               placeholder="ถามคำถาม สั่งสรุปงาน หรือปรึกษา AI..."
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
-              className="flex-1 bg-[#141517] px-3.5 py-2 rounded-md border border-[#333538] text-white text-xs outline-none focus:border-[#7b68ee]"
+              className="flex-1 bg-[#141517] px-3.5 py-2 rounded-md border border-[#333538] text-white text-xs outline-none focus:border-cyan-500 transition"
             />
             <button
               type="submit"
               disabled={isAiReplying || !inputMessage.trim()}
-              className="p-2 bg-[#7b68ee] hover:bg-[#6a55e0] disabled:opacity-50 text-white rounded-md transition shadow-sm"
+              className="p-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 disabled:opacity-50 text-white rounded-md transition shadow-sm cursor-pointer"
             >
               <Send size={14} />
             </button>
           </form>
         </div>
-      )}
-
-      {/* TAB 2: Vector Semantic Search */}
-      {activeTab === 'search' && (
-        <div className="flex-1 flex flex-col p-4 space-y-4 overflow-y-auto">
-          {/* Search Form */}
-          <form onSubmit={handleSemanticSearch} className="flex items-center space-x-2">
-            <div className="relative flex-1">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input 
-                type="text"
-                placeholder="ค้นหาด้วยความหมาย เช่น 'ประเมินคู่ค้า', 'KPI'..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                autoFocus
-                className="w-full pl-8 pr-3 py-2 bg-[#141517] border border-[#333538] rounded-md text-white text-xs outline-none focus:border-[#7b68ee]"
-              />
-            </div>
-            <button 
-              type="submit"
-              disabled={isSearching}
-              className="px-4 py-2 bg-[#7b68ee] hover:bg-[#6a55e0] text-white font-semibold rounded-md text-xs transition"
-            >
-              {isSearching ? 'ค้นหา...' : 'Search'}
-            </button>
-          </form>
-
-          {/* Results List */}
-          <div className="space-y-2.5">
-            {searchResults.length > 0 ? (
-              searchResults.map(res => (
-                <div 
-                  key={res.taskId}
-                  onClick={() => onSelectTaskById(res.taskId)}
-                  className="p-3 bg-[#222427] hover:bg-[#282a2e] border border-[#333538] hover:border-purple-500 rounded-md cursor-pointer transition space-y-2 group"
-                >
-                  <div className="flex items-start justify-between">
-                    <h4 className="font-semibold text-white text-xs group-hover:text-purple-300 transition">
-                      {res.name}
-                    </h4>
-                    <span className="px-2 py-0.5 bg-purple-900/40 text-purple-300 rounded text-[10px] font-bold border border-purple-500/30">
-                      Score: {(res.score * 100).toFixed(0)}%
-                    </span>
-                  </div>
-
-                  <div className="flex items-center space-x-2 text-[10px] text-gray-400">
-                    <span className="px-1.5 py-0.2 bg-[#18191b] rounded">{res.status}</span>
-                    <span>•</span>
-                    <span>ความสำคัญ: {res.priority}</span>
-                    {res.dueDate && (
-                      <>
-                        <span>•</span>
-                        <span>ครบกำหนด: {res.dueDate}</span>
-                      </>
-                    )}
-                  </div>
-
-                  <p className="text-[11px] text-gray-300 line-clamp-2 bg-[#18191b] p-2 rounded">
-                    {res.textChunk}
-                  </p>
-                </div>
-              ))
-            ) : (
-              <div className="text-center text-gray-500 py-10 space-y-2">
-                <Sparkles size={24} className="mx-auto text-purple-400/50" />
-                <p>พิมพ์คำค้นหาเพื่อดึงงานที่มีความหมายใกล้เคียงที่สุดจาก SQLite Vector Database</p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
+      </div>
+    </>
   );
 }

@@ -18,8 +18,8 @@ function setWindowsWallpaper(imagePath) {
       return reject(new Error(`Wallpaper image file not found: ${absolutePath}`));
     }
 
-    // Escape backslashes for PowerShell string
-    const safePath = absolutePath.replace(/\\/g, '\\\\');
+    // Escape single quotes for PowerShell single-quoted literal string
+    const safePath = absolutePath.replace(/'/g, "''");
 
     const psCommand = `
 Add-Type -TypeDefinition @"
@@ -75,7 +75,7 @@ public class WallpaperManager
 "@
 Set-ItemProperty -Path 'HKCU:\\Control Panel\\Desktop' -Name WallpaperStyle -Value "10"
 Set-ItemProperty -Path 'HKCU:\\Control Panel\\Desktop' -Name TileWallpaper -Value "0"
-[WallpaperManager]::SetWallpaper("${safePath}")
+[WallpaperManager]::SetWallpaper('${safePath}')
 `;
 
     // Encode to base64 for safe powershell -EncodedCommand execution

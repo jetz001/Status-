@@ -60,13 +60,13 @@ export default function Header({
           </div>
         )}
 
-        {/* Center: Search & AI Semantic Search */}
+        {/* Center: Search & AI Assistant */}
         <div className="flex items-center space-x-2 flex-1 max-w-md mx-6">
           <div className="relative w-full">
             <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
             <input 
               type="text"
-              placeholder="ค้นหางาน หรือกด AI เพื่อค้นหาความหมาย (Ctrl+K)..."
+              placeholder="ค้นหาชื่องาน รายละเอียด หรือผู้รับผิดชอบ (Ctrl+K)..."
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
               className="w-full pl-8 pr-16 py-1.5 bg-[#141517] border border-[#333538] rounded-full text-xs text-white placeholder-gray-500 outline-none focus:border-[#7b68ee] transition"
@@ -81,7 +81,7 @@ export default function Header({
             className="flex items-center space-x-1.5 px-3 py-1.5 bg-gradient-to-r from-purple-900/60 to-indigo-900/60 hover:from-purple-800/80 hover:to-indigo-800/80 border border-purple-500/40 rounded-full text-purple-200 text-xs font-medium transition shadow-sm flex-shrink-0"
           >
             <Sparkles size={13} className="text-purple-300" />
-            <span>AI Sidebar</span>
+            <span>AI Assistant</span>
           </button>
         </div>
 
