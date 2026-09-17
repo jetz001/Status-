@@ -3,30 +3,69 @@ import {
   X, 
   Sparkles, 
   Send, 
-  Search, 
   Bot, 
   User, 
   ArrowRight, 
   CheckCircle2, 
   Clock, 
-  ExternalLink 
+  ExternalLink,
+  Plus,
+  RotateCcw,
+  MessageSquare
 } from 'lucide-react';
 
 export default function AISidebarRAG({
   isOpen,
   onClose,
-  onSelectTaskById
+  onSelectTaskById,
+  activeSessionId,
+  onSessionChange,
+  onHistoryUpdated
 }) {
+  const DEFAULT_GREETING = {
+    role: 'assistant',
+    content: 'สวัสดีครับ! ผมคือ AI Project Assistant มีอะไรให้ผมช่วยเหลือในการวางแผน วิเคราะห์ สรุปสถานะ หรือค้นหาข้อมูลในระบบ ClickUp ไหมครับ?'
+  };
+
   // Chat State
-  const [messages, setMessages] = useState([
-    {
-      role: 'assistant',
-      content: 'สวัสดีครับ! ผมคือ AI Project Assistant มีอะไรให้ผมช่วยเหลือในการวางแผน วิเคราะห์ สรุปสถานะ หรือค้นหาข้อมูลในระบบ ClickUp ไหมครับ?'
-    }
-  ]);
+  const [messages, setMessages] = useState([DEFAULT_GREETING]);
   const [inputMessage, setInputMessage] = useState('');
   const [isAiReplying, setIsAiReplying] = useState(false);
+  const [sessionTitle, setSessionTitle] = useState('');
   const messagesEndRef = useRef(null);
+
+  // Auto scroll to bottom
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, isAiReplying]);
+
+  // Load session when activeSessionId changes
+  useEffect(() => {
+    if (!isOpen) return;
+
+    if (!activeSessionId) {
+      setMessages([DEFAULT_GREETING]);
+      setSessionTitle('');
+      return;
+    }
+
+    const loadSession = async () => {
+      try {
+        const res = await fetch(`/api/ai/history/${activeSessionId}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.messages && data.messages.length > 0) {
+            setMessages(data.messages);
+            setSessionTitle(data.title || '');
+          }
+        }
+      } catch (err) {
+        console.error('Error loading session:', err);
+      }
+    };
+
+    loadSession();
+  }, [activeSessionId, isOpen]);
 
   // Close on Escape key
   useEffect(() => {
@@ -38,6 +77,14 @@ export default function AISidebarRAG({
       return () => window.removeEventListener('keydown', handleKeyDown);
     }
   }, [isOpen, onClose]);
+
+  // Start a fresh new chat
+  const handleStartNewChat = () => {
+    if (onSessionChange) onSessionChange(null);
+    setMessages([DEFAULT_GREETING]);
+    setSessionTitle('');
+    setInputMessage('');
+  };
 
   // Chat Send
   const handleSendMessage = async (textToSend) => {
@@ -53,17 +100,29 @@ export default function AISidebarRAG({
       const res = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: newMsgs })
+        body: JSON.stringify({ 
+          messages: newMsgs,
+          sessionId: activeSessionId || undefined,
+          title: sessionTitle || undefined
+        })
       });
       const data = await res.json();
-      setMessages(prev => [
-        ...prev,
-        {
-          role: 'assistant',
-          content: data.reply || 'ขออภัยครับ ไม่สามารถติดต่อโมเดล AI ได้ในขณะนี้',
-          sources: data.sources || []
-        }
-      ]);
+      
+      const assistantReply = {
+        role: 'assistant',
+        content: data.reply || 'ขออภัยครับ ไม่สามารถติดต่อโมเดล AI ได้ในขณะนี้',
+        sources: data.sources || []
+      };
+
+      setMessages(prev => [...prev, assistantReply]);
+
+      if (data.sessionId && !activeSessionId && onSessionChange) {
+        onSessionChange(data.sessionId);
+      }
+
+      if (onHistoryUpdated) {
+        onHistoryUpdated();
+      }
     } catch (err) {
       console.error(err);
       setMessages(prev => [
@@ -97,19 +156,31 @@ export default function AISidebarRAG({
               <Sparkles size={15} />
             </div>
             <div>
-              <h3 className="font-bold text-white text-xs flex items-center space-x-1.5">
-                <span>AI Project Assistant</span>
+              <h3 className="font-bold text-white text-xs flex items-center space-x-1.5 truncate max-w-[220px]">
+                <span>{sessionTitle || 'AI Assistant'}</span>
               </h3>
               <span className="text-[10px] text-gray-400">ผู้ช่วยอัจฉริยะวิเคราะห์และสรุปงาน</span>
             </div>
           </div>
 
-          <button 
-            onClick={onClose}
-            className="p-1 text-gray-400 hover:text-white rounded hover:bg-[#2a2b2d] transition cursor-pointer"
-          >
-            <X size={17} />
-          </button>
+          <div className="flex items-center space-x-1">
+            <button
+              type="button"
+              onClick={handleStartNewChat}
+              title="เริ่มแชทใหม่ (+ New Chat)"
+              className="flex items-center space-x-1 px-2.5 py-1 rounded bg-[#242629] hover:bg-[#2d3034] text-cyan-300 text-[11px] font-medium transition cursor-pointer border border-[#383a3e]"
+            >
+              <Plus size={12} />
+              <span>แชทใหม่</span>
+            </button>
+
+            <button 
+              onClick={onClose}
+              className="p-1 text-gray-400 hover:text-white rounded hover:bg-[#2a2b2d] transition cursor-pointer ml-1"
+            >
+              <X size={17} />
+            </button>
+          </div>
         </div>
 
         {/* AI Chat Body */}

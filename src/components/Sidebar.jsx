@@ -22,7 +22,8 @@ import {
   Copy,
   Trash2,
   PlusCircle,
-  AlertTriangle
+  AlertTriangle,
+  History
 } from 'lucide-react';
 import ContextMenu from './ContextMenu.jsx';
 
@@ -52,7 +53,12 @@ export default function Sidebar({
   onQuickAddTask,
   onOpenAISidebar,
   onOpenSettings,
-  onOpenBackupDataModal
+  onOpenBackupDataModal,
+  aiChatHistory = [],
+  activeAiSessionId = null,
+  onSelectAiSession,
+  onNewAiChat,
+  onDeleteAiSession
 }) {
   const [expandedSpaces, setExpandedSpaces] = useState({ 'space-team': true });
   const [showAddSpaceModal, setShowAddSpaceModal] = useState(false);
@@ -356,11 +362,92 @@ export default function Sidebar({
           <div className="space-y-0.5 mt-1">
             <div 
               onClick={onOpenAISidebar}
-              className="flex items-center space-x-2 px-2 py-1.5 rounded hover:bg-[#2a2b2d] text-cyan-300 hover:text-cyan-200 cursor-pointer font-medium transition"
+              className="flex items-center justify-between px-2 py-1.5 rounded hover:bg-[#2a2b2d] text-cyan-300 hover:text-cyan-200 cursor-pointer font-medium transition group"
             >
-              <Sparkles size={14} className="text-cyan-400" />
-              <span>AI Assistant</span>
+              <div className="flex items-center space-x-2">
+                <Sparkles size={14} className="text-cyan-400" />
+                <span>AI Assistant</span>
+              </div>
+              <button 
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onNewAiChat();
+                }}
+                title="เริ่มแชทใหม่ (+ New Chat)"
+                className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-[#383a3e] text-cyan-300 transition cursor-pointer"
+              >
+                <Plus size={13} />
+              </button>
             </div>
+          </div>
+        </div>
+
+        {/* History Log ที่คุยกับ AI */}
+        <div className="pt-3 border-t border-[#2e3033] flex-1 flex flex-col min-h-0">
+          <div className="flex items-center justify-between px-2 py-1 text-[10px] font-semibold tracking-wider text-gray-400 uppercase">
+            <div className="flex items-center space-x-1.5">
+              <History size={12} className="text-cyan-500" />
+              <span>ประวัติคุย AI ({aiChatHistory.length})</span>
+            </div>
+            {aiChatHistory.length > 0 && (
+              <button
+                type="button"
+                onClick={onNewAiChat}
+                title="เริ่มแชทใหม่"
+                className="text-[10px] text-cyan-400 hover:text-cyan-300 font-medium transition cursor-pointer"
+              >
+                + แชทใหม่
+              </button>
+            )}
+          </div>
+
+          <div className="space-y-1 mt-1 max-h-64 overflow-y-auto custom-scrollbar pr-1">
+            {aiChatHistory && aiChatHistory.length > 0 ? (
+              aiChatHistory.map(item => (
+                <div 
+                  key={item.id}
+                  onClick={() => onSelectAiSession(item.id)}
+                  title={item.title}
+                  className={`group flex items-center justify-between px-2.5 py-2 rounded-lg cursor-pointer transition text-xs ${
+                    activeAiSessionId === item.id 
+                      ? 'bg-cyan-950/40 text-cyan-300 border border-cyan-500/40 font-semibold' 
+                      : 'text-gray-300 hover:text-white hover:bg-[#25272a]'
+                  }`}
+                >
+                  <div className="flex items-center space-x-2 min-w-0 flex-1">
+                    <MessageSquare size={13} className="text-gray-500 group-hover:text-cyan-400 flex-shrink-0" />
+                    <span className="truncate text-[11px] block">
+                      {item.title}
+                    </span>
+                  </div>
+
+                  <button 
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDeleteAiSession(item.id);
+                    }}
+                    title="ลบประวัติแชทนี้"
+                    className="opacity-0 group-hover:opacity-100 p-1 text-gray-500 hover:text-red-400 rounded transition flex-shrink-0 ml-1 cursor-pointer"
+                  >
+                    <Trash2 size={11} />
+                  </button>
+                </div>
+              ))
+            ) : (
+              <div className="p-3 text-center text-gray-500 text-[11px] space-y-1.5 bg-[#141517]/50 rounded-lg border border-[#2a2b2d]/50">
+                <p>ยังไม่มีประวัติการคุย</p>
+                <button 
+                  type="button"
+                  onClick={onNewAiChat}
+                  className="px-2.5 py-1 rounded bg-[#242629] hover:bg-[#2e3135] text-cyan-400 text-[10px] font-medium transition inline-flex items-center space-x-1 cursor-pointer"
+                >
+                  <Plus size={11} />
+                  <span>เริ่มถามคำถามแรก</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>

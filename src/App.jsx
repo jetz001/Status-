@@ -39,6 +39,43 @@ export default function App() {
   const [printConfig, setPrintConfig] = useState(null); // { type: 'list' | 'task', singleTask }
 
   const [notifications, setNotifications] = useState([]);
+  const [aiChatHistory, setAiChatHistory] = useState([]);
+  const [activeAiSessionId, setActiveAiSessionId] = useState(null);
+
+  // Load AI chat history
+  const loadAiHistory = async () => {
+    try {
+      const res = await fetch('/api/ai/history');
+      if (res.ok) {
+        const data = await res.json();
+        setAiChatHistory(Array.isArray(data) ? data : []);
+      }
+    } catch (err) {
+      console.error('Error loading AI history:', err);
+    }
+  };
+
+  const handleSelectAiSession = (sessionId) => {
+    setActiveAiSessionId(sessionId);
+    setShowAISidebar(true);
+  };
+
+  const handleNewAiChat = () => {
+    setActiveAiSessionId(null);
+    setShowAISidebar(true);
+  };
+
+  const handleDeleteAiSession = async (sessionId) => {
+    try {
+      await fetch(`/api/ai/history/${sessionId}`, { method: 'DELETE' });
+      if (activeAiSessionId === sessionId) {
+        setActiveAiSessionId(null);
+      }
+      loadAiHistory();
+    } catch (err) {
+      console.error('Error deleting AI session:', err);
+    }
+  };
 
   // Load Spaces & Lists
   const loadSpaces = async () => {
@@ -104,6 +141,7 @@ export default function App() {
     loadSpaces();
     loadAllTasks();
     checkNotifications();
+    loadAiHistory();
     const interval = setInterval(checkNotifications, 60000); // Check every minute
     return () => clearInterval(interval);
   }, []);
@@ -409,9 +447,14 @@ export default function App() {
         onDeleteList={handleDeleteList}
         onDuplicateList={handleDuplicateList}
         onQuickAddTask={handleQuickAddTask}
-        onOpenAISidebar={() => setShowAISidebar(true)}
+        onOpenAISidebar={handleNewAiChat}
         onOpenSettings={() => setShowSettingsModal(true)}
         onOpenBackupDataModal={() => setShowBackupModal(true)}
+        aiChatHistory={aiChatHistory}
+        activeAiSessionId={activeAiSessionId}
+        onSelectAiSession={handleSelectAiSession}
+        onNewAiChat={handleNewAiChat}
+        onDeleteAiSession={handleDeleteAiSession}
       />
 
       {/* 2. Main Content Center */}
@@ -532,6 +575,9 @@ export default function App() {
       <AISidebarRAG 
         isOpen={showAISidebar}
         onClose={() => setShowAISidebar(false)}
+        activeSessionId={activeAiSessionId}
+        onSessionChange={setActiveAiSessionId}
+        onHistoryUpdated={loadAiHistory}
         context={[activeSpaceName ? `Space: ${activeSpaceName}` : '', activeListName ? `List: ${activeListName}` : ''].filter(Boolean).join(', ')}
         onSelectTaskById={async (taskId) => {
           try {

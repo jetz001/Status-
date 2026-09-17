@@ -865,12 +865,132 @@ app.post('/api/ai/chat', async (req, res) => {
     const ragContext = ragResults.map(r => `- [${r.status}] ${r.name} (Priority: ${r.priority || 'Normal'}, List: ${r.listName}): ${r.textChunk || ''}`).join('\n');
     
     const reply = await chatAssistant(messages, ragContext, context);
+    
+    // Auto-save or update session if sessionId is provided
+    const { sessionId, title } = req.body;
+    let savedSessionId = sessionId;
+    if (messages && messages.length > 0) {
+      try {
+        if (!savedSessionId) {
+          savedSessionId = `session-${Date.now()}`;
+        }
+        const userMsgs = messages.filter(m => m.role === 'user');
+        const sessionTitle = title || (userMsgs[0]?.content ? userMsgs[0].content.slice(0, 40) : 'การสนทนาใหม่');
+        const fullMessages = [
+          ...messages,
+          { role: 'assistant', content: reply, sources: ragResults }
+        ];
+        
+        const existing = db.prepare('SELECT id FROM ai_chat_sessions WHERE id = ?').get(savedSessionId);
+        if (existing) {
+          db.prepare('UPDATE ai_chat_sessions SET title = ?, messages_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+            .run(sessionTitle, JSON.stringify(fullMessages), savedSessionId);
+        } else {
+          db.prepare('INSERT INTO ai_chat_sessions (id, title, messages_json, created_at, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)')
+            .run(savedSessionId, sessionTitle, JSON.stringify(fullMessages));
+        }
+      } catch (saveErr) {
+        console.error('Error auto-saving AI chat session:', saveErr);
+      }
+    }
+
     res.json({
       reply: reply || 'ขออภัยครับ ไม่สามารถประมวลผลข้อความได้ในขณะนี้',
-      sources: ragResults
+      sources: ragResults,
+      sessionId: savedSessionId
     });
   } catch (err) {
     console.error('Error in /api/ai/chat:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// AI Chat History Endpoints
+app.get('/api/ai/history', (req, res) => {
+  try {
+    const sessions = db.prepare('SELECT id, title, created_at, updated_at, messages_json FROM ai_chat_sessions ORDER BY updated_at DESC').all();
+    const result = sessions.map(s => {
+      let count = 0;
+      let lastMessage = '';
+      try {
+        const msgs = JSON.parse(s.messages_json);
+        count = msgs.length;
+        const last = msgs[msgs.length - 1];
+        lastMessage = last ? last.content.slice(0, 60) : '';
+      } catch (e) {}
+      return {
+        id: s.id,
+        title: s.title,
+        createdAt: s.created_at,
+        updatedAt: s.updated_at,
+        messageCount: count,
+        lastMessage
+      };
+    });
+    res.json(result);
+  } catch (err) {
+    console.error('Error fetching AI history:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/ai/history/:id', (req, res) => {
+  try {
+    const session = db.prepare('SELECT * FROM ai_chat_sessions WHERE id = ?').get(req.params.id);
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+    res.json({
+      id: session.id,
+      title: session.title,
+      createdAt: session.created_at,
+      updatedAt: session.updated_at,
+      messages: JSON.parse(session.messages_json || '[]')
+    });
+  } catch (err) {
+    console.error('Error fetching AI session:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/ai/history', (req, res) => {
+  try {
+    const { id, title, messages } = req.body;
+    const sessionId = id || `session-${Date.now()}`;
+    const sessionTitle = title || (messages?.[0]?.content ? messages[0].content.slice(0, 40) : 'บทสนทนา AI');
+    const msgsJson = JSON.stringify(messages || []);
+
+    const existing = db.prepare('SELECT id FROM ai_chat_sessions WHERE id = ?').get(sessionId);
+    if (existing) {
+      db.prepare('UPDATE ai_chat_sessions SET title = ?, messages_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+        .run(sessionTitle, msgsJson, sessionId);
+    } else {
+      db.prepare('INSERT INTO ai_chat_sessions (id, title, messages_json, created_at, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)')
+        .run(sessionId, sessionTitle, msgsJson);
+    }
+    res.json({ id: sessionId, title: sessionTitle, success: true });
+  } catch (err) {
+    console.error('Error saving AI history:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/ai/history/:id', (req, res) => {
+  try {
+    db.prepare('DELETE FROM ai_chat_sessions WHERE id = ?').run(req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error deleting AI session:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/ai/history', (req, res) => {
+  try {
+    db.prepare('DELETE FROM ai_chat_sessions').run();
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error clearing AI history:', err);
     res.status(500).json({ error: err.message });
   }
 });
