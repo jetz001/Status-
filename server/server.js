@@ -591,16 +591,103 @@ app.post('/api/settings', (req, res) => {
   }
 });
 
-// Add Custom Field
-app.post('/api/lists/:listId/fields', (req, res) => {
+// ==========================================
+// 9. BACKUP, EXPORT & IMPORT
+// ==========================================
+
+const {
+  createFullBackup,
+  listBackups,
+  restoreBackupData,
+  exportListToCSV,
+  importTasksFromCSV,
+  BACKUP_DIR
+} = require('./backupService');
+
+app.get('/api/backup/list', (req, res) => {
   try {
-    const { listId } = req.params;
-    const { name, type = 'text', options = [] } = req.body;
-    const id = `f-${Date.now()}`;
-    const maxPos = db.prepare('SELECT MAX(position) as p FROM custom_fields WHERE list_id = ?').get(listId).p || 0;
-    db.prepare('INSERT INTO custom_fields (id, list_id, name, type, options_json, position) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(id, listId, name, type, JSON.stringify(options), maxPos + 1);
-    res.json({ id, list_id: listId, name, type, options_json: JSON.stringify(options) });
+    const list = listBackups();
+    res.json(list);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/backup/create', (req, res) => {
+  try {
+    const { note = 'manual' } = req.body;
+    const backup = createFullBackup(note);
+    res.json(backup);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/backup/restore', (req, res) => {
+  try {
+    const { backupData, filename, mode = 'replace' } = req.body;
+    let dataToRestore = backupData;
+
+    if (!dataToRestore && filename) {
+      const filePath = path.join(BACKUP_DIR, path.basename(filename));
+      if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ error: 'Backup file not found.' });
+      }
+      dataToRestore = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    }
+
+    const result = restoreBackupData(dataToRestore, mode);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/backup/download/:filename', (req, res) => {
+  try {
+    const filename = path.basename(req.params.filename);
+    const filePath = path.join(BACKUP_DIR, filename);
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'File not found.' });
+    }
+    res.download(filePath, filename);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/export/csv', (req, res) => {
+  try {
+    const { listId = 'list-iqa26' } = req.query;
+    const csvData = exportListToCSV(listId);
+    const list = db.prepare('SELECT name FROM lists WHERE id = ?').get(listId);
+    const safeName = (list ? list.name : 'tasks').replace(/[^\wก-๙]/g, '_');
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(safeName)}-tasks.csv"`);
+    res.send(csvData);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/export/backup', (req, res) => {
+  try {
+    const backup = createFullBackup('export-download');
+    res.download(backup.filePath, backup.filename);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/import/csv', (req, res) => {
+  try {
+    const { listId, csvText } = req.body;
+    if (!listId || !csvText) {
+      return res.status(400).json({ error: 'listId and csvText are required.' });
+    }
+    const result = importTasksFromCSV(listId, csvText);
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

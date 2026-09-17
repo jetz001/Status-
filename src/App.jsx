@@ -13,6 +13,7 @@ import CustomFieldModal from './components/CustomFieldModal.jsx';
 import SettingsModal from './components/SettingsModal.jsx';
 import ImageLightboxModal from './components/ImageLightboxModal.jsx';
 import PrintReportView from './components/PrintReportView.jsx';
+import BackupDataModal from './components/BackupDataModal.jsx';
 
 export default function App() {
   const [spaces, setSpaces] = useState([]);
@@ -28,6 +29,7 @@ export default function App() {
   const [showWallpaperModal, setShowWallpaperModal] = useState(false);
   const [showNotificationCenter, setShowNotificationCenter] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showBackupModal, setShowBackupModal] = useState(false);
   const [showMoveCopyModal, setShowMoveCopyModal] = useState(false);
   const [taskForMoveCopy, setTaskForMoveCopy] = useState(null);
   const [showCustomFieldModal, setShowCustomFieldModal] = useState(false);
@@ -271,6 +273,7 @@ export default function App() {
         onCreateList={handleCreateList}
         onOpenAISidebar={() => setShowAISidebar(true)}
         onOpenSettings={() => setShowSettingsModal(true)}
+        onOpenBackupDataModal={() => setShowBackupModal(true)}
       />
 
       {/* 2. Main Content Center */}
@@ -278,6 +281,7 @@ export default function App() {
         <Header 
           spaceName={activeSpaceName}
           listName={activeListName}
+          activeListId={activeListId}
           activeView={activeView}
           onSelectView={setActiveView}
           onOpenAISidebar={() => setShowAISidebar(true)}
@@ -285,6 +289,7 @@ export default function App() {
           onOpenNotificationCenter={() => setShowNotificationCenter(prev => !prev)}
           onOpenPrintReport={() => setPrintConfig({ type: 'list' })}
           onOpenCustomFieldModal={() => setShowCustomFieldModal(true)}
+          onOpenBackupDataModal={() => setShowBackupModal(true)}
           onQuickAddTask={() => handleQuickAddTask({ name: 'งานใหม่...', status: 'NOT STARTED' })}
           notificationCount={notifications.length}
           searchQuery={searchQuery}
@@ -422,6 +427,18 @@ export default function App() {
           onClose={() => setPrintConfig(null)}
         />
       )}
+
+      {/* 12. Backup & Data Management Modal */}
+      <BackupDataModal 
+        isOpen={showBackupModal}
+        onClose={() => setShowBackupModal(false)}
+        activeListId={activeListId}
+        activeListName={activeListName}
+        onDataRestored={() => {
+          loadSpaces();
+          loadTasks();
+        }}
+      />
     </div>
   );
 }

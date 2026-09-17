@@ -78,6 +78,33 @@ Generates an executive project report in Markdown or JSON format.
 node .agents/skills/project-task-manager/scripts/pm_cli.js report --list-id list-iqa26 --format md
 ```
 
+### 8. `list-backups` & `create-backup`
+Inspect existing rolling snapshots or take a manual full system snapshot.
+```bash
+# List all 7-day rolling backups
+node .agents/skills/project-task-manager/scripts/pm_cli.js list-backups
+
+# Create manual snapshot
+node .agents/skills/project-task-manager/scripts/pm_cli.js create-backup --note "before-sprint-close"
+```
+
+### 9. `restore-backup`
+Restore database state from a backup JSON file with merge or full replace mode.
+```bash
+node .agents/skills/project-task-manager/scripts/pm_cli.js restore-backup --file backups/backup-auto-daily-2026-09-17.json --mode merge
+```
+
+### 10. `export-csv` & `import-csv`
+Export tasks to Excel-compatible CSV (UTF-8 BOM) or import tasks from a spreadsheet.
+```bash
+# Export
+node .agents/skills/project-task-manager/scripts/pm_cli.js export-csv --list-id list-iqa26 --output tasks_iqa.csv
+
+# Import
+node .agents/skills/project-task-manager/scripts/pm_cli.js import-csv --list-id list-iqa26 --file external_tasks.csv
+```
+
 ## Common Mistakes
-1. **Missing `--list-id`**: When adding a task, always specify `--list-id` (e.g. `list-iqa26`). Run `list-spaces` first if you don't know the list ID.
-2. **Not saving output**: For large project lists, pass `--output report.json` to prevent terminal output truncation.
+1. **Missing `--list-id`**: When adding a task or exporting CSV, always specify `--list-id` (e.g. `list-iqa26`). Run `list-spaces` first if you don't know the list ID.
+2. **Not saving output**: For large project lists, pass `--output report.json` or `--output data.csv` to prevent terminal output truncation.
+3. **Restore Mode**: Default restore mode is `merge` (safe, non-destructive). Use `--mode replace` only when you explicitly want a complete overwrite.

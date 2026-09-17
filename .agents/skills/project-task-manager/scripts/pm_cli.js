@@ -14,6 +14,13 @@ const projectRoot = path.resolve(__dirname, '..', '..', '..', '..');
 const { db } = require(path.join(projectRoot, 'server', 'db.js'));
 const { indexTask, semanticSearch } = require(path.join(projectRoot, 'server', 'ragService.js'));
 const { setWindowsWallpaper, STOCK_WALLPAPERS } = require(path.join(projectRoot, 'server', 'wallpaperService.js'));
+const { 
+  createFullBackup, 
+  listBackups, 
+  restoreBackupData, 
+  exportListToCSV, 
+  importTasksFromCSV 
+} = require(path.join(projectRoot, 'server', 'backupService.js'));
 
 function parseArgs(args) {
   const parsed = { _: [] };
@@ -67,9 +74,14 @@ Commands:
   rag-search --query <query> [--limit <n>]        Perform semantic vector search in SQLite
   report [--list-id <id>] [--format md|json]      Generate executive project status report
   set-wallpaper [--stock-id <id>]                 Change Windows wallpaper to project tracker
+  list-backups                                    List available snapshot backups in backups/
+  create-backup [--note <text>]                   Create a new full system snapshot
+  restore-backup --file <path> [--mode merge|replace] Restore database from backup JSON
+  export-csv --list-id <id> [--output <file>]     Export tasks of a list to Excel CSV (UTF-8 BOM)
+  import-csv --list-id <id> --file <path>         Import tasks from a CSV file
 
 Options:
-  --output <file>                                 Write result to JSON/MD file
+  --output <file>                                 Write result to JSON/MD/CSV file
 `);
     process.exit(0);
   }
@@ -284,6 +296,68 @@ Options:
             tasks
           }, args.output);
         }
+        break;
+      }
+
+      case 'list-backups': {
+        const backups = listBackups();
+        writeOutput(backups, args.output);
+        break;
+      }
+
+      case 'create-backup': {
+        const note = args.note || 'manual';
+        const res = createFullBackup(note);
+        if (args.output && res.backup) {
+          fs.writeFileSync(path.resolve(args.output), JSON.stringify(res.backup, null, 2), 'utf8');
+        }
+        writeOutput({ success: true, filename: res.filename, summary: res.backup?.summary }, args.output ? null : null);
+        break;
+      }
+
+      case 'restore-backup': {
+        if (!args.file) {
+          console.error('Error: --file is required (path to backup JSON file).');
+          process.exit(1);
+        }
+        const filePath = path.resolve(args.file);
+        if (!fs.existsSync(filePath)) {
+          console.error(`Backup file not found: ${filePath}`);
+          process.exit(1);
+        }
+        const raw = fs.readFileSync(filePath, 'utf8');
+        const backupData = JSON.parse(raw);
+        const mode = args.mode || 'merge'; // 'merge' | 'replace'
+        const res = restoreBackupData(backupData, mode);
+        writeOutput(res, args.output);
+        break;
+      }
+
+      case 'export-csv': {
+        const listId = args['list-id'] || 'list-iqa26';
+        const csvContent = exportListToCSV(listId);
+        if (args.output) {
+          fs.writeFileSync(path.resolve(args.output), csvContent, 'utf8');
+          console.log(`CSV written to: ${args.output}`);
+        } else {
+          process.stdout.write(csvContent);
+        }
+        break;
+      }
+
+      case 'import-csv': {
+        const listId = args['list-id'] || 'list-iqa26';
+        if (!args.file) {
+          console.error('Error: --file is required (path to CSV file).');
+          process.exit(1);
+        }
+        const filePath = path.resolve(args.file);
+        if (!fs.existsSync(filePath)) {
+          console.error(`CSV file not found: ${filePath}`);
+          process.exit(1);
+        }
+        const res = importTasksFromCSV(listId, filePath);
+        writeOutput(res, args.output);
         break;
       }
 

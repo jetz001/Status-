@@ -15,7 +15,8 @@ import {
   Compass,
   Calendar,
   Clock,
-  LayoutDashboard
+  LayoutDashboard,
+  Database
 } from 'lucide-react';
 
 export default function Sidebar({ 
@@ -25,7 +26,8 @@ export default function Sidebar({
   onCreateSpace, 
   onCreateList,
   onOpenAISidebar,
-  onOpenSettings
+  onOpenSettings,
+  onOpenBackupDataModal
 }) {
   const [expandedSpaces, setExpandedSpaces] = useState({ 'space-team': true });
   const [showAddSpaceModal, setShowAddSpaceModal] = useState(false);
@@ -188,7 +190,15 @@ export default function Sidebar({
       </div>
 
       {/* Footer Bottom Bar */}
-      <div className="p-2.5 border-t border-[#333538] flex items-center justify-between bg-[#141517]">
+      <div className="p-2 border-t border-[#333538] flex flex-col space-y-1 bg-[#141517]">
+        <button 
+          onClick={onOpenBackupDataModal}
+          className="flex items-center space-x-2 px-2 py-1.5 rounded hover:bg-[#2a2b2d] text-gray-300 hover:text-white cursor-pointer transition w-full"
+        >
+          <Database size={15} className="text-purple-400" />
+          <span className="text-xs font-medium">Backup & Data Center</span>
+        </button>
+
         <button 
           onClick={onOpenSettings}
           className="flex items-center space-x-2 px-2 py-1.5 rounded hover:bg-[#2a2b2d] text-gray-400 hover:text-white cursor-pointer transition w-full"

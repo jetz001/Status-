@@ -11,12 +11,15 @@ import {
   Kanban, 
   CalendarRange, 
   Share2,
-  ChevronDown
+  ChevronDown,
+  Download,
+  Database
 } from 'lucide-react';
 
 export default function Header({
   spaceName,
   listName,
+  activeListId,
   activeView,
   onSelectView,
   onOpenAISidebar,
@@ -24,6 +27,7 @@ export default function Header({
   onOpenNotificationCenter,
   onOpenPrintReport,
   onOpenCustomFieldModal,
+  onOpenBackupDataModal,
   onQuickAddTask,
   notificationCount = 0,
   searchQuery,
@@ -79,6 +83,26 @@ export default function Header({
           >
             <ImageIcon size={15} className="text-pink-400" />
             <span className="hidden sm:inline">Wallpaper</span>
+          </button>
+
+          {/* Quick Export Excel/CSV Button */}
+          <a 
+            href={`/api/export/csv?listId=${activeListId || 'list-iqa26'}`}
+            title="ส่งออกตารางงานเป็น Excel CSV ทันที"
+            className="flex items-center space-x-1 px-2.5 py-1.5 rounded hover:bg-[#2a2b2d] text-gray-300 hover:text-emerald-400 text-xs font-medium transition"
+          >
+            <Download size={15} className="text-emerald-400" />
+            <span className="hidden sm:inline">Export</span>
+          </a>
+
+          {/* Backup & Data Center Button */}
+          <button 
+            onClick={onOpenBackupDataModal}
+            title="ศูนย์สำรองข้อมูลและกู้คืน (Backup & Data Center)"
+            className="flex items-center space-x-1 px-2.5 py-1.5 rounded hover:bg-[#2a2b2d] text-gray-300 hover:text-purple-400 text-xs font-medium transition"
+          >
+            <Database size={15} className="text-purple-400" />
+            <span className="hidden sm:inline">Backup</span>
           </button>
 
           {/* Print / PDF Button */}
