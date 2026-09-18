@@ -21,6 +21,7 @@ import {
   X
 } from 'lucide-react';
 import ContextMenu from './ContextMenu.jsx';
+import ThaiDatePicker from './ThaiDatePicker.jsx';
 
 const STATUS_CONFIG = {
   'COMPLETED': {
@@ -211,14 +212,60 @@ export default function ListView({
     setInlineEditingTaskId(null);
   };
 
+  const formatDateDMY = (dateStr) => {
+    if (!dateStr) return '';
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      const [y, m, d] = parts;
+      const thaiMonths = ['', 'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+      const mNum = parseInt(m, 10);
+      const dNum = parseInt(d, 10);
+      return `${dNum} ${thaiMonths[mNum] || m} ${y}`;
+    }
+    return dateStr;
+  };
+
   const formatDueDateDisplay = (dateStr) => {
     if (!dateStr) return null;
     const today = new Date().toISOString().split('T')[0];
     const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
-    if (dateStr === today) return { label: 'วันนี้', color: 'text-amber-400 bg-amber-950/40 border-amber-500/50' };
-    if (dateStr === tomorrow) return { label: 'พรุ่งนี้', color: 'text-blue-300 bg-blue-950/40 border-blue-500/40' };
-    if (dateStr < today) return { label: `เกินกำหนด (${dateStr.slice(5)})`, color: 'text-red-400 bg-red-950/40 border-red-500/50' };
-    return { label: dateStr.slice(5), color: 'text-gray-300 bg-[#25272b] border-[#383a40]' };
+    const dmy = formatDateDMY(dateStr);
+    if (dateStr === today) return { label: `วันนี้ (${dmy})`, color: 'text-amber-400 bg-amber-950/40 border-amber-500/50' };
+    if (dateStr === tomorrow) return { label: `พรุ่งนี้ (${dmy})`, color: 'text-blue-300 bg-blue-950/40 border-blue-500/40' };
+    if (dateStr < today) return { label: `เกินกำหนด (${dmy})`, color: 'text-red-400 bg-red-950/40 border-red-500/50' };
+    return { label: dmy, color: 'text-gray-300 bg-[#25272b] border-[#383a40]' };
+  };
+
+  const getRecurringLabel = (ruleStr) => {
+    if (!ruleStr) return null;
+    try {
+      const rule = typeof ruleStr === 'string' ? JSON.parse(ruleStr) : ruleStr;
+      if (!rule || rule.type === 'none') return null;
+      switch (rule.type) {
+        case 'daily': return 'ทุกวัน';
+        case 'weekly': return 'ทุกสัปดาห์';
+        case 'monthly': return 'ทุกเดือน';
+        case 'monthly_date': return `ทุกวันที่ ${rule.day || '1'}`;
+        case 'half_yearly': return 'ทุก 6 เดือน';
+        case 'yearly': return 'ทุกปี';
+        default: return null;
+      }
+    } catch (e) {
+      return null;
+    }
+  };
+
+  const handleTogglePopover = (e, taskId, type) => {
+    e.stopPropagation();
+    if (activePopover?.taskId === taskId && activePopover?.type === type) {
+      setActivePopover(null);
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const opensUp = spaceBelow < 320; // open upwards if less than 320px from bottom!
+    const opensLeft = rect.left + 290 > window.innerWidth;
+    setActivePopover({ taskId, type, opensUp, opensLeft });
   };
 
   const handleTaskContextMenu = (e, task) => {
@@ -456,10 +503,7 @@ export default function ListView({
                         {/* 2. Interactive Assignee Column */}
                         <td className="py-2.5 px-2 relative">
                           <div 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setActivePopover(activePopover?.taskId === task.id && activePopover?.type === 'assignee' ? null : { taskId: task.id, type: 'assignee' });
-                            }}
+                            onClick={(e) => handleTogglePopover(e, task.id, 'assignee')}
                             className="inline-flex items-center space-x-1.5 px-2 py-1 rounded bg-[#24262b] hover:bg-[#2c2f35] border border-[#383a3f] cursor-pointer transition shadow-sm"
                             title="คลิกเพื่อเลือกผู้รับผิดชอบงาน"
                           >
@@ -475,7 +519,7 @@ export default function ListView({
                           {activePopover?.taskId === task.id && activePopover?.type === 'assignee' && (
                             <div 
                               onClick={(e) => e.stopPropagation()}
-                              className="absolute top-full left-0 mt-1 z-50 w-64 bg-[#222427] border border-[#383a3e] rounded-lg shadow-2xl p-2.5 space-y-2 text-xs"
+                              className={`absolute ${activePopover?.opensUp ? 'bottom-full mb-1.5' : 'top-full mt-1.5'} ${activePopover?.opensLeft ? 'right-0' : 'left-0'} z-50 w-64 bg-[#222427] border border-[#383a3e] rounded-lg shadow-2xl p-2.5 space-y-2 text-xs`}
                             >
                               <div className="flex items-center justify-between text-[11px] font-bold text-gray-400 border-b border-[#333538] pb-1.5">
                                 <span>ผู้รับผิดชอบงาน (Assignee)</span>
@@ -611,7 +655,7 @@ export default function ListView({
                                     onKeyDown={(e) => {
                                       if (e.key === 'Enter') handleAddMember();
                                     }}
-                                    placeholder="ชื่อเต็ม (Jet Mut)"
+                                    placeholder="ชื่อเต็ม (เช่น สมชาย หรือ John)"
                                     className="w-2/3 px-1.5 py-1 bg-[#18191b] border border-[#383a3e] rounded text-white text-[11px] outline-none"
                                   />
                                 </div>
@@ -631,100 +675,54 @@ export default function ListView({
 
                         {/* 3. Interactive Due Date Column */}
                         <td className="py-2.5 px-2 relative">
-                          <div 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setActivePopover(activePopover?.taskId === task.id && activePopover?.type === 'dueDate' ? null : { taskId: task.id, type: 'dueDate' });
-                            }}
-                            className={`inline-flex items-center space-x-1.5 px-2 py-1 rounded border cursor-pointer transition shadow-sm ${
-                              dueInfo ? dueInfo.color : 'text-gray-400 bg-[#24262b] border-dashed border-[#383a3f] hover:border-gray-400'
-                            }`}
-                            title="คลิกเพื่อตั้งกำหนดส่งงาน"
-                          >
-                            <Calendar size={12} />
-                            <span className="text-[11px] font-medium">
-                              {dueInfo ? dueInfo.label : '+ กำหนดส่ง'}
-                            </span>
+                          <div className="flex items-center space-x-1">
+                            <div 
+                              onClick={(e) => handleTogglePopover(e, task.id, 'dueDate')}
+                              className={`inline-flex items-center space-x-1.5 px-2 py-1 rounded border cursor-pointer transition shadow-sm ${
+                                dueInfo ? dueInfo.color : 'text-gray-400 bg-[#24262b] border-dashed border-[#383a3f] hover:border-gray-400'
+                              }`}
+                              title="คลิกเพื่อตั้งกำหนดส่งงานและรอบทำซ้ำ"
+                            >
+                              <Calendar size={12} />
+                              <span className="text-[11px] font-medium">
+                                {dueInfo ? dueInfo.label : '+ กำหนดส่ง'}
+                              </span>
+                            </div>
+
+                            {/* Recurring Badge */}
+                            {getRecurringLabel(task.recurring_rule) && (
+                              <span 
+                                onClick={(e) => handleTogglePopover(e, task.id, 'dueDate')}
+                                className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-950/60 text-purple-300 border border-purple-500/40 cursor-pointer hover:bg-purple-900/60 transition"
+                                title={`รอบทำซ้ำ: ${getRecurringLabel(task.recurring_rule)}`}
+                              >
+                                <span>🔁</span>
+                                <span>{getRecurringLabel(task.recurring_rule)}</span>
+                              </span>
+                            )}
                           </div>
 
-                          {/* Due Date Popover */}
+                          {/* Due Date Popover with Thai Calendar, Day-Month-Year format & Anti-Clipping */}
                           {activePopover?.taskId === task.id && activePopover?.type === 'dueDate' && (
                             <div 
                               onClick={(e) => e.stopPropagation()}
-                              className="absolute top-full left-0 mt-1 z-50 w-60 bg-[#222427] border border-[#383a3e] rounded-lg shadow-2xl p-2.5 space-y-2 text-xs"
+                              className={`absolute ${activePopover?.opensUp ? 'bottom-full mb-1.5' : 'top-full mt-1.5'} ${activePopover?.opensLeft ? 'right-0' : 'left-0'} z-50`}
                             >
-                              <div className="text-[11px] font-bold text-gray-400 border-b border-[#333538] pb-1">
-                                กำหนดส่ง (Due Date)
-                              </div>
-
-                              <div className="grid grid-cols-2 gap-1.5">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const todayStr = new Date().toISOString().split('T')[0];
-                                    onUpdateTask && onUpdateTask(task.id, { due_date: todayStr });
-                                    setActivePopover(null);
-                                  }}
-                                  className="px-2 py-1 bg-[#18191b] hover:bg-[#2d2f34] text-amber-300 rounded text-center font-medium"
-                                >
-                                  วันนี้
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const tom = new Date(Date.now() + 86400000).toISOString().split('T')[0];
-                                    onUpdateTask && onUpdateTask(task.id, { due_date: tom });
-                                    setActivePopover(null);
-                                  }}
-                                  className="px-2 py-1 bg-[#18191b] hover:bg-[#2d2f34] text-blue-300 rounded text-center font-medium"
-                                >
-                                  พรุ่งนี้
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const nextWeek = new Date(Date.now() + 86400000 * 7).toISOString().split('T')[0];
-                                    onUpdateTask && onUpdateTask(task.id, { due_date: nextWeek });
-                                    setActivePopover(null);
-                                  }}
-                                  className="px-2 py-1 bg-[#18191b] hover:bg-[#2d2f34] text-purple-300 rounded text-center font-medium"
-                                >
-                                  +7 วัน (สัปดาห์หน้า)
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    onUpdateTask && onUpdateTask(task.id, { due_date: null });
-                                    setActivePopover(null);
-                                  }}
-                                  className="px-2 py-1 bg-[#18191b] hover:bg-red-950/30 text-red-400 rounded text-center font-medium"
-                                >
-                                  ล้างวันที่
-                                </button>
-                              </div>
-
-                              {/* Custom date picker */}
-                              <div className="pt-1.5 border-t border-[#333538] flex space-x-1">
-                                <input 
-                                  type="date"
-                                  value={customDateInput || task.due_date || ''}
-                                  onChange={(e) => setCustomDateInput(e.target.value)}
-                                  className="w-full px-2 py-1 bg-[#18191b] border border-[#383a3e] rounded text-white text-[11px] outline-none"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    if (customDateInput) {
-                                      onUpdateTask && onUpdateTask(task.id, { due_date: customDateInput });
-                                      setCustomDateInput('');
-                                      setActivePopover(null);
-                                    }
-                                  }}
-                                  className="px-2 py-1 bg-[#7b68ee] text-white rounded text-[10px] font-bold"
-                                >
-                                  บันทึก
-                                </button>
-                              </div>
+                              <ThaiDatePicker
+                                value={task.due_date}
+                                onChange={(newDate) => {
+                                  onUpdateTask && onUpdateTask(task.id, { due_date: newDate });
+                                  setActivePopover(null);
+                                }}
+                                onClose={() => setActivePopover(null)}
+                                showRecurring={true}
+                                recurringRule={task.recurring_rule}
+                                onUpdateRecurring={(newRule) => {
+                                  onUpdateTask && onUpdateTask(task.id, { 
+                                    recurring_rule: newRule ? JSON.stringify(newRule) : null 
+                                  });
+                                }}
+                              />
                             </div>
                           )}
                         </td>
@@ -732,10 +730,7 @@ export default function ListView({
                         {/* 4. Interactive Priority Column */}
                         <td className="py-2.5 px-2 relative">
                           <div 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setActivePopover(activePopover?.taskId === task.id && activePopover?.type === 'priority' ? null : { taskId: task.id, type: 'priority' });
-                            }}
+                            onClick={(e) => handleTogglePopover(e, task.id, 'priority')}
                             className="inline-flex items-center space-x-1.5 px-2 py-1 rounded bg-[#24262b] hover:bg-[#2c2f35] border border-[#383a3f] cursor-pointer transition shadow-sm"
                             title="คลิกเพื่อเปลี่ยนระดับความสำคัญ"
                           >
@@ -749,7 +744,7 @@ export default function ListView({
                           {activePopover?.taskId === task.id && activePopover?.type === 'priority' && (
                             <div 
                               onClick={(e) => e.stopPropagation()}
-                              className="absolute top-full left-0 mt-1 z-50 w-48 bg-[#222427] border border-[#383a3e] rounded-lg shadow-2xl p-1.5 space-y-1 text-xs"
+                              className={`absolute ${activePopover?.opensUp ? 'bottom-full mb-1.5' : 'top-full mt-1.5'} ${activePopover?.opensLeft ? 'right-0' : 'left-0'} z-50 w-48 bg-[#222427] border border-[#383a3e] rounded-lg shadow-2xl p-1.5 space-y-1 text-xs`}
                             >
                               <div className="text-[11px] font-bold text-gray-400 px-2 py-0.5 border-b border-[#333538]">
                                 ระดับความสำคัญ (Priority)
@@ -780,10 +775,7 @@ export default function ListView({
                         {/* 5. Interactive Subtasks Column */}
                         <td className="py-2.5 px-2 relative">
                           <div 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setActivePopover(activePopover?.taskId === task.id && activePopover?.type === 'subtasks' ? null : { taskId: task.id, type: 'subtasks' });
-                            }}
+                            onClick={(e) => handleTogglePopover(e, task.id, 'subtasks')}
                             className={`inline-flex items-center space-x-1.5 px-2 py-1 rounded border cursor-pointer transition shadow-sm ${
                               totalSubs > 0 
                                 ? (completedSubs === totalSubs ? 'bg-emerald-950/40 text-emerald-300 border-emerald-500/40' : 'bg-blue-950/40 text-blue-300 border-blue-500/40')
@@ -801,7 +793,7 @@ export default function ListView({
                           {activePopover?.taskId === task.id && activePopover?.type === 'subtasks' && (
                             <div 
                               onClick={(e) => e.stopPropagation()}
-                              className="absolute top-full left-0 mt-1 z-50 w-72 bg-[#222427] border border-[#383a3e] rounded-lg shadow-2xl p-3 space-y-2 text-xs"
+                              className={`absolute ${activePopover?.opensUp ? 'bottom-full mb-1.5' : 'top-full mt-1.5'} ${activePopover?.opensLeft ? 'right-0' : 'left-0'} z-50 w-72 bg-[#222427] border border-[#383a3e] rounded-lg shadow-2xl p-3 space-y-2 text-xs`}
                             >
                               <div className="flex items-center justify-between border-b border-[#333538] pb-1.5">
                                 <span className="font-bold text-gray-200 text-xs flex items-center space-x-1.5">
@@ -876,10 +868,7 @@ export default function ListView({
                         {/* 6. Interactive Status Badge Column */}
                         <td className="py-2.5 px-2 relative">
                           <div 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setActivePopover(activePopover?.taskId === task.id && activePopover?.type === 'status' ? null : { taskId: task.id, type: 'status' });
-                            }}
+                            onClick={(e) => handleTogglePopover(e, task.id, 'status')}
                             className="px-2.5 py-1 rounded text-[10px] font-bold tracking-wider inline-block cursor-pointer hover:opacity-90 transition shadow-sm"
                             style={{ backgroundColor: config.color, color: '#fff' }}
                             title="คลิกเพื่อเปลี่ยนสถานะงาน"
@@ -891,7 +880,7 @@ export default function ListView({
                           {activePopover?.taskId === task.id && activePopover?.type === 'status' && (
                             <div 
                               onClick={(e) => e.stopPropagation()}
-                              className="absolute top-full left-0 mt-1 z-50 w-48 bg-[#222427] border border-[#383a3e] rounded-lg shadow-2xl p-1.5 space-y-1 text-xs"
+                              className={`absolute ${activePopover?.opensUp ? 'bottom-full mb-1.5' : 'top-full mt-1.5'} ${activePopover?.opensLeft ? 'right-0' : 'left-0'} z-50 w-48 bg-[#222427] border border-[#383a3e] rounded-lg shadow-2xl p-1.5 space-y-1 text-xs`}
                             >
                               <div className="text-[11px] font-bold text-gray-400 px-2 py-0.5 border-b border-[#333538]">
                                 เปลี่ยนสถานะงาน

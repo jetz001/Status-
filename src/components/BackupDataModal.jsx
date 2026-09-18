@@ -18,7 +18,7 @@ export default function BackupDataModal({
   isOpen,
   onClose,
   activeListId,
-  activeListName = 'IQA26',
+  activeListName = 'Tasks',
   onDataRestored
 }) {
   const [activeTab, setActiveTab] = useState('backups'); // 'backups' | 'export' | 'import'
@@ -28,7 +28,7 @@ export default function BackupDataModal({
   const [statusMessage, setStatusMessage] = useState(null);
 
   // Import State
-  const [importMode, setImportMode] = useState('merge'); // 'merge' | 'replace'
+  const [importMode, setImportMode] = useState('replace'); // 'replace' | 'merge'
   const [selectedFile, setSelectedFile] = useState(null);
   const [fileContent, setFileContent] = useState(null);
   const [restoreConfirmFile, setRestoreConfirmFile] = useState(null);
@@ -126,8 +126,11 @@ export default function BackupDataModal({
           setSelectedFile(null);
           setFileContent(null);
           if (onDataRestored) onDataRestored();
+        } else {
+          setStatusMessage({ type: 'error', text: data.error || 'การนำเข้า CSV ล้มเหลว' });
         }
-      } else if (selectedFile.name.endsWith('.json')) {
+      } else {
+        // .statusbackup, .spbackup, or .json
         const parsed = JSON.parse(fileContent);
         const res = await fetch('/api/backup/restore', {
           method: 'POST',
@@ -140,6 +143,8 @@ export default function BackupDataModal({
           setSelectedFile(null);
           setFileContent(null);
           if (onDataRestored) onDataRestored();
+        } else {
+          setStatusMessage({ type: 'error', text: data.error || 'การกู้คืนข้อมูลล้มเหลว' });
         }
       }
     } catch (err) {
@@ -341,7 +346,7 @@ export default function BackupDataModal({
                     className="inline-flex items-center space-x-1.5 px-4 py-2 bg-[#7b68ee] hover:bg-[#6a55e0] text-white font-semibold rounded shadow transition"
                   >
                     <Download size={14} />
-                    <span>ดาวน์โหลด Full Backup (.json)</span>
+                    <span>ดาวน์โหลด Full Backup (.statusbackup)</span>
                   </a>
                 </div>
               </div>
@@ -359,13 +364,13 @@ export default function BackupDataModal({
                 <Upload size={28} className="mx-auto text-purple-400" />
                 <div className="space-y-1">
                   <p className="font-bold text-white">คลิกเพื่อเลือกไฟล์ หรือลากไฟล์มาวางที่นี่</p>
-                  <p className="text-[11px] text-gray-400">รองรับไฟล์ Excel (.csv) หรือไฟล์สำรอง (.json)</p>
+                  <p className="text-[11px] text-gray-400">รองรับไฟล์สำรอง (.statusbackup / .json) หรือ Excel (.csv)</p>
                 </div>
                 <input 
                   type="file" 
                   ref={fileInputRef} 
                   onChange={handleFileSelect} 
-                  accept=".csv,.json" 
+                  accept=".statusbackup,.spbackup,.json,.csv" 
                   className="hidden" 
                 />
               </div>
@@ -386,25 +391,11 @@ export default function BackupDataModal({
                     </button>
                   </div>
 
-                  {/* Mode Selector for JSON */}
-                  {selectedFile.name.endsWith('.json') && (
+                  {/* Mode Selector for Backup Files */}
+                  {!selectedFile.name.endsWith('.csv') && (
                     <div className="space-y-2 pt-2 border-t border-[#2e3034]">
                       <label className="font-semibold text-gray-300 block">เลือกรูปแบบการนำเข้า:</label>
                       <div className="grid grid-cols-2 gap-2">
-                        <label className={`p-3 rounded-lg border cursor-pointer transition ${
-                          importMode === 'merge' ? 'border-[#7b68ee] bg-[#7b68ee]/10 text-white' : 'border-[#333538] bg-[#18191b] text-gray-400'
-                        }`}>
-                          <input 
-                            type="radio" 
-                            name="importMode" 
-                            checked={importMode === 'merge'} 
-                            onChange={() => setImportMode('merge')} 
-                            className="hidden" 
-                          />
-                          <span className="font-bold block">1. Merge (นำเข้าเพิ่มเติม)</span>
-                          <span className="text-[10px] text-gray-400 block pt-0.5">นำเข้างานใหม่เข้าสู่ระบบโดยไม่ลบงานเดิมที่มีอยู่</span>
-                        </label>
-
                         <label className={`p-3 rounded-lg border cursor-pointer transition ${
                           importMode === 'replace' ? 'border-amber-500 bg-amber-500/10 text-white' : 'border-[#333538] bg-[#18191b] text-gray-400'
                         }`}>
@@ -415,8 +406,22 @@ export default function BackupDataModal({
                             onChange={() => setImportMode('replace')} 
                             className="hidden" 
                           />
-                          <span className="font-bold text-amber-300 block">2. Full Restore (กู้คืนทับทั้งหมด)</span>
-                          <span className="text-[10px] text-gray-400 block pt-0.5">แทนที่ระบบเดิมทั้งหมดด้วยไฟล์สำรองนี้ (มี Snapshot นิรภัยก่อนทำ)</span>
+                          <span className="font-bold text-amber-300 block">1. Full Restore (กู้คืนครบทุก Space/List) [แนะนำ]</span>
+                          <span className="text-[10px] text-gray-400 block pt-0.5">กู้คืนโครงสร้างครบทั้งหมด (Spaces, Lists, Tasks) คืนค่าเหมือนต้นฉบับ 100%</span>
+                        </label>
+
+                        <label className={`p-3 rounded-lg border cursor-pointer transition ${
+                          importMode === 'merge' ? 'border-[#7b68ee] bg-[#7b68ee]/10 text-white' : 'border-[#333538] bg-[#18191b] text-gray-400'
+                        }`}>
+                          <input 
+                            type="radio" 
+                            name="importMode" 
+                            checked={importMode === 'merge'} 
+                            onChange={() => setImportMode('merge')} 
+                            className="hidden" 
+                          />
+                          <span className="font-bold block">2. Merge (ผสานข้อมูลเพิ่ม)</span>
+                          <span className="text-[10px] text-gray-400 block pt-0.5">นำเข้า Spaces, Lists และ Tasks เพิ่มเติมโดยไม่ลบงานเดิมที่มีอยู่</span>
                         </label>
                       </div>
                     </div>

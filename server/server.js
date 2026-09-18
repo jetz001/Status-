@@ -1,17 +1,32 @@
+const fs = require('fs');
+const debugLog = (msg) => {
+  try { fs.appendFileSync('C:/Users/Boss-QA/status_debug.log', `[${new Date().toISOString()}] [server.js] ${msg}\n`); } catch (_) {}
+};
+debugLog('server.js top start');
+
 const express = require('express');
+debugLog('express required');
 const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
-const fs = require('fs');
 
+debugLog('requiring ./db');
 const { db, logMcpActivity, getMcpLogs, clearMcpLogs } = require('./db');
+debugLog('requiring ./ragService');
 const { indexTask, semanticSearch, reindexAll } = require('./ragService');
-const { callLLM, polishText, generateSubtasks, autofillMetadata, chatAssistant } = require('./aiService');
+debugLog('requiring ./aiService');
+const { callLLM, polishText, generateSubtasks, autofillMetadata, completeTaskAll, extractCleanText, chatAssistant } = require('./aiService');
+debugLog('requiring ./wallpaperService');
 const { setWindowsWallpaper, saveWallpaperDataUrl, STOCK_WALLPAPERS } = require('./wallpaperService');
+debugLog('requiring ./aiSkills');
 const { processAgentQuery } = require('./aiSkills');
+debugLog('requiring ./fileProcessor');
 const { processFileForAI, saveFileBuffer } = require('./fileProcessor');
+debugLog('requiring ./aiTools');
 const { executeTool } = require('./aiTools');
+debugLog('requiring ../mcp/desktopController');
 const { cleanupTempFiles, getTempFilesStatus } = require('../mcp/desktopController');
+debugLog('all modules required successfully');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -21,7 +36,8 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Ensure upload folders exist
-const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
+const USER_DATA_DIR = process.env.STATUS_USER_DATA || path.join(__dirname, '..');
+const UPLOADS_DIR = path.join(USER_DATA_DIR, 'uploads');
 const ATTACHMENTS_DIR = path.join(UPLOADS_DIR, 'attachments');
 const WALLPAPERS_UPLOAD_DIR = path.join(UPLOADS_DIR, 'wallpapers');
 if (!fs.existsSync(ATTACHMENTS_DIR)) {
@@ -31,16 +47,46 @@ if (!fs.existsSync(WALLPAPERS_UPLOAD_DIR)) {
   fs.mkdirSync(WALLPAPERS_UPLOAD_DIR, { recursive: true });
 }
 
+// Function to ensure all 12 stock wallpapers are seeded to user uploads directory
+function ensureStockWallpapersSeeded() {
+  try {
+    const sourceDirs = [
+      path.join(__dirname, '..', 'public', 'wallpapers'),
+      path.join(process.resourcesPath || '', 'app.asar.unpacked', 'public', 'wallpapers'),
+      path.join(__dirname, '..', 'dist', 'wallpapers'),
+      path.join(process.resourcesPath || '', 'public', 'wallpapers')
+    ];
+    let foundDir = null;
+    for (const dir of sourceDirs) {
+      if (fs.existsSync(dir)) {
+        foundDir = dir;
+        break;
+      }
+    }
+    if (foundDir) {
+      const files = fs.readdirSync(foundDir);
+      for (const file of files) {
+        if (file.match(/\.(jpg|jpeg|png|webp)$/i)) {
+          const dest = path.join(WALLPAPERS_UPLOAD_DIR, file);
+          if (!fs.existsSync(dest) || fs.statSync(dest).size === 0) {
+            const buf = fs.readFileSync(path.join(foundDir, file));
+            fs.writeFileSync(dest, buf);
+          }
+        }
+      }
+      console.log(`[Wallpaper] Seeded stock wallpapers from ${foundDir} to ${WALLPAPERS_UPLOAD_DIR}`);
+    }
+  } catch (err) {
+    console.error('[Wallpaper] Notice during stock wallpapers seed:', err.message);
+  }
+}
+ensureStockWallpapersSeeded();
+
 // Serve uploaded and static files
-app.use('/uploads', express.static(UPLOADS_DIR));
+app.use('/uploads', cors(), express.static(UPLOADS_DIR));
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 if (fs.existsSync(PUBLIC_DIR)) {
   app.use(express.static(PUBLIC_DIR));
-  app.use('/wallpapers', express.static(path.join(PUBLIC_DIR, 'wallpapers')));
-}
-const DIST_WALLPAPERS = path.join(__dirname, '..', 'dist', 'wallpapers');
-if (fs.existsSync(DIST_WALLPAPERS)) {
-  app.use('/wallpapers', express.static(DIST_WALLPAPERS));
 }
 
 // Configure multer for file uploads (Images & PDFs)
@@ -315,6 +361,39 @@ app.get('/api/tasks/:id', (req, res) => {
   }
 });
 
+function computeNextDueDate(currentDueDateStr, rule) {
+  if (!rule || rule.type === 'none') return null;
+  const base = currentDueDateStr ? new Date(currentDueDateStr) : new Date();
+  const d = new Date(base.getTime());
+  switch (rule.type) {
+    case 'daily':
+      d.setDate(d.getDate() + 1);
+      break;
+    case 'weekly':
+      d.setDate(d.getDate() + 7);
+      break;
+    case 'monthly':
+      d.setMonth(d.getMonth() + 1);
+      break;
+    case 'monthly_date': {
+      const targetDay = parseInt(rule.day || d.getDate(), 10);
+      d.setMonth(d.getMonth() + 1);
+      const lastDayOfMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+      d.setDate(Math.min(targetDay, lastDayOfMonth));
+      break;
+    }
+    case 'half_yearly':
+      d.setMonth(d.getMonth() + 6);
+      break;
+    case 'yearly':
+      d.setFullYear(d.getFullYear() + 1);
+      break;
+    default:
+      return null;
+  }
+  return d.toISOString().split('T')[0];
+}
+
 app.post('/api/tasks', (req, res) => {
   try {
     const {
@@ -325,18 +404,27 @@ app.post('/api/tasks', (req, res) => {
       priority = 'Normal',
       due_date = null,
       start_date = null,
-      assignee = 'JM',
+      assignee = '',
       fieldValues = {},
-      subtasks = []
+      subtasks = [],
+      recurring_rule = null
     } = req.body;
 
+    let targetListId = list_id;
+    if (!targetListId) {
+      const firstList = db.prepare('SELECT id FROM lists ORDER BY position ASC LIMIT 1').get();
+      targetListId = firstList ? firstList.id : 'list-tasks';
+    }
+
     const id = `task-${Date.now()}`;
-    const maxPos = db.prepare('SELECT MAX(position) as p FROM tasks WHERE list_id = ?').get(list_id).p || 0;
+    const maxRow = db.prepare('SELECT MAX(position) as p FROM tasks WHERE list_id = ?').get(targetListId);
+    const maxPos = (maxRow && maxRow.p) ? maxRow.p : 0;
+    const ruleStr = recurring_rule ? (typeof recurring_rule === 'object' ? JSON.stringify(recurring_rule) : String(recurring_rule)) : null;
 
     db.prepare(`
-      INSERT INTO tasks (id, list_id, name, description, status, priority, due_date, start_date, assignee, position)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, list_id, name, description, status, priority, due_date, start_date, assignee, maxPos + 1);
+      INSERT INTO tasks (id, list_id, name, description, status, priority, due_date, start_date, assignee, position, recurring_rule)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, targetListId, name, description, status, priority, due_date, start_date, assignee, maxPos + 1, ruleStr);
 
     // Insert field values
     const insertVal = db.prepare('INSERT INTO task_field_values (id, task_id, field_id, value) VALUES (?, ?, ?, ?)');
@@ -370,11 +458,16 @@ app.put('/api/tasks/:id', (req, res) => {
       due_date,
       start_date,
       assignee,
-      fieldValues
+      fieldValues,
+      recurring_rule
     } = req.body;
 
     const currentTask = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
     if (!currentTask) return res.status(404).json({ error: 'Task not found' });
+
+    const newRuleStr = recurring_rule !== undefined
+      ? (recurring_rule ? (typeof recurring_rule === 'object' ? JSON.stringify(recurring_rule) : String(recurring_rule)) : null)
+      : currentTask.recurring_rule;
 
     db.prepare(`
       UPDATE tasks 
@@ -385,6 +478,7 @@ app.put('/api/tasks/:id', (req, res) => {
           due_date = ?,
           start_date = ?,
           assignee = COALESCE(?, assignee),
+          recurring_rule = ?,
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(
@@ -395,6 +489,7 @@ app.put('/api/tasks/:id', (req, res) => {
       due_date !== undefined ? due_date : currentTask.due_date,
       start_date !== undefined ? start_date : currentTask.start_date,
       assignee !== undefined ? assignee : null,
+      newRuleStr,
       id
     );
 
@@ -407,10 +502,61 @@ app.put('/api/tasks/:id', (req, res) => {
       }
     }
 
+    // Auto-advance Recurring Task if status transitioned to COMPLETED
+    let spawnedTaskId = null;
+    const effectiveStatus = status !== undefined ? status : currentTask.status;
+    if (effectiveStatus === 'COMPLETED' && currentTask.status !== 'COMPLETED') {
+      const activeRuleStr = newRuleStr || currentTask.recurring_rule;
+      if (activeRuleStr) {
+        try {
+          const rule = typeof activeRuleStr === 'string' ? JSON.parse(activeRuleStr) : activeRuleStr;
+          if (rule && rule.type && rule.type !== 'none') {
+            const nextDueDate = computeNextDueDate(currentTask.due_date, rule);
+            spawnedTaskId = `task-${Date.now()}`;
+            const maxPos = db.prepare('SELECT MAX(position) as p FROM tasks WHERE list_id = ?').get(currentTask.list_id).p || 0;
+
+            db.prepare(`
+              INSERT INTO tasks (id, list_id, name, description, status, priority, due_date, start_date, assignee, position, recurring_rule)
+              VALUES (?, ?, ?, ?, 'NOT STARTED', ?, ?, ?, ?, ?, ?)
+            `).run(
+              spawnedTaskId,
+              currentTask.list_id,
+              currentTask.name,
+              currentTask.description || '',
+              currentTask.priority || 'Normal',
+              nextDueDate,
+              null,
+              currentTask.assignee || '',
+              maxPos + 1,
+              activeRuleStr
+            );
+
+            // Clone custom fields
+            const fvs = db.prepare('SELECT * FROM task_field_values WHERE task_id = ?').all(id);
+            const insertFv = db.prepare('INSERT INTO task_field_values (id, task_id, field_id, value) VALUES (?, ?, ?, ?)');
+            fvs.forEach(fv => {
+              insertFv.run(`tfv-${Date.now()}-${fv.field_id}`, spawnedTaskId, fv.field_id, fv.value);
+            });
+
+            // Clone subtasks with completed = 0 (reset progress for next cycle)
+            const oldSubs = db.prepare('SELECT * FROM subtasks WHERE task_id = ? ORDER BY position ASC').all(id);
+            const insertSub = db.prepare('INSERT INTO subtasks (id, task_id, title, completed, position) VALUES (?, ?, ?, 0, ?)');
+            oldSubs.forEach((s, idx) => {
+              insertSub.run(`sub-${Date.now()}-${idx}`, spawnedTaskId, s.title, idx);
+            });
+
+            try { indexTask(spawnedTaskId); } catch (e) {}
+          }
+        } catch (e) {
+          console.error('Error auto-spawning recurring task:', e);
+        }
+      }
+    }
+
     // Auto-index into RAG Vector DB
     indexTask(id);
 
-    res.json({ success: true });
+    res.json({ success: true, spawnedTaskId });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -693,6 +839,47 @@ app.get('/api/wallpaper/stocks', (req, res) => {
   res.json(STOCK_WALLPAPERS);
 });
 
+// Dedicated static wallpaper server endpoint with CORS (serves buffer safely even inside asar)
+const serveWallpaperFile = (req, res) => {
+  const filename = path.basename(req.params.filename);
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', '*');
+  if (req.method === 'OPTIONS') return res.sendStatus(200);
+
+  const candidates = [
+    path.join(WALLPAPERS_UPLOAD_DIR, filename),
+    path.join(process.resourcesPath || '', 'app.asar.unpacked', 'public', 'wallpapers', filename),
+    path.join(__dirname, '..', 'public', 'wallpapers', filename),
+    path.join(__dirname, '..', 'dist', 'wallpapers', filename),
+    path.join(process.resourcesPath || '', 'public', 'wallpapers', filename)
+  ];
+
+  for (const p of candidates) {
+    try {
+      if (fs.existsSync(p)) {
+        const ext = path.extname(p).toLowerCase();
+        const mimeMap = {
+          '.jpg': 'image/jpeg',
+          '.jpeg': 'image/jpeg',
+          '.png': 'image/png',
+          '.webp': 'image/webp'
+        };
+        res.setHeader('Content-Type', mimeMap[ext] || 'image/jpeg');
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        const buf = fs.readFileSync(p);
+        return res.end(buf);
+      }
+    } catch (err) {
+      // Continue to next candidate
+    }
+  }
+  res.status(404).send('Wallpaper not found');
+};
+
+app.get('/api/wallpaper/file/:filename', serveWallpaperFile);
+app.get('/wallpapers/:filename', serveWallpaperFile);
+
 // Set wallpaper on Windows
 app.post('/api/wallpaper/set', async (req, res) => {
   try {
@@ -899,6 +1086,188 @@ app.post('/api/settings', (req, res) => {
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Workspace & Current User info
+app.get('/api/workspace', (req, res) => {
+  try {
+    const ws = db.prepare('SELECT * FROM workspaces LIMIT 1').get();
+    const userSetting = db.prepare("SELECT value FROM app_settings WHERE key = 'user_name'").get();
+    const wsSetting = db.prepare("SELECT value FROM app_settings WHERE key = 'workspace_name'").get();
+    const user = db.prepare('SELECT * FROM team_members LIMIT 1').get();
+    
+    const defaultUser = process.env.USERNAME || process.env.USER || 'User';
+    let userName = userSetting ? userSetting.value : (user && user.name !== 'Me' ? user.name : defaultUser);
+    let workspaceName = wsSetting ? wsSetting.value : (ws ? ws.name : 'My Workspace');
+
+    res.json({
+      workspaceName,
+      userName
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/workspace', (req, res) => {
+  try {
+    const { userName, workspaceName } = req.body;
+    if (userName !== undefined) {
+      const trimmedUser = String(userName).trim() || 'User';
+      db.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('user_name', ?)").run(trimmedUser);
+      const user = db.prepare('SELECT * FROM team_members LIMIT 1').get();
+      if (user) {
+        db.prepare('UPDATE team_members SET name = ?, label = ? WHERE id = ?').run(trimmedUser, trimmedUser, user.id);
+      }
+    }
+    if (workspaceName !== undefined) {
+      const trimmedWs = String(workspaceName).trim() || 'My Workspace';
+      db.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('workspace_name', ?)").run(trimmedWs);
+      const ws = db.prepare('SELECT * FROM workspaces LIMIT 1').get();
+      if (ws) {
+        db.prepare('UPDATE workspaces SET name = ? WHERE id = ?').run(trimmedWs, ws.id);
+      }
+    }
+    res.json({ success: true, userName, workspaceName });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// AI Connection Tester Endpoint
+app.post('/api/ai/test-connection', async (req, res) => {
+  try {
+    const provider = req.body.provider || req.body.ai_provider || getSetting('ai_provider', 'gemini');
+    let apiKey = req.body.apiKey !== undefined ? req.body.apiKey : (req.body.ai_api_key !== undefined ? req.body.ai_api_key : getSetting('ai_api_key', ''));
+    const model = req.body.model || req.body.ai_model || getSetting('ai_model', '');
+
+    if (!provider) return res.status(400).json({ success: false, error: 'กรุณาเลือกผู้ให้บริการ AI' });
+    if (provider !== 'ollama' && (!apiKey || !apiKey.trim())) {
+      return res.status(400).json({ success: false, error: 'กรุณาระบุ API Key' });
+    }
+
+    const trimmedKey = (apiKey || '').trim();
+    const testPrompt = 'Hello, reply only with "OK"';
+
+    if (provider === 'mistral') {
+      const url = 'https://api.mistral.ai/v1/chat/completions';
+      const mistralModel = (model || 'pixtral-12b-2409').trim();
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${trimmedKey}`
+        },
+        body: JSON.stringify({
+          model: mistralModel,
+          messages: [{ role: 'user', content: testPrompt }],
+          max_tokens: 10
+        })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        return res.status(response.status).json({
+          success: false,
+          error: data.error?.message || data.message || `Mistral API Error (${response.status})`
+        });
+      }
+      return res.json({ success: true, reply: data.choices?.[0]?.message?.content || 'OK' });
+    }
+
+    if (provider === 'gemini') {
+      const geminiModel = (model || 'gemini-1.5-flash').trim();
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${trimmedKey}`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: testPrompt }] }] })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        return res.status(response.status).json({
+          success: false,
+          error: data.error?.message || `Gemini API Error (${response.status})`
+        });
+      }
+      return res.json({ success: true, reply: data.candidates?.[0]?.content?.parts?.[0]?.text || 'OK' });
+    }
+
+    if (provider === 'openai') {
+      const openaiModel = (model || 'gpt-4o-mini').trim();
+      const url = 'https://api.openai.com/v1/chat/completions';
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${trimmedKey}`
+        },
+        body: JSON.stringify({
+          model: openaiModel,
+          messages: [{ role: 'user', content: testPrompt }],
+          max_tokens: 10
+        })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        return res.status(response.status).json({
+          success: false,
+          error: data.error?.message || `OpenAI API Error (${response.status})`
+        });
+      }
+      return res.json({ success: true, reply: data.choices?.[0]?.message?.content || 'OK' });
+    }
+
+    if (provider === 'claude') {
+      const claudeModel = (model || 'claude-3-5-sonnet-20241022').trim();
+      const url = 'https://api.anthropic.com/v1/messages';
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': trimmedKey,
+          'anthropic-version': '2023-06-01'
+        },
+        body: JSON.stringify({
+          model: claudeModel,
+          max_tokens: 10,
+          messages: [{ role: 'user', content: testPrompt }]
+        })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        return res.status(response.status).json({
+          success: false,
+          error: data.error?.message || `Claude API Error (${response.status})`
+        });
+      }
+      return res.json({ success: true, reply: data.content?.[0]?.text || 'OK' });
+    }
+
+    if (provider === 'ollama') {
+      const url = 'http://localhost:11434/api/generate';
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: (model || 'llama3').trim(),
+          prompt: testPrompt,
+          stream: false
+        })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        return res.status(response.status).json({
+          success: false,
+          error: data.error || `Ollama Error (${response.status})`
+        });
+      }
+      return res.json({ success: true, reply: data.response || 'OK' });
+    }
+
+    res.json({ success: true, reply: 'OK' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -1298,9 +1667,9 @@ app.post('/api/ai/autofill', async (req, res) => {
 สรุปเป็น 2-4 บรรทัด หรือรายการข้อที่กระชับ ชัดเจน เป็นภาษาไทยสำหรับฝ่ายบริหารและทีมงาน
 ตอบเฉพาะเนื้อหาคำอธิบายเท่านั้น ไม่ต้องมีคำเกริ่น`;
     
-    const descResult = await callLLM(descPrompt, 'คุณคือผู้จัดการโครงการมืออาชีพ');
+    const descResult = await callLLM(descPrompt, 'คุณคือผู้จัดการโครงการมืออาชีพ ตอบเฉพาะข้อความธรรมดา ห้ามใช้ JSON', null, false);
     if (descResult && descResult.trim()) {
-      enhancedDescription = descResult.trim();
+      enhancedDescription = extractCleanText(descResult.trim());
     } else {
       enhancedDescription = `รายละเอียดการดำเนินงานสำหรับ: ${title.trim()}
 - ตรวจสอบความถูกต้องและรวบรวมข้อมูลที่เกี่ยวข้อง
@@ -1316,6 +1685,65 @@ app.post('/api/ai/autofill', async (req, res) => {
     });
   } catch (err) {
     console.error('Error in /api/ai/autofill:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Single Unified AI Action: Auto-complete, Polish, Description & Subtasks in One Go ("ปุ่มเดียวพอ")
+app.post('/api/ai/complete-task', async (req, res) => {
+  try {
+    const { taskId, title, description = '', context = '' } = req.body;
+    if (!taskId) return res.status(400).json({ error: 'taskId is required' });
+
+    const result = await completeTaskAll(title, description, context);
+
+    const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId);
+    if (!task) return res.status(404).json({ error: 'Task not found' });
+
+    let newDueDate = task.due_date;
+    if (!newDueDate && result.suggestedDays) {
+      const d = new Date(Date.now() + 86400000 * result.suggestedDays);
+      newDueDate = d.toISOString().split('T')[0];
+    }
+
+    db.prepare(`
+      UPDATE tasks 
+      SET name = COALESCE(?, name),
+          description = COALESCE(?, description),
+          priority = COALESCE(?, priority),
+          due_date = COALESCE(?, due_date)
+      WHERE id = ?
+    `).run(
+      result.title || null,
+      result.description || null,
+      result.priority || null,
+      newDueDate || null,
+      taskId
+    );
+
+    // Insert subtasks if existing task has no subtasks yet
+    const existingCount = db.prepare('SELECT COUNT(*) as c FROM subtasks WHERE task_id = ?').get(taskId).c;
+    if (existingCount === 0 && Array.isArray(result.subtasks) && result.subtasks.length > 0) {
+      result.subtasks.forEach((st, idx) => {
+        const subId = `sub-${Date.now()}-${idx}`;
+        db.prepare('INSERT INTO subtasks (id, task_id, title, completed, position) VALUES (?, ?, ?, 0, ?)')
+          .run(subId, taskId, st, idx + 1);
+      });
+    }
+
+    indexTask(taskId);
+
+    const updatedTask = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId);
+    const updatedSubtasks = db.prepare('SELECT * FROM subtasks WHERE task_id = ? ORDER BY position ASC').all(taskId);
+
+    res.json({
+      success: true,
+      task: updatedTask,
+      subtasks: updatedSubtasks,
+      severity: result.severity
+    });
+  } catch (err) {
+    console.error('Error in /api/ai/complete-task:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -1422,24 +1850,54 @@ app.post('/api/import/csv', (req, res) => {
   }
 });
 
-// Serve production frontend if built
+// Serve production frontend if built (safe for inside app.asar)
 const DIST_DIR = path.join(__dirname, '..', 'dist');
 if (fs.existsSync(DIST_DIR)) {
-  app.use(express.static(DIST_DIR));
   app.use((req, res, next) => {
-    if (req.method === 'GET' && !req.path.startsWith('/api') && !req.path.startsWith('/uploads')) {
-      return res.sendFile(path.join(DIST_DIR, 'index.html'));
+    if (req.method !== 'GET') return next();
+    if (req.path.startsWith('/api') || req.path.startsWith('/uploads') || req.path.startsWith('/wallpapers')) {
+      return next();
+    }
+
+    let reqPath = req.path === '/' ? 'index.html' : req.path.replace(/^\//, '');
+    let targetPath = path.join(DIST_DIR, reqPath);
+
+    if (!fs.existsSync(targetPath) || fs.statSync(targetPath).isDirectory()) {
+      targetPath = path.join(DIST_DIR, 'index.html');
+    }
+
+    if (fs.existsSync(targetPath)) {
+      const ext = path.extname(targetPath).toLowerCase();
+      const mimeMap = {
+        '.html': 'text/html; charset=utf-8',
+        '.js': 'application/javascript; charset=utf-8',
+        '.css': 'text/css; charset=utf-8',
+        '.json': 'application/json',
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.svg': 'image/svg+xml',
+        '.ico': 'image/x-icon',
+        '.woff': 'font/woff',
+        '.woff2': 'font/woff2'
+      };
+      res.setHeader('Content-Type', mimeMap[ext] || 'application/octet-stream');
+      const buf = fs.readFileSync(targetPath);
+      return res.end(buf);
     }
     next();
   });
 }
 
 // Start listening
+debugLog(`About to listen on PORT ${PORT}`);
 if (process.env.NODE_ENV !== 'test') {
   const server = app.listen(PORT, () => {
+    debugLog(`app.listen callback fired! Running at http://localhost:${PORT}`);
     console.log(`ClickUp Local Backend running at http://localhost:${PORT}`);
   });
   server.on('error', (err) => {
+    debugLog(`server error event: ${err.code} ${err.message}`);
     if (err.code === 'EADDRINUSE') {
       console.log(`[Backend] Port ${PORT} already active, reusing existing instance.`);
     } else {
@@ -1447,5 +1905,6 @@ if (process.env.NODE_ENV !== 'test') {
     }
   });
 }
+debugLog('server.js finished executing synchronously');
 
 module.exports = app;

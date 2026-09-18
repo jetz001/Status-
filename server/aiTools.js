@@ -41,7 +41,7 @@ const tools = {
     const priority = args.priority || 'Normal';
     const dueDate = args.due_date || null;
     const startDate = args.start_date || null;
-    const assignee = args.assignee || 'JM';
+    const assignee = args.assignee || '';
 
     // Get max position
     const maxPos = db.prepare('SELECT COALESCE(MAX(position), 0) as maxP FROM tasks WHERE list_id = ?').get(listId).maxP;
@@ -263,7 +263,7 @@ const tools = {
           description: t.description || '',
           priority: t.priority || 'Normal',
           due_date: t.due_date || null,
-          assignee: t.assignee || 'JM',
+          assignee: t.assignee || '',
           subtasks: t.subtasks || []
         }, fileInfo);
         taskCount++;

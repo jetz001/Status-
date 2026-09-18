@@ -14,6 +14,7 @@ import {
   Loader2,
   Compass
 } from 'lucide-react';
+import { formatToDMY } from './ThaiDatePicker.jsx';
 
 const CATEGORIES = [
   'All', 
@@ -35,13 +36,28 @@ const QUICK_TAGS = [
   'Deep Ocean Waves'
 ];
 
+const DEFAULT_STOCKS = [
+  { id: 'stock-dark-obsidian', name: 'Dark Obsidian Glass', category: 'Dark Minimalist', imageUrl: '/api/wallpaper/file/dark-obsidian.jpg', thumbnail: '/api/wallpaper/file/dark-obsidian.jpg', accent: '#7b68ee' },
+  { id: 'stock-dark-polygon', name: 'Geometric Polygonal Mesh', category: 'Dark Minimalist', imageUrl: '/api/wallpaper/file/dark-polygon.jpg', thumbnail: '/api/wallpaper/file/dark-polygon.jpg', accent: '#3b82f6' },
+  { id: 'stock-cyber-city', name: 'Tokyo Cyberpunk Rain', category: 'Cyber Neon', imageUrl: '/api/wallpaper/file/cyber-neon-city.jpg', thumbnail: '/api/wallpaper/file/cyber-neon-city.jpg', accent: '#06b6d4' },
+  { id: 'stock-neon-horizon', name: 'Neon Violet Horizon', category: 'Cyber Neon', imageUrl: '/api/wallpaper/file/neon-horizon.jpg', thumbnail: '/api/wallpaper/file/neon-horizon.jpg', accent: '#ec4899' },
+  { id: 'stock-midnight-mountain', name: 'Deep Midnight Mountain', category: 'Nature & Landscape', imageUrl: '/api/wallpaper/file/midnight-mountain.jpg', thumbnail: '/api/wallpaper/file/midnight-mountain.jpg', accent: '#38bdf8' },
+  { id: 'stock-pine-forest', name: 'Nordic Pine Forest Mist', category: 'Nature & Landscape', imageUrl: '/api/wallpaper/file/pine-forest-mist.jpg', thumbnail: '/api/wallpaper/file/pine-forest-mist.jpg', accent: '#10b981' },
+  { id: 'stock-milky-way', name: 'Milky Way Starry Night', category: 'Nature & Landscape', imageUrl: '/api/wallpaper/file/milky-way-galaxy.jpg', thumbnail: '/api/wallpaper/file/milky-way-galaxy.jpg', accent: '#818cf8' },
+  { id: 'stock-minimalist-desk', name: 'Clean Workspace Studio', category: 'Architecture & Desk', imageUrl: '/api/wallpaper/file/minimalist-desk.jpg', thumbnail: '/api/wallpaper/file/minimalist-desk.jpg', accent: '#f59e0b' },
+  { id: 'stock-modern-architecture', name: 'Modern Geometric Architecture', category: 'Architecture & Desk', imageUrl: '/api/wallpaper/file/modern-architecture.jpg', thumbnail: '/api/wallpaper/file/modern-architecture.jpg', accent: '#64748b' },
+  { id: 'stock-purple-spheres', name: '3D Purple Liquid Spheres', category: 'Abstract 3D', imageUrl: '/api/wallpaper/file/purple-liquid-spheres.jpg', thumbnail: '/api/wallpaper/file/purple-liquid-spheres.jpg', accent: '#a855f7' },
+  { id: 'stock-silk-flow', name: 'Silk Flow Gradient Wave', category: 'Abstract 3D', imageUrl: '/api/wallpaper/file/silk-gradient-flow.jpg', thumbnail: '/api/wallpaper/file/silk-gradient-flow.jpg', accent: '#ec4899' },
+  { id: 'stock-cyber-sunset', name: 'Cyber Sunset Horizon', category: 'Abstract 3D', imageUrl: '/api/wallpaper/file/cyber-sunset.jpg', thumbnail: '/api/wallpaper/file/cyber-sunset.jpg', accent: '#f97316' }
+];
+
 export default function WallpaperModal({
   isOpen,
   onClose,
   tasks = [],
   listName = 'Task Tracker'
 }) {
-  const [stocks, setStocks] = useState([]);
+  const [stocks, setStocks] = useState(DEFAULT_STOCKS);
   const [selectedStockId, setSelectedStockId] = useState('stock-dark-obsidian');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [customBgUrl, setCustomBgUrl] = useState(null);
@@ -150,6 +166,18 @@ export default function WallpaperModal({
         drawWidget(ctx, width, height, currentStock);
       };
       img.onerror = () => {
+        // Fallback: try alternate route
+        const currentSrc = img.src;
+        if (!img._retried) {
+          img._retried = true;
+          if (currentSrc.includes('/api/wallpaper/file/')) {
+            img.src = currentSrc.replace('/api/wallpaper/file/', '/wallpapers/');
+            return;
+          } else if (currentSrc.includes('/wallpapers/')) {
+            img.src = currentSrc.replace('/wallpapers/', '/api/wallpaper/file/');
+            return;
+          }
+        }
         // Graceful fallback
         drawGradientFallback(ctx, width, height, currentStock);
         drawWidget(ctx, width, height, currentStock);
@@ -341,12 +369,21 @@ export default function WallpaperModal({
           textStartX += badgeWidth + Math.round(8 * totalScale);
         }
 
+        // Due date calculation & text preparation (วัน เดือน ปี เช่น 18 ก.ย. 2026)
+        let dateStr = '';
+        let dateWidth = 0;
+        if (task.due_date) {
+          dateStr = formatToDMY(task.due_date);
+          ctx.font = `bold ${Math.round(11 * totalScale)}px "Segoe UI", sans-serif`;
+          dateWidth = ctx.measureText(dateStr).width + Math.round(14 * totalScale);
+        }
+
         // Task Name
         ctx.fillStyle = task.status === 'COMPLETED' ? '#9ca3af' : '#ffffff';
         ctx.font = `${task.status === 'COMPLETED' ? 'normal' : '600'} ${Math.round(14 * totalScale)}px "Segoe UI", sans-serif`;
         
-        // Measure remaining width for task title
-        const maxTitleWidth = (wx + wWidth - padX) - textStartX - (task.due_date ? Math.round(75 * totalScale) : 0);
+        // Measure remaining width for task title dynamically based on actual date width
+        const maxTitleWidth = (wx + wWidth - padX) - textStartX - dateWidth;
         let title = task.name;
         if (ctx.measureText(title).width > maxTitleWidth) {
           while (title.length > 3 && ctx.measureText(title + '...').width > maxTitleWidth) {
@@ -356,12 +393,22 @@ export default function WallpaperModal({
         }
         ctx.fillText(title, textStartX, itemY);
 
-        // Due date on far right
-        if (task.due_date) {
-          ctx.fillStyle = '#9ca3af';
+        // Due date on far right with contextual status color
+        if (dateStr) {
+          const todayIso = new Date().toISOString().split('T')[0];
+          if (task.status === 'COMPLETED') {
+            ctx.fillStyle = '#6b7280';
+          } else if (task.due_date < todayIso) {
+            ctx.fillStyle = '#f87171'; // เกินกำหนด (แดงอ่อน)
+          } else if (task.due_date === todayIso) {
+            ctx.fillStyle = '#fbbf24'; // วันนี้ (เหลืองอำพัน)
+          } else {
+            ctx.fillStyle = '#9ca3af'; // ปกติ (เทาอ่อน)
+          }
           ctx.font = `bold ${Math.round(11 * totalScale)}px "Segoe UI", sans-serif`;
-          const dateStr = task.due_date.length >= 10 ? task.due_date.slice(5) : task.due_date;
-          ctx.fillText(dateStr, wx + wWidth - padX - Math.round(55 * totalScale), itemY);
+          ctx.textAlign = 'right';
+          ctx.fillText(dateStr, wx + wWidth - padX, itemY);
+          ctx.textAlign = 'left';
         }
 
         itemY += itemHeight;
@@ -542,22 +589,24 @@ export default function WallpaperModal({
                 </button>
               </div>
 
-              {/* Quick Prompt Pills */}
-              <div className="flex flex-wrap gap-1 pt-1">
-                {QUICK_TAGS.map((tag, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    disabled={isGenerating}
-                    onClick={() => {
-                      setSearchPrompt(tag);
-                      handleGenerateAiWallpaper(tag);
-                    }}
-                    className="px-2 py-0.5 rounded bg-[#18191b] hover:bg-purple-950/40 border border-[#383a3e] hover:border-purple-500/40 text-gray-400 hover:text-purple-300 text-[10px] transition cursor-pointer"
-                  >
-                    {tag}
-                  </button>
-                ))}
+              {/* Quick Prompt Dropdown */}
+              <div className="pt-1">
+                <select
+                  value=""
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      setSearchPrompt(e.target.value);
+                      handleGenerateAiWallpaper(e.target.value);
+                    }
+                  }}
+                  disabled={isGenerating}
+                  className="w-full px-2.5 py-1.5 bg-[#18191b] border border-[#383a3e] rounded text-gray-300 text-xs outline-none focus:border-purple-500 cursor-pointer"
+                >
+                  <option value="">✨ เลือกตัวอย่างสไตล์ภาพ AI...</option>
+                  {QUICK_TAGS.map((tag, idx) => (
+                    <option key={idx} value={tag}>{tag}</option>
+                  ))}
+                </select>
               </div>
 
               {generateError && (
@@ -574,21 +623,18 @@ export default function WallpaperModal({
                 <span className="text-gray-500 text-[10px]">({filteredStocks.length} ภาพ)</span>
               </label>
 
-              <div className="flex flex-wrap gap-1">
-                {CATEGORIES.map(cat => (
-                  <button
-                    key={cat}
-                    type="button"
-                    onClick={() => setSelectedCategory(cat)}
-                    className={`px-2 py-1 rounded text-[10px] font-medium transition cursor-pointer ${
-                      selectedCategory === cat
-                        ? 'bg-[#7b68ee] text-white shadow-sm'
-                        : 'bg-[#222427] text-gray-400 hover:text-white hover:bg-[#2c2e33]'
-                    }`}
-                  >
-                    {cat}
-                  </button>
-                ))}
+              <div className="pt-0.5">
+                <select
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value)}
+                  className="w-full px-2.5 py-1.5 bg-[#222427] border border-[#383a3e] rounded-lg text-white font-medium text-xs outline-none focus:border-purple-500 cursor-pointer"
+                >
+                  {CATEGORIES.map(cat => (
+                    <option key={cat} value={cat}>
+                      {cat === 'All' ? 'หมวดหมู่: ทั้งหมด (All Presets)' : `หมวดหมู่: ${cat}`}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               {/* Stock Wallpapers Grid */}
@@ -612,6 +658,17 @@ export default function WallpaperModal({
                         alt={stk.name} 
                         className="w-full h-full object-cover" 
                         loading="lazy"
+                        onError={(e) => {
+                          const src = e.target.src;
+                          if (!e.target._retried) {
+                            e.target._retried = true;
+                            if (src.includes('/api/wallpaper/file/')) {
+                              e.target.src = src.replace('/api/wallpaper/file/', '/wallpapers/');
+                            } else if (src.includes('/wallpapers/')) {
+                              e.target.src = src.replace('/wallpapers/', '/api/wallpaper/file/');
+                            }
+                          }
+                        }}
                       />
                     </div>
                     <span className="text-[10px] text-gray-300 font-medium truncate block pt-1">
@@ -650,30 +707,32 @@ export default function WallpaperModal({
                 </span>
               </label>
 
-              {/* Source Toggle */}
-              <div className="grid grid-cols-2 gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setTaskSource('all')}
-                  className={`py-1.5 px-2 rounded text-xs font-medium transition cursor-pointer flex items-center justify-center space-x-1 ${
-                    taskSource === 'all'
-                      ? 'bg-purple-600 text-white font-bold shadow-sm'
-                      : 'bg-[#222427] text-gray-400 hover:text-white hover:bg-[#2c2e33]'
-                  }`}
-                >
-                  <span>🌐 ทุกโปรเจกต์</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTaskSource('current')}
-                  className={`py-1.5 px-2 rounded text-xs font-medium transition cursor-pointer flex items-center justify-center space-x-1 ${
-                    taskSource === 'current'
-                      ? 'bg-purple-600 text-white font-bold shadow-sm'
-                      : 'bg-[#222427] text-gray-400 hover:text-white hover:bg-[#2c2e33]'
-                  }`}
-                >
-                  <span>📁 เฉพาะลิสต์นี้</span>
-                </button>
+              {/* Scope & Count Dropdowns */}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <label className="text-gray-400 text-[11px] block">ขอบเขตงาน</label>
+                  <select
+                    value={taskSource}
+                    onChange={(e) => setTaskSource(e.target.value)}
+                    className="w-full px-2 py-1.5 bg-[#222427] border border-[#383a3e] rounded-lg text-white text-xs outline-none focus:border-purple-500 cursor-pointer"
+                  >
+                    <option value="all">🌐 ทุกโปรเจกต์</option>
+                    <option value="current">📁 เฉพาะลิสต์นี้</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-gray-400 text-[11px] block">จำนวนงานที่แสดง</label>
+                  <select
+                    value={maxTasksCount}
+                    onChange={(e) => setMaxTasksCount(Number(e.target.value))}
+                    className="w-full px-2 py-1.5 bg-[#222427] border border-[#383a3e] rounded-lg text-white text-xs outline-none focus:border-purple-500 cursor-pointer"
+                  >
+                    <option value={6}>6 งาน</option>
+                    <option value={8}>8 งาน (แนะนำ)</option>
+                    <option value={10}>10 งาน</option>
+                    <option value={12}>12 งาน</option>
+                  </select>
+                </div>
               </div>
 
               {/* Only Pending Filter */}
@@ -686,27 +745,6 @@ export default function WallpaperModal({
                 />
                 <span>ซ่อนงานที่เสร็จแล้ว (แสดงเฉพาะงานค้าง)</span>
               </label>
-
-              {/* Max Tasks Count */}
-              <div className="flex items-center justify-between text-xs pt-1">
-                <span className="text-gray-400">จำนวนงานที่แสดง:</span>
-                <div className="flex space-x-1">
-                  {[6, 8, 10, 12].map(cnt => (
-                    <button
-                      key={cnt}
-                      type="button"
-                      onClick={() => setMaxTasksCount(cnt)}
-                      className={`px-2 py-0.5 rounded text-[11px] font-bold transition cursor-pointer ${
-                        maxTasksCount === cnt
-                          ? 'bg-[#7b68ee] text-white'
-                          : 'bg-[#222427] text-gray-400 hover:bg-[#2a2b2d]'
-                      }`}
-                    >
-                      {cnt}
-                    </button>
-                  ))}
-                </div>
-              </div>
             </div>
 
             {/* 2. Text & Card Scale Control */}
@@ -741,28 +779,20 @@ export default function WallpaperModal({
                 <span>ตำแหน่งการวางกล่องงาน</span>
               </label>
 
-              {/* Position Buttons */}
-              <div className="grid grid-cols-2 gap-1.5">
-                {[
-                  { id: 'center-right', label: 'กลางขวา (แนะนำหลบไอคอน)' },
-                  { id: 'center', label: 'กึ่งกลางจอ' },
-                  { id: 'top-right', label: 'ขวาบน' },
-                  { id: 'bottom-right', label: 'ขวาล่าง' },
-                  { id: 'top-left', label: 'ซ้ายบน' },
-                  { id: 'bottom-left', label: 'ซ้ายล่าง' },
-                ].map(p => (
-                  <button
-                    key={p.id}
-                    onClick={() => setPosition(p.id)}
-                    className={`py-1.5 px-2 rounded text-[11px] transition cursor-pointer text-center ${
-                      position === p.id 
-                        ? 'bg-[#7b68ee] text-white font-bold shadow-sm' 
-                        : 'bg-[#222427] text-gray-300 hover:bg-[#2a2b2d]'
-                    }`}
-                  >
-                    {p.label}
-                  </button>
-                ))}
+              {/* Position Select Dropdown */}
+              <div className="pt-0.5">
+                <select
+                  value={position}
+                  onChange={(e) => setPosition(e.target.value)}
+                  className="w-full px-2.5 py-1.5 bg-[#222427] border border-[#383a3e] rounded-lg text-white text-xs outline-none focus:border-purple-500 cursor-pointer"
+                >
+                  <option value="center-right">กลางขวา (Center Right - แนะนำหลบไอคอน)</option>
+                  <option value="center">กึ่งกลางจอ (Center)</option>
+                  <option value="top-right">ขวาบน (Top Right)</option>
+                  <option value="bottom-right">ขวาล่าง (Bottom Right)</option>
+                  <option value="top-left">ซ้ายบน (Top Left)</option>
+                  <option value="bottom-left">ซ้ายล่าง (Bottom Left)</option>
+                </select>
               </div>
 
               {/* Opacity Slider */}

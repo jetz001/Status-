@@ -18,12 +18,24 @@ import HomeView from './components/HomeView.jsx';
 
 export default function App() {
   const [spaces, setSpaces] = useState([]);
-  const [activeListId, setActiveListId] = useState('list-iqa26');
+  const [activeListId, setActiveListId] = useState(null);
   const [tasks, setTasks] = useState([]);
   const [allTasks, setAllTasks] = useState([]);
   const [fields, setFields] = useState([]);
   const [activeView, setActiveView] = useState('home'); // 'home' | 'list' | 'board' | 'timeline'
   const [searchQuery, setSearchQuery] = useState('');
+  const [workspaceInfo, setWorkspaceInfo] = useState(() => {
+    try {
+      const u = localStorage.getItem('status_user_name');
+      const w = localStorage.getItem('status_workspace_name');
+      return {
+        workspaceName: w || 'My Workspace',
+        userName: u || 'User'
+      };
+    } catch {
+      return { workspaceName: 'My Workspace', userName: 'User' };
+    }
+  });
   
   // Modals & Panels
   const [selectedTask, setSelectedTask] = useState(null);
@@ -95,14 +107,28 @@ export default function App() {
   const loadTasks = async (listId = activeListId) => {
     if (!listId) return;
     if (listId === 'all') {
-      loadAllTasks();
+      try {
+        const res = await fetch('/api/tasks/all');
+        const data = await res.json();
+        const fresh = data || [];
+        setAllTasks(fresh);
+        setTasks(fresh);
+      } catch (err) {
+        console.error('Error loading all tasks:', err);
+      }
       return;
     }
     try {
       const res = await fetch(`/api/tasks?listId=${listId}`);
       const data = await res.json();
-      setTasks(data.tasks || []);
+      const freshTasks = data.tasks || [];
+      setTasks(freshTasks);
       setFields(data.fields || []);
+      setSelectedTask(prev => {
+        if (!prev) return null;
+        const fresh = freshTasks.find(t => t.id === prev.id);
+        return fresh ? { ...prev, ...fresh } : prev;
+      });
     } catch (err) {
       console.error('Error loading tasks:', err);
     }
@@ -168,7 +194,66 @@ export default function App() {
     }
   };
 
+  // Load Workspace Info (Name, User)
+  const loadWorkspaceInfo = async () => {
+    try {
+      const res = await fetch('/api/workspace');
+      if (res.ok) {
+        const data = await res.json();
+        setWorkspaceInfo(prev => {
+          const localUser = localStorage.getItem('status_user_name');
+          const localWs = localStorage.getItem('status_workspace_name');
+          const userName = (data.userName && data.userName !== 'User' && data.userName !== 'Me')
+            ? data.userName
+            : (localUser || data.userName || prev.userName);
+          const workspaceName = data.workspaceName || localWs || prev.workspaceName;
+          try {
+            if (userName) localStorage.setItem('status_user_name', userName);
+            if (workspaceName) localStorage.setItem('status_workspace_name', workspaceName);
+          } catch (e) {}
+          return { workspaceName, userName };
+        });
+      }
+    } catch (err) {
+      console.error('Error loading workspace info:', err);
+    }
+  };
+
+  // Update Workspace & User Info
+  const handleUpdateWorkspaceInfo = async (newInfo) => {
+    // 1. Instantly update React state & localStorage so UI never reverts
+    setWorkspaceInfo(prev => {
+      const nextUser = newInfo.userName !== undefined ? newInfo.userName : prev.userName;
+      const nextWs = newInfo.workspaceName !== undefined ? newInfo.workspaceName : prev.workspaceName;
+      try {
+        if (nextUser) localStorage.setItem('status_user_name', nextUser);
+        if (nextWs) localStorage.setItem('status_workspace_name', nextWs);
+      } catch (e) {}
+      return { workspaceName: nextWs, userName: nextUser };
+    });
+
+    // 2. Persist to server
+    try {
+      await fetch('/api/workspace', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newInfo)
+      });
+      await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_name: newInfo.userName,
+          workspace_name: newInfo.workspaceName
+        })
+      });
+    } catch (err) {
+      console.error('Error updating workspace info:', err);
+    }
+  };
+
   useEffect(() => {
+    loadWorkspaceInfo();
     loadSpaces();
     loadAllTasks();
     checkNotifications();
@@ -297,7 +382,7 @@ export default function App() {
       const data = typeof taskData === 'string' ? { name: taskData } : taskData;
       let targetList = data.list_id || activeListId;
       if (!targetList || targetList === 'all') {
-        targetList = spaces[0]?.lists?.[0]?.id || 'list-iqa26';
+        targetList = spaces[0]?.lists?.[0]?.id || '';
       }
       await fetch('/api/tasks', {
         method: 'POST',
@@ -320,15 +405,22 @@ export default function App() {
 
   const handleUpdateTask = async (taskId, updates) => {
     try {
-      await fetch(`/api/tasks/${taskId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates)
-      });
+      const { attachments: updatedAtts, ...dbUpdates } = updates;
+      if (Object.keys(dbUpdates).length > 0) {
+        await fetch(`/api/tasks/${taskId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(dbUpdates)
+        });
+      }
       loadTasks();
       loadAllTasks();
       if (selectedTask && selectedTask.id === taskId) {
-        setSelectedTask(prev => ({ ...prev, ...updates }));
+        setSelectedTask(prev => ({ 
+          ...prev, 
+          ...updates,
+          ...(updatedAtts !== undefined ? { attachments: updatedAtts } : {})
+        }));
       }
     } catch (err) {
       console.error(err);
@@ -439,10 +531,10 @@ export default function App() {
   };
 
   // Find active space and list metadata
-  let activeSpaceName = 'Team Space';
-  let activeListName = 'IQA26';
+  let activeSpaceName = spaces[0]?.name || 'Workspace';
+  let activeListName = spaces[0]?.lists?.[0]?.name || 'Tasks';
   if (activeListId === 'all') {
-    activeSpaceName = "Jet mut's Workspace";
+    activeSpaceName = 'Workspace';
     activeListName = 'All Tasks';
   } else {
     for (const sp of spaces) {
@@ -471,6 +563,7 @@ export default function App() {
     <div className="flex h-screen w-screen overflow-hidden bg-[#1e1f21] text-[#ececef]">
       {/* 1. Left Sidebar */}
       <Sidebar 
+        workspaceName={workspaceInfo.workspaceName}
         spaces={spaces}
         activeListId={activeListId}
         activeView={activeView}
@@ -515,7 +608,7 @@ export default function App() {
           onOpenAISidebar={() => setShowAISidebar(true)}
           onOpenWallpaperModal={() => setShowWallpaperModal(true)}
           onOpenNotificationCenter={() => setShowNotificationCenter(prev => !prev)}
-          onOpenPrintReport={() => setPrintConfig({ type: 'list' })}
+          onOpenPrintReport={(viewType) => setPrintConfig({ type: viewType || activeView || 'list' })}
           onOpenCustomFieldModal={() => setShowCustomFieldModal(true)}
           onOpenBackupDataModal={() => setShowBackupModal(true)}
           onQuickAddTask={() => handleQuickAddTask({ name: 'งานใหม่...', status: 'NOT STARTED' })}
@@ -528,6 +621,9 @@ export default function App() {
         <div className="flex-1 flex overflow-hidden">
           {activeView === 'home' && (
             <HomeView 
+              workspaceName={workspaceInfo.workspaceName}
+              userName={workspaceInfo.userName}
+              onUpdateWorkspaceInfo={handleUpdateWorkspaceInfo}
               allTasks={allTasks}
               spaces={spaces}
               onSelectTask={setSelectedTask}
@@ -711,6 +807,8 @@ export default function App() {
       <SettingsModal 
         isOpen={showSettingsModal}
         onClose={() => setShowSettingsModal(false)}
+        workspaceInfo={workspaceInfo}
+        onUpdateWorkspaceInfo={handleUpdateWorkspaceInfo}
       />
 
       {/* 10. Image Lightbox */}
@@ -723,10 +821,12 @@ export default function App() {
       {printConfig && (
         <PrintReportView 
           type={printConfig.type}
-          tasks={tasks}
+          tasks={(printConfig.type === 'home' || activeListId === 'all') ? allTasks : tasks}
           singleTask={printConfig.singleTask}
           listName={activeListName}
           spaceName={activeSpaceName}
+          workspaceName={workspaceInfo.workspaceName}
+          userName={workspaceInfo.userName}
           onClose={() => setPrintConfig(null)}
         />
       )}
@@ -739,6 +839,7 @@ export default function App() {
         activeListName={activeListName}
         onDataRestored={() => {
           loadSpaces();
+          loadAllTasks();
           loadTasks();
         }}
       />

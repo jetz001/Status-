@@ -29,7 +29,7 @@ const SKILLS = {
   },
   advisor: {
     id: 'advisor',
-    label: 'ที่ปรึกษาวางแผนงาน (Advisor)',
+    label: 'ผู้ช่วยอัจฉริยะ (AI Assistant)',
     icon: 'Sparkles',
     badgeClass: 'bg-blue-500/15 text-blue-300 border-blue-500/40',
     tools: ['query_tasks', 'get_project_overview']
@@ -53,6 +53,11 @@ function routeSkill(userText, hasAttachment = false) {
 
   const text = (userText || '').toLowerCase().trim();
 
+  // 0. General Greeting & Friendly Chat Intent
+  if (/^(?:ดี|หวัดดี|สวัสดี|hello|hi|hey|ดีครับ|ดีค่ะ|สวัสดีครับ|สวัสดีค่ะ|ทำอะไรได้บ้าง|ช่วยอะไรได้บ้าง|คุณคือใคร|แนะนำตัว|คุยกันหน่อย)[\s\!\?\.]*$/i.test(text)) {
+    return SKILLS.advisor;
+  }
+
   // 0. Plan confirmation intent (e.g. "จัดมาเลย", "เอาเลย", "อนุมัติ", "ตกลง")
   if (/^(?:จัดมาเลย|จัดไป|เอาเลย|สร้างเลย|อนุมัติ|ตกลง|โอเค|ลุยเลย|สร้างตามนี้|ตามนั้น|เอาตามนี้|confirm|approve|ok|yes|จัดเลย|ดำเนินการเลย)/i.test(text)) {
     return SKILLS.task_ops;
@@ -68,8 +73,8 @@ function routeSkill(userText, hasAttachment = false) {
     return SKILLS.project_builder;
   }
 
-  // 2. Task CRUD operations
-  if (/สร้าง\s*งาน|เพิ่ม\s*งาน|ลบ\s*งาน|แก้ไข\s*งาน|อัปเดต|เปลี่ยน\s*(สถานะ|กำหนด|วันส่ง|ความสำคัญ)|ทำเสร็จ|ย้าย\s*งาน|เพิ่ม\s*(checklist|subtask|งานย่อย)/i.test(text)) {
+  // 2. Task CRUD & Natural Language Task assignment operations
+  if (/สร้าง\s*งาน|เพิ่ม\s*งาน|ลบ\s*งาน|แก้ไข\s*งาน|อัปเดต|เปลี่ยน\s*(สถานะ|กำหนด|วันส่ง|ความสำคัญ)|ทำเสร็จ|ย้าย\s*งาน|เพิ่ม\s*(checklist|subtask|งานย่อย)|ป้าย|ติดตั้ง|ซ่อม|ช่าง|จัดทำ|ดำเนินการ|หัวหน้าให้ทำ|มีงาน|ช่วยวางแผน|วางแผนงาน/i.test(text)) {
     return SKILLS.task_ops;
   }
 
@@ -88,7 +93,11 @@ function routeSkill(userText, hasAttachment = false) {
 async function fallbackRuleExecution(skill, query, fileProcessed = null, activeListId = null) {
   const actions = [];
   let reply = '';
-  const text = query.trim();
+  // Friendly Greeting & Introduction Intent
+  if (/^(?:ดี|หวัดดี|สวัสดี|hello|hi|hey|ดีครับ|ดีค่ะ|สวัสดีครับ|สวัสดีค่ะ|ทำอะไรได้บ้าง|ช่วยอะไรได้บ้าง|คุณคือใคร|แนะนำตัว|คุยกันหน่อย)[\s\!\?\.]*$/i.test(text)) {
+    reply = `สวัสดีครับ! ผมคือ Status+ AI ผู้ช่วยอัจฉริยะด้านการบริหารจัดการงานและโครงการครับ 😊\n\nยินดีที่ได้พูดคุยและพร้อมช่วยเหลือคุณเสมอครับ คุณสามารถสั่งงานหรือปรึกษาผมได้หลายด้าน เช่น:\n• 📊 **สรุปภาพรวมงาน & KPI** (พิมพ์ *สรุปงาน* หรือ *ภาพรวม*)\n• 📋 **สร้างหรือปรับปรุงงาน** (พิมพ์ *สร้างงาน...* หรือสั่งย้าย/ลบงาน)\n• 🔁 **ตั้งค่างานแบบทำซ้ำเป็นประจำ (Recurring Tasks)**\n• 📄 **อ่านเอกสาร PDF หรือรูปภาพ** เพื่อแปลงเป็นรายการงานอัตโนมัติ\n• 🖥️ **แคปหน้าจอและสั่งการคอมพิวเตอร์ Windows**\n\nวันนี้อยากให้ช่วยดูแลงานส่วนไหน พิมพ์บอกหรือสอบถามได้เลยครับ!`;
+    return { skill: SKILLS.advisor, actions: [], reply };
+  }
 
   // Document extraction fallback -> PROPOSE PLAN FIRST (Grill-me)
   if (fileProcessed) {
@@ -309,6 +318,16 @@ async function processAgentQuery({
   const cleanMsg = (userMessage || '').trim();
   const isAffirmative = /^(?:จัดมาเลย|จัดไป|เอาเลย|สร้างเลย|อนุมัติ|ตกลง|โอเค|ลุยเลย|สร้างตามนี้|ตามนั้น|เอาตามนี้|confirm|approve|ok|yes|จัดเลย|ดำเนินการเลย)/i.test(cleanMsg);
 
+  // Intercept greetings & casual chat directly
+  if (!fileProcessed && /^(?:ดี|หวัดดี|สวัสดี|hello|hi|hey|ดีครับ|ดีค่ะ|สวัสดีครับ|สวัสดีค่ะ|ทำอะไรได้บ้าง|ช่วยอะไรได้บ้าง|คุณคือใคร|แนะนำตัว|คุยกันหน่อย)[\s\!\?\.]*$/i.test(cleanMsg)) {
+    return await fallbackRuleExecution(SKILLS.advisor, cleanMsg, null, activeListId);
+  }
+
+  // Intercept project overview / status query directly so user gets instant stats & task list
+  if (!fileProcessed && /^(?:สรุป|ภาพรวม|สถานะ|รายงาน|overview|dashboard|kpi|สรุปงานทั้งหมด|สถานะงานทั้งหมด|สรุปภาพรวมและสถานะงานทั้งหมดในระบบ)/i.test(cleanMsg) && !/สร้าง|ลบ|เพิ่ม|ย้าย/i.test(cleanMsg)) {
+    return await fallbackRuleExecution(SKILLS.advisor, cleanMsg, null, activeListId);
+  }
+
   // 0. Natural Language Plan Confirmation (e.g. user typed "จัดมาเลย" in chat)
   if (isAffirmative && !fileProcessed && sessionId) {
     let pendingPlan = null;
@@ -357,6 +376,108 @@ async function processAgentQuery({
         actions: createdTasks,
         reply: `🎉 **อนุมัติสร้างงานตามแผนทั้งหมด ${createdTasks.length} รายการ เรียบร้อยแล้วครับ!**\n\n• บรรจุใน List: **"${targetListName}"**\n\n**รายการงานที่สร้าง:**\n${taskNamesList}\n\nคุณสามารถคลิกเปิดดูการ์ดงานเพื่อตรวจสอบความคืบหน้าได้ทันทีครับ`
       };
+    }
+  }
+
+  // 0.1 Natural Language "ขอดูหน่อย" / "ดูแผน" / "มีอะไรบ้าง" Intent
+  const isShowRequest = /^(?:ขอดูหน่อย|ดูหน่อย|ไหนดูซิ|ขอดูแผน|ดูแผน|ขอดู|มีอะไรบ้าง|ขอตรวจสอบ|ตรวจแผน|ไหนแผน|ขอแผน)[\s\!\?\.]*$/i.test(cleanMsg);
+  if (isShowRequest && !fileProcessed && sessionId) {
+    let pendingPlan = null;
+    let lastUserTopic = '';
+    try {
+      const sess = db.prepare('SELECT messages_json FROM ai_chat_sessions WHERE id = ?').get(sessionId);
+      if (sess && sess.messages_json) {
+        const msgs = JSON.parse(sess.messages_json);
+        for (let i = msgs.length - 1; i >= 0; i--) {
+          if (msgs[i].role === 'assistant' && Array.isArray(msgs[i].actions)) {
+            const found = msgs[i].actions.find(a => (a.action === 'plan_proposal' || a.type === 'plan_proposal') && a.plan);
+            if (found) {
+              pendingPlan = found.plan;
+              break;
+            }
+          }
+        }
+        if (!pendingPlan) {
+          const userMsgs = msgs.filter(m => m.role === 'user');
+          if (userMsgs.length > 0) {
+            lastUserTopic = userMsgs.map(m => m.content).join(' ');
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Error fetching pending plan or topic:', e);
+    }
+
+    if (pendingPlan) {
+      return {
+        skill: SKILLS.task_ops,
+        actions: [{
+          action: 'plan_proposal',
+          title: '📋 ร่างแผนงาน (รออนุมัติก่อนสร้าง)',
+          plan: pendingPlan,
+          availableLists: flatLists
+        }],
+        reply: `นี่คือร่างแผนงานและขั้นตอนที่จัดเตรียมไว้ให้ครับ คุณสามารถตรวจสอบรายละเอียด เลือก Space/List ปลายทาง และกดปุ่มอนุมัติสร้างงานด้านล่างได้เลยครับ:`
+      };
+    } else if (lastUserTopic) {
+      let planName = 'ติดตั้งป้ายรับสมัครงานไวนิลหน้าโรงงาน';
+      let planDesc = 'ป้ายเดิมชำรุด/ขาด ส่งมอบป้ายไวนิลรับสมัครงานใหม่ให้ช่างดำเนินการติดตั้งบริเวณหน้าโรงงาน';
+      let subtasks = [
+        'ตรวจสอบสภาพและขนาดของป้ายไวนิลรับสมัครงานใหม่',
+        'ประสานงานช่างซ่อมบำรุง/ช่างอาคารเพื่อนัดหมายและส่งมอบงานติดตั้ง',
+        'รื้อถอนป้ายเดิมที่ชำรุดออกอย่างปลอดภัย',
+        'ดำเนินการติดตั้งป้ายไวนิลใหม่ที่ตำแหน่งหน้าโรงงาน',
+        'ตรวจรับความเรียบร้อยและความแข็งแรงหลังการติดตั้ง'
+      ];
+
+      if (!/ป้าย|ไวนิล/i.test(lastUserTopic)) {
+        planName = lastUserTopic.slice(0, 45);
+        planDesc = lastUserTopic;
+        subtasks = ['ตรวจสอบรายละเอียดและข้อกำหนด', 'ดำเนินการตามแผน', 'ตรวจรับงานและสรุปผล'];
+      }
+
+      const defaultListId = activeListId || (flatLists[0]?.listId || '');
+      const synthesizedPlan = {
+        name: planName,
+        description: planDesc,
+        priority: 'Normal',
+        subtasks,
+        defaultListId,
+        tasks: [{
+          name: planName,
+          description: planDesc,
+          priority: 'Normal',
+          subtasks
+        }]
+      };
+
+      return {
+        skill: SKILLS.task_ops,
+        actions: [{
+          action: 'plan_proposal',
+          title: '📋 ร่างแผนงาน (รออนุมัติก่อนสร้าง)',
+          plan: synthesizedPlan,
+          availableLists: flatLists
+        }],
+        reply: `นี่คือร่างแผนงานและขั้นตอน Checklist ที่ผมได้จัดเตรียมไว้ให้ตามที่คุณได้แจ้งไว้ครับ:\n\n• **ชื่องาน:** ${planName}\n• **รายละเอียด:** ${planDesc}\n\nคุณสามารถเลือก Space และ List ปลายทางที่ต้องการจากการ์ดด้านล่าง แล้วกดอนุมัติเพื่อสร้างงานลงในระบบได้เลยครับ! 😊`
+      };
+    }
+  }
+
+  // Load recent session chat history for multi-turn conversational awareness
+  let chatHistoryContext = '';
+  if (sessionId) {
+    try {
+      const sess = db.prepare('SELECT messages_json FROM ai_chat_sessions WHERE id = ?').get(sessionId);
+      if (sess && sess.messages_json) {
+        const msgs = JSON.parse(sess.messages_json);
+        const recent = msgs.slice(-6);
+        if (recent.length > 0) {
+          chatHistoryContext = recent.map(m => `${m.role === 'user' ? 'ผู้ใช้' : 'AI'}: ${m.content}`).join('\n');
+        }
+      }
+    } catch (e) {
+      console.warn('Error loading chat history:', e);
     }
   }
 
@@ -437,7 +558,45 @@ ${fileProcessed.text ? `เนื้อหาในเอกสารที่�
       }
     }
   ],
-  "reply": "สร้างงานเรียบร้อยแล้วครับ"
+4. **การสนทนาทั่วไป การทักทาย และการตอบคำถามทั่วไป (General Conversation & Chatting)**:
+   - หากผู้ใช้ทักทาย (เช่น "ดี", "สวัสดี", "hello", "hi", "หวัดดี") หรือพูดคุย ปรึกษา สอบถามทั่วไป:
+     - ตอบกลับอย่างเป็นมิตร สุภาพ นอบน้อม ชัดเจน กระชับ และเป็นประโยชน์
+     - **ห้ามบังคับหรือทวงถามให้แนบรูปภาพหรือเอกสารเด็ดขาด!**
+     - กำหนด "actions": [] เป็น array ว่าง
+     - ตัวอย่าง JSON เมื่อสนทนาทั่วไป:
+{
+  "actions": [],
+  "reply": "สวัสดีครับ! ผมคือ Status+ AI ผู้ช่วยด้านการบริหารจัดการงานและโครงการ ยินดีที่ได้คุยกันครับ 😊 วันนี้อยากให้ช่วยวางแผน ติดตาม หรือจัดการงานส่วนไหน บอกได้เลยครับ!"
+}
+
+5. **เมื่อผู้ใช้เล่าถึงภาระงาน มอบหมายงาน หรือขอให้ช่วยวางแผนงานด้วยข้อความ (Natural Language Task Assignment & Planning)**:
+   - เช่น ผู้ใช้บอกว่า "หัวหน้าให้ทำป้ายรับสมัครงาน", "ป้ายไวนิล เอามาให้ช่างติดตั้งที่หน้าโรงงาน ป้ายเก่ามันขาด ไม่รู้จะใช้ spaceไหน", "ช่วยวางแผนงานซ่อมบำรุง", "มีงานด่วน...":
+   - **ให้ร่างแผนงาน (plan_proposal) ทันที!** โดย:
+     - กำหนด name: ชื่องานที่กระชับและเป็นทางการ (เช่น "ติดตั้งป้ายไวนิลรับสมัครงานหน้าโรงงาน (ทดแทนป้ายเก่า)")
+     - กำหนด description: รายละเอียดงานและที่มา
+     - กำหนด priority: ความสำคัญที่เหมาะสม เช่น "High" หรือ "Normal"
+     - กำหนด subtasks: ขั้นตอน Checklist สำหรับการปฏิบัติงานจริง 3-5 ข้อ
+     - โครงสร้าง JSON:
+{
+  "actions": [
+    {
+      "action": "plan_proposal",
+      "title": "📋 ร่างแผนงาน (รออนุมัติก่อนสร้าง)",
+      "plan": {
+        "name": "ติดตั้งป้ายไวนิลรับสมัครงานหน้าโรงงาน (ทดแทนป้ายเก่า)",
+        "description": "ป้ายเดิมชำรุด/ขาด ส่งมอบป้ายไวนิลรับสมัครงานใหม่ให้ช่างดำเนินการติดตั้งบริเวณหน้าโรงงาน",
+        "priority": "High",
+        "subtasks": [
+          "ตรวจสอบสภาพและขนาดของป้ายไวนิลใหม่",
+          "ประสานงานช่างเพื่อนัดหมายและส่งมอบงานติดตั้ง",
+          "รื้อถอนป้ายเดิมที่ชำรุดออก",
+          "ดำเนินการติดตั้งป้ายใหม่บริเวณหน้าโรงงาน",
+          "ตรวจรับความเรียบร้อยหลังการติดตั้ง"
+        ]
+      }
+    }
+  ],
+  "reply": "ผมได้ร่างแผนงานและขั้นตอน Checklist สำหรับการติดตั้งป้ายรับสมัครงานมาให้เรียบร้อยแล้วครับ เนื่องจากยังไม่ได้ระบุ Space/List คุณสามารถเลือก Space/List ที่ต้องการจากการ์ดด้านล่าง หรือกดอนุมัติเพื่อสร้างงานลงในระบบได้เลยครับ!"
 }
 `;
 
@@ -486,6 +645,9 @@ function safeJsonParse(rawText) {
   // Attempt LLM execution
   try {
     let prompt = userMessage ? userMessage.trim() : '';
+    if (chatHistoryContext) {
+      prompt = `[ประวัติการสนทนาก่อนหน้านี้ในห้องแชทนี้]:\n${chatHistoryContext}\n\n[ข้อความล่าสุดจากผู้ใช้]:\n${prompt}`;
+    }
     if (fileProcessed) {
       const fileContext = fileProcessed.type === 'image'
         ? 'ช่วยวิเคราะห์ภาพแนบนี้ อ่านข้อความ OCR และสาระสำคัญ สกัดรายการงาน (Tasks) ทั้งหมดที่พบในภาพอย่างครบถ้วนทุกรายการ (หากมีหลายงานในภาพ ให้สกัดใส่ใน plan.tasks ให้ครบทุกงาน ห้ามเลือกมาแค่งานเดียวเด็ดขาด) พร้อม Checklist ข้อย่อยเพื่อนำเข้าสู่ระบบ Status+'
@@ -494,7 +656,7 @@ function safeJsonParse(rawText) {
     } else if (!prompt) {
       prompt = 'สรุปภาพรวมงานในระบบ';
     }
-    const llmResponse = await callLLM(prompt, systemInstruction, fileProcessed);
+    const llmResponse = await callLLM(prompt, systemInstruction, fileProcessed, true);
 
     if (llmResponse) {
       const parsed = safeJsonParse(llmResponse);
@@ -503,14 +665,18 @@ function safeJsonParse(rawText) {
 
         if (Array.isArray(parsed.actions)) {
           for (const act of parsed.actions) {
-            // Convert task_creation or non-standard plan into plan_proposal if plan_proposal is requested
-            if (act.type === 'task_creation' || (!act.action && act.task)) {
+            // Convert task_creation, confirmation, or non-standard plan into plan_proposal
+            if (act.type === 'task_creation' || act.type === 'confirmation' || act.type === 'space_selection' || (!act.action && act.task)) {
               act.action = 'plan_proposal';
+              const rawPlan = act.plan || act.task || {};
+              const planName = rawPlan.name || rawPlan.project_name || (act.details?.parameters?.service ? `ติดตั้ง${act.details.parameters.service}` : null) || 'งานที่มอบหมาย';
+              const planDesc = rawPlan.description || rawPlan.notes || (act.details?.parameters?.notes || cleanMsg);
+              const rawSubtasks = Array.isArray(rawPlan.subtasks) ? rawPlan.subtasks : (Array.isArray(act.options) ? act.options.map(o => o.details || o.response) : []);
               act.plan = {
-                name: act.task?.name || act.task?.project_name || 'งานที่สกัดจากเอกสาร/ภาพ',
-                description: act.task?.description || act.task?.notes || 'สกัดจากเอกสาร/ภาพ',
-                priority: act.task?.priority || 'Normal',
-                subtasks: (act.task?.subtasks || []).map(s => typeof s === 'string' ? s : (s.description || s.action || s.title || ''))
+                name: planName,
+                description: planDesc,
+                priority: rawPlan.priority || 'Normal',
+                subtasks: rawSubtasks.map(s => typeof s === 'string' ? s : (s.task || s.title || s.name || s.description || s.action || '')).filter(Boolean)
               };
             }
 
@@ -534,7 +700,7 @@ function safeJsonParse(rawText) {
                   }
                 }
 
-                // Sanitize every task name
+                // Sanitize every task name and normalize subtasks
                 act.plan.tasks = act.plan.tasks.map(t => {
                   let cleanName = (t.name || '').trim();
                   cleanName = cleanName.replace(/^(?:จัดทำแผนงานและดำเนิน(?:การ)?ตาม(?:รูปภาพ|ภาพ|เอกสาร)|วิเคราะห์และดำเนิน(?:การ)?ตาม(?:รูปภาพ|ภาพ|เอกสาร)|ตาม(?:รูปภาพ|ภาพ|เอกสาร)|งานตาม(?:รูปภาพ|ภาพ))\s*[:\-]?\s*/i, '');
@@ -542,10 +708,16 @@ function safeJsonParse(rawText) {
                   if (!cleanName || cleanName.length < 3) {
                     cleanName = 'งานตรวจสอบและดำเนินการตามข้อมูลที่วิเคราะห์ได้';
                   }
+                  const rawSubs = Array.isArray(t.subtasks) ? t.subtasks : [];
+                  const cleanSubtasks = rawSubs.map(s => {
+                    if (typeof s === 'string') return s;
+                    return s.task || s.title || s.name || s.description || s.action || '';
+                  }).filter(Boolean);
+
                   return {
                     ...t,
                     name: cleanName,
-                    subtasks: Array.isArray(t.subtasks) ? t.subtasks : []
+                    subtasks: cleanSubtasks
                   };
                 });
 
@@ -567,35 +739,39 @@ function safeJsonParse(rawText) {
               continue;
             }
 
-            // B. Direct Tool Execution (Intercept premature create_task when file is attached)
-            if (fileProcessed && act.tool === 'create_task') {
-              act.action = 'plan_proposal';
-              act.title = '📋 ร่างแผนงาน (รออนุมัติก่อนสร้าง)';
-              act.plan = {
-                name: act.args?.name || 'งานที่สกัดจากเอกสาร/ภาพ',
-                description: act.args?.description || '',
-                priority: act.args?.priority || 'Normal',
-                due_date: act.args?.due_date || null,
-                subtasks: act.args?.subtasks || [],
-                defaultListId: act.args?.list_id || activeListId || (flatLists[0]?.listId || ''),
-                fileInfo: fileProcessed ? fileProcessed.fileInfo : null
-              };
-              delete act.tool;
-              delete act.args;
+            // B. Direct Tool Execution (Intercept create_task when list is not specifically chosen)
+            if (act.tool === 'create_task') {
+              if (fileProcessed || !act.args?.list_id || act.args?.list_id === 'default' || act.args?.list_id === '') {
+                const rawSubs = Array.isArray(act.args?.subtasks) ? act.args.subtasks : [];
+                const cleanSubs = rawSubs.map(s => typeof s === 'string' ? s : (s.task || s.title || s.name || s.description || s.action || '')).filter(Boolean);
+                act.action = 'plan_proposal';
+                act.title = '📋 ร่างแผนงาน (รออนุมัติก่อนสร้าง)';
+                act.plan = {
+                  name: act.args?.name || 'งานที่มอบหมาย',
+                  description: act.args?.description || '',
+                  priority: act.args?.priority || 'Normal',
+                  due_date: act.args?.due_date || null,
+                  subtasks: cleanSubs.length > 0 ? cleanSubs : ['ตรวจสอบรายละเอียดและข้อกำหนด', 'ดำเนินการตามแผน', 'ตรวจรับงาน'],
+                  defaultListId: activeListId || (flatLists[0]?.listId || ''),
+                  fileInfo: fileProcessed ? fileProcessed.fileInfo : null
+                };
+                delete act.tool;
+                delete act.args;
 
-              let cleanName = (act.plan.name || '').trim();
-              cleanName = cleanName.replace(/^(?:จัดทำแผนงานและดำเนิน(?:การ)?ตาม(?:รูปภาพ|ภาพ|เอกสาร)|วิเคราะห์และดำเนิน(?:การ)?ตาม(?:รูปภาพ|ภาพ|เอกสาร)|ตาม(?:รูปภาพ|ภาพ|เอกสาร)|งานตาม(?:รูปภาพ|ภาพ))\s*[:\-]?\s*/i, '');
-              cleanName = cleanName.replace(/clipboard-\d+/gi, '').replace(/^[:\-]\s*/, '').trim();
-              if (!cleanName || cleanName.length < 3) {
-                cleanName = 'งานตรวจสอบและดำเนินการตามข้อมูลที่วิเคราะห์ได้';
+                let cleanName = (act.plan.name || '').trim();
+                cleanName = cleanName.replace(/^(?:จัดทำแผนงานและดำเนิน(?:การ)?ตาม(?:รูปภาพ|ภาพ|เอกสาร)|วิเคราะห์และดำเนิน(?:การ)?ตาม(?:รูปภาพ|ภาพ|เอกสาร)|ตาม(?:รูปภาพ|ภาพ|เอกสาร)|งานตาม(?:รูปภาพ|ภาพ))\s*[:\-]?\s*/i, '');
+                cleanName = cleanName.replace(/clipboard-\d+/gi, '').replace(/^[:\-]\s*/, '').trim();
+                if (!cleanName || cleanName.length < 3) {
+                  cleanName = 'งานตรวจสอบและดำเนินการตามข้อมูลที่วิเคราะห์ได้';
+                }
+                act.plan.name = cleanName;
+                act.availableLists = flatLists;
+                executedActions.push(act);
+                continue;
               }
-              act.plan.name = cleanName;
-              act.availableLists = flatLists;
-              executedActions.push(act);
-              continue;
             }
 
-            if (skill.tools.includes(act.tool)) {
+            if (ALL_TOOLS[act.tool] || skill.tools.includes(act.tool)) {
               try {
                 if (act.tool === 'create_task' && (!act.args.list_id || act.args.list_id === 'default')) {
                   act.args.list_id = activeListId || (flatLists[0]?.listId || '');
@@ -610,9 +786,28 @@ function safeJsonParse(rawText) {
           }
         }
 
-        const replyText = typeof parsed.reply === 'string' 
-          ? parsed.reply 
-          : (parsed.reply?.message || parsed.reply?.text || 'วิเคราะห์ข้อมูลและร่างแผนงานเรียบร้อยแล้วครับ');
+        // Format rich object reply from LLM (handling message, suggestion, steps, next_step, note)
+        let replyText = '';
+        if (typeof parsed.reply === 'string') {
+          replyText = parsed.reply;
+        } else if (parsed.reply && typeof parsed.reply === 'object') {
+          const parts = [];
+          if (parsed.reply.message) parts.push(parsed.reply.message);
+          if (parsed.reply.suggestion) parts.push(parsed.reply.suggestion);
+          if (parsed.reply.text) parts.push(parsed.reply.text);
+          if (Array.isArray(parsed.reply.steps)) {
+            parts.push(parsed.reply.steps.join('\n'));
+          }
+          if (parsed.reply.next_step) parts.push(`👉 **ขั้นตอนถัดไป:** ${parsed.reply.next_step}`);
+          if (parsed.reply.note) parts.push(`💡 **คำแนะนำเพิ่มเติม:** ${parsed.reply.note}`);
+          replyText = parts.join('\n\n');
+        }
+
+        if (!replyText.trim()) {
+          replyText = executedActions.some(a => a.action === 'plan_proposal')
+            ? 'ผมได้วิเคราะห์และร่างแผนงานพร้อมขั้นตอน Checklist สำหรับการดำเนินงานมาให้ตรวจสอบแล้วครับ สามารถเลือก Space/List และกดอนุมัติสร้างงานด้านล่างได้เลยครับ'
+            : 'วิเคราะห์ข้อมูลและดำเนินการตามคำสั่งเรียบร้อยแล้วครับ';
+        }
 
         return {
           skill,
@@ -621,7 +816,16 @@ function safeJsonParse(rawText) {
         };
       }
 
-      // If safeJsonParse returned null but LLM gave a rich markdown/text response:
+      // If safeJsonParse returned null:
+      if (!fileProcessed) {
+        return {
+          skill,
+          actions: [],
+          reply: llmResponse.trim()
+        };
+      }
+
+      // If safeJsonParse returned null but LLM gave a rich markdown/text response for file attachment:
       if (llmResponse.length > 20) {
         const text = llmResponse.trim();
         let planTitle = '';

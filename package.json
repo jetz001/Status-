@@ -50,7 +50,7 @@
     "vite": "^8.3.0"
   },
   "build": {
-    "appId": "com.jetmut.statusplus",
+    "appId": "com.statusplus.app",
     "productName": "Status+",
     "directories": {
       "output": "release"
@@ -59,19 +59,37 @@
       "dist/**/*",
       "electron/**/*",
       "server/**/*",
-      "uploads/**/*",
       "public/**/*",
-      "package.json"
+      "mcp/**/*",
+      "package.json",
+      "!**/*.db*",
+      "!uploads/**/*"
+    ],
+    "asarUnpack": [
+      "public/wallpapers/**/*"
     ],
     "win": {
       "target": [
-        "nsis",
-        "portable"
-      ]
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "public/icon.png"
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "allowElevation": true,
+      "perMachine": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Status+",
+      "uninstallDisplayName": "Status+",
+      "runAfterFinish": true,
+      "include": "electron/installer.nsh"
     }
   }
 }

@@ -3,7 +3,8 @@ const path = require('path');
 const pdf = require('pdf-parse');
 const { db } = require('./db');
 
-const ATTACHMENTS_DIR = path.join(__dirname, '..', 'uploads', 'attachments');
+const USER_DATA_DIR = process.env.STATUS_USER_DATA || path.join(__dirname, '..');
+const ATTACHMENTS_DIR = path.join(USER_DATA_DIR, 'uploads', 'attachments');
 if (!fs.existsSync(ATTACHMENTS_DIR)) {
   fs.mkdirSync(ATTACHMENTS_DIR, { recursive: true });
 }

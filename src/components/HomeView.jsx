@@ -25,13 +25,20 @@ import {
   Flag,
   Printer,
   ExternalLink,
-  Copy
+  Copy,
+  Edit2,
+  Check,
+  X
 } from 'lucide-react';
 import ContextMenu from './ContextMenu.jsx';
+import logoImg from '../assets/logo.png';
 
 export default function HomeView({
   allTasks = [],
   spaces = [],
+  workspaceName = 'My Workspace',
+  userName = 'User',
+  onUpdateWorkspaceInfo,
   onSelectTask,
   onUpdateTaskStatus,
   onUpdateTaskPriority,
@@ -45,6 +52,26 @@ export default function HomeView({
   onOpenWallpaperModal,
   onOpenBackupModal
 }) {
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [tempName, setTempName] = useState(userName);
+
+  useEffect(() => {
+    setTempName(userName);
+  }, [userName]);
+
+  const handleSaveName = () => {
+    const trimmed = tempName.trim();
+    if (trimmed) {
+      try {
+        localStorage.setItem('status_user_name', trimmed);
+      } catch (e) {}
+      if (onUpdateWorkspaceInfo) {
+        onUpdateWorkspaceInfo({ userName: trimmed });
+      }
+    }
+    setIsEditingName(false);
+  };
+
   const [contextMenu, setContextMenu] = useState({ isOpen: false, position: { x: 0, y: 0 }, items: [] });
   // 1. Greeting calculation
   const [greeting, setGreeting] = useState({ text: 'สวัสดี', icon: 'sun' });
@@ -99,7 +126,7 @@ export default function HomeView({
   const [scratchNote, setScratchNote] = useState('');
   const [isSavingNote, setIsSavingNote] = useState(false);
   const [noteSavedTime, setNoteSavedTime] = useState(null);
-  const [targetListForNote, setTargetListForNote] = useState(spaces[0]?.lists?.[0]?.id || 'list-iqa26');
+  const [targetListForNote, setTargetListForNote] = useState(spaces[0]?.lists?.[0]?.id || '');
   const [showConvertModal, setShowConvertModal] = useState(false);
 
   // Load scratchpad from settings on mount
@@ -163,7 +190,7 @@ export default function HomeView({
   const handleQuickAddInHome = (e) => {
     e.preventDefault();
     if (!quickTaskTitle.trim()) return;
-    const defaultList = spaces[0]?.lists?.[0]?.id || 'list-iqa26';
+    const defaultList = spaces[0]?.lists?.[0]?.id || '';
     onQuickAddTask({
       name: quickTaskTitle.trim(),
       list_id: defaultList,
@@ -285,14 +312,56 @@ export default function HomeView({
           {/* User Info & Greeting */}
           <div className="flex items-center space-x-4">
             <img 
-              src="/logo.png" 
+              src={logoImg} 
               alt="Status+" 
               className="w-14 h-14 rounded-2xl object-cover shadow-lg shadow-purple-500/20 ring-1 ring-white/10 flex-shrink-0" 
             />
             <div>
               <div className="flex items-center space-x-2">
-                <h1 className="text-xl md:text-2xl font-bold text-white tracking-tight">
-                  {greeting.text}, <span className="text-purple-400">Jet mut</span>
+                <h1 className="text-xl md:text-2xl font-bold text-white tracking-tight flex items-center flex-wrap gap-1.5">
+                  <span>{greeting.text},</span>
+                  {isEditingName ? (
+                    <span className="inline-flex items-center space-x-1.5">
+                      <input
+                        type="text"
+                        value={tempName}
+                        onChange={(e) => setTempName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleSaveName();
+                          if (e.key === 'Escape') setIsEditingName(false);
+                        }}
+                        autoFocus
+                        className="px-2.5 py-0.5 bg-[#18191c] border border-purple-500 rounded-lg text-purple-300 text-lg font-bold outline-none shadow-inner"
+                        placeholder="พิมพ์ชื่อของคุณ..."
+                      />
+                      <button
+                        onClick={handleSaveName}
+                        className="p-1 bg-green-600/30 hover:bg-green-600/50 text-green-300 border border-green-500/40 rounded-md transition cursor-pointer"
+                        title="บันทึกชื่อ"
+                      >
+                        <Check size={16} />
+                      </button>
+                      <button
+                        onClick={() => setIsEditingName(false)}
+                        className="p-1 bg-gray-700/30 hover:bg-gray-700/50 text-gray-400 hover:text-white rounded-md transition cursor-pointer"
+                        title="ยกเลิก"
+                      >
+                        <X size={16} />
+                      </button>
+                    </span>
+                  ) : (
+                    <span
+                      onClick={() => {
+                        setTempName(userName);
+                        setIsEditingName(true);
+                      }}
+                      className="group inline-flex items-center space-x-1.5 text-purple-400 hover:text-purple-300 cursor-pointer transition border-b border-dashed border-purple-500/40 hover:border-purple-300"
+                      title="คลิกเพื่อแก้ไขชื่อของคุณ"
+                    >
+                      <span>{userName}</span>
+                      <Edit2 size={13} className="text-purple-400/60 group-hover:text-purple-300 transition" />
+                    </span>
+                  )}
                 </h1>
                 {greeting.icon === 'sunrise' && <Sunrise size={20} className="text-amber-400" />}
                 {greeting.icon === 'sun' && <Sun size={20} className="text-amber-400" />}
@@ -304,7 +373,7 @@ export default function HomeView({
                 <span>•</span>
                 <span className="text-purple-400 font-semibold">Status+</span>
                 <span>•</span>
-                <span>Jet mut's Workspace</span>
+                <span>{workspaceName}</span>
               </p>
             </div>
           </div>
@@ -319,13 +388,6 @@ export default function HomeView({
               <span>+ เพิ่มงานใหม่</span>
             </button>
 
-            <button
-              onClick={onOpenAISidebar}
-              className="flex items-center space-x-1.5 px-3 py-2 bg-[#2a2b2f] hover:bg-[#34363b] border border-purple-500/30 text-purple-300 hover:text-white rounded-lg text-xs font-medium transition cursor-pointer"
-            >
-              <Sparkles size={14} className="text-purple-400" />
-              <span>ผู้ช่วย AI (Ctrl+K)</span>
-            </button>
 
             <button
               onClick={onOpenWallpaperModal}
@@ -397,13 +459,13 @@ export default function HomeView({
         <div className="lg:col-span-7 space-y-4">
           <div className="bg-[#24262b] border border-[#333538] rounded-2xl p-5 shadow-lg space-y-4">
             {/* Widget Header & Tabs */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pb-3 border-b border-[#333538]">
-              <div className="flex items-center space-x-2">
-                <div className="w-2.5 h-2.5 rounded-full bg-[#7b68ee]" />
-                <h2 className="text-sm font-bold text-white uppercase tracking-wider">
-                  My Work (งานที่ต้องติดตาม)
+            <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[#333538]">
+              <div className="flex items-center space-x-2 flex-shrink-0 whitespace-nowrap">
+                <div className="w-2.5 h-2.5 rounded-full bg-[#7b68ee] flex-shrink-0" />
+                <h2 className="text-sm font-bold text-white uppercase tracking-wider whitespace-nowrap">
+                  My Work
                 </h2>
-                <span className="text-xs text-gray-400 font-normal">
+                <span className="text-xs text-gray-400 font-normal whitespace-nowrap">
                   ({allActiveTasks.length} งานที่ยังไม่เสร็จ)
                 </span>
               </div>
@@ -592,7 +654,7 @@ export default function HomeView({
               <div className="flex items-center space-x-2">
                 <FileText size={15} className="text-purple-400" />
                 <h3 className="text-xs font-bold text-white uppercase tracking-wider">
-                  Quick Scratchpad (สมุดจดด่วน)
+                  Quick Scratchpad
                 </h3>
               </div>
               <div className="text-[10px] text-gray-400 flex items-center space-x-1">
@@ -704,7 +766,7 @@ export default function HomeView({
               <div className="flex items-center space-x-2">
                 <Sparkles size={16} className="text-purple-400" />
                 <h3 className="text-xs font-bold text-purple-200 uppercase tracking-wider">
-                  AI Daily Briefing (สรุปงานวันนี้)
+                  AI Daily Briefing
                 </h3>
               </div>
               <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 text-[10px] font-semibold border border-purple-500/30">

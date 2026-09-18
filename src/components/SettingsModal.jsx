@@ -17,20 +17,101 @@ import {
   ChevronDown, 
   ChevronRight,
   ClipboardList,
-  HardDrive
+  HardDrive,
+  User
 } from 'lucide-react';
 
 export default function SettingsModal({
   isOpen,
-  onClose
+  onClose,
+  workspaceInfo = { userName: 'User', workspaceName: 'My Workspace' },
+  onUpdateWorkspaceInfo
 }) {
-  const [activeTab, setActiveTab] = useState('settings'); // 'settings' | 'mcp_logs'
+  const [activeTab, setActiveTab] = useState('profile'); // 'profile' | 'api' | 'context' | 'mcp_logs'
+  const [profileName, setProfileName] = useState(workspaceInfo.userName || 'User');
+  const [profileWorkspace, setProfileWorkspace] = useState(workspaceInfo.workspaceName || 'My Workspace');
+
+  useEffect(() => {
+    if (workspaceInfo) {
+      if (workspaceInfo.userName) setProfileName(workspaceInfo.userName);
+      if (workspaceInfo.workspaceName) setProfileWorkspace(workspaceInfo.workspaceName);
+    }
+  }, [workspaceInfo]);
   const [provider, setProvider] = useState('gemini');
   const [apiKey, setApiKey] = useState('');
   const [model, setModel] = useState('gemini-1.5-flash');
   const [workspaceContext, setWorkspaceContext] = useState('');
   const [isSaved, setIsSaved] = useState(false);
   const [showKey, setShowKey] = useState(false);
+  const [isTesting, setIsTesting] = useState(false);
+  const [testResult, setTestResult] = useState(null);
+
+  const PROVIDERS = [
+    { id: 'gemini', label: 'Google Gemini', defaultModel: 'gemini-1.5-flash', badge: 'แนะนำ / ฟรี' },
+    { id: 'openai', label: 'OpenAI (ChatGPT)', defaultModel: 'gpt-4o-mini', badge: 'ยอดนิยม' },
+    { id: 'claude', label: 'Claude (Anthropic)', defaultModel: 'claude-3-5-sonnet-20241022', badge: 'ฉลาดขั้นสูง' },
+    { id: 'mistral', label: 'Mistral AI', defaultModel: 'pixtral-12b-2409', badge: 'เร็ว & รองรับภาพ' },
+    { id: 'qwen', label: 'Qwen (Alibaba)', defaultModel: 'qwen-plus', badge: 'คุ้มค่า' },
+    { id: 'kimi', label: 'Kimi (Moonshot)', defaultModel: 'moonshot-v1-8k', badge: 'อ่านเอกสารยาว' },
+    { id: 'ollama', label: 'Local Ollama (ออฟไลน์)', defaultModel: 'llama3', badge: 'ไม่ต้องใช้ Key' }
+  ];
+
+  const POPULAR_MODELS = {
+    mistral: [
+      { id: 'pixtral-12b-2409', label: 'Pixtral 12B' },
+      { id: 'mistral-small-latest', label: 'Mistral Small (Latest)' },
+      { id: 'open-mistral-7b', label: 'Open Mistral 7B' },
+      { id: 'mistral-large-latest', label: 'Mistral Large' }
+    ],
+    gemini: [
+      { id: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash' },
+      { id: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro' },
+      { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' }
+    ],
+    openai: [
+      { id: 'gpt-4o-mini', label: 'GPT-4o Mini' },
+      { id: 'gpt-4o', label: 'GPT-4o' }
+    ],
+    claude: [
+      { id: 'claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet' },
+      { id: 'claude-3-5-haiku-20241022', label: 'Claude 3.5 Haiku' }
+    ]
+  };
+
+  const handleTestConnection = async () => {
+    setIsTesting(true);
+    setTestResult(null);
+    try {
+      const res = await fetch('/api/ai/test-connection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider,
+          apiKey: apiKey.trim(),
+          model: model.trim()
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setTestResult({
+          success: true,
+          message: data.reply ? `AI ตอบกลับ: "${data.reply}" (เชื่อมต่อสำเร็จ)` : 'เชื่อมต่อสำเร็จเรียบร้อย!'
+        });
+      } else {
+        setTestResult({
+          success: false,
+          message: data.error || data.message || 'การเชื่อมต่อล้มเหลว ตรวจสอบ Key หรือชื่อโมเดล'
+        });
+      }
+    } catch (err) {
+      setTestResult({
+        success: false,
+        message: 'ไม่สามารถเชื่อมต่อได้: ' + err.message
+      });
+    } finally {
+      setIsTesting(false);
+    }
+  };
 
   // MCP Logs State
   const [mcpLogs, setMcpLogs] = useState([]);
@@ -43,20 +124,6 @@ export default function SettingsModal({
   const [tempStatus, setTempStatus] = useState({ fileCount: 0, formattedSize: '0 B' });
   const [isCleaningTemp, setIsCleaningTemp] = useState(false);
 
-  const CONTEXT_PRESETS = [
-    {
-      label: '🏭 QA, IQA & ISO Compliance',
-      context: 'ทีมงานฝ่ายคุณภาพ (QA/QC) และผู้ตรวจประเมินภายใน (IQA) สำหรับโรงงานและองค์กรที่ปฏิบัติตามมาตรฐาน ISO 9001:2015, ISO 14001, มาตรฐาน FSC, ตรวจสอบรถขนส่ง, ประเมินคู่ค้า Supplier List, ตรวจนับ Stockcard, ติดตามข้อบกพร่อง CAR/PAR และบริหาร KPI ทุกแผนก'
-    },
-    {
-      label: '💻 Software & Tech Startup',
-      context: 'ทีมพัฒนาซอฟต์แวร์และเทคโนโลยี ทำงานแบบ Agile/Scrum, Sprint Planning, Code Review, CI/CD Pipeline, Bug Tracking, Automated Testing, API Design และ Product Release Roadmap'
-    },
-    {
-      label: '🏢 General Business & Ops',
-      context: 'องค์กรธุรกิจและงานบริหารทั่วไป ติดตาม OKR/KPI ของทุกแผนก, งานการตลาด, ฝ่ายขาย, บริหารทรัพยากรบุคคล (HR), การเงินบัญชี, จัดซื้อจัดจ้าง และการจัดทำรายงานสรุปประจำเดือน'
-    }
-  ];
 
   const fetchSettings = () => {
     fetch('/api/settings')
@@ -120,6 +187,12 @@ export default function SettingsModal({
   const handleSave = async (e) => {
     e.preventDefault();
     try {
+      if (onUpdateWorkspaceInfo) {
+        onUpdateWorkspaceInfo({
+          userName: profileName.trim(),
+          workspaceName: profileWorkspace.trim()
+        });
+      }
       await fetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -127,7 +200,9 @@ export default function SettingsModal({
           ai_provider: provider,
           ai_api_key: apiKey,
           ai_model: model,
-          workspace_context: workspaceContext
+          workspace_context: workspaceContext,
+          user_name: profileName.trim(),
+          workspace_name: profileWorkspace.trim()
         })
       });
       setIsSaved(true);
@@ -213,15 +288,41 @@ export default function SettingsModal({
         <div className="flex border-b border-[#333538] bg-[#1a1b1d] px-5 pt-2">
           <button
             type="button"
-            onClick={() => setActiveTab('settings')}
-            className={`flex items-center space-x-2 px-4 py-2 border-b-2 font-medium text-xs transition cursor-pointer ${
-              activeTab === 'settings'
+            onClick={() => setActiveTab('profile')}
+            className={`flex items-center space-x-2 px-3.5 py-2 border-b-2 font-medium text-xs transition cursor-pointer ${
+              activeTab === 'profile'
+                ? 'border-[#7b68ee] text-[#7b68ee] font-bold bg-[#222427]/60 rounded-t-lg'
+                : 'border-transparent text-gray-400 hover:text-gray-200'
+            }`}
+          >
+            <User size={14} />
+            <span>โปรไฟล์ & ทั่วไป</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('api')}
+            className={`flex items-center space-x-2 px-3.5 py-2 border-b-2 font-medium text-xs transition cursor-pointer ${
+              activeTab === 'api'
                 ? 'border-[#7b68ee] text-[#7b68ee] font-bold bg-[#222427]/60 rounded-t-lg'
                 : 'border-transparent text-gray-400 hover:text-gray-200'
             }`}
           >
             <Key size={14} />
-            <span>โมเดล & API Keys</span>
+            <span>เชื่อมต่อ AI & Key</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('context')}
+            className={`flex items-center space-x-2 px-3.5 py-2 border-b-2 font-medium text-xs transition cursor-pointer ${
+              activeTab === 'context'
+                ? 'border-[#7b68ee] text-[#7b68ee] font-bold bg-[#222427]/60 rounded-t-lg'
+                : 'border-transparent text-gray-400 hover:text-gray-200'
+            }`}
+          >
+            <Sparkles size={14} />
+            <span>บริบทองค์กร (Context)</span>
           </button>
 
           <button
@@ -230,14 +331,14 @@ export default function SettingsModal({
               setActiveTab('mcp_logs');
               fetchMcpLogs();
             }}
-            className={`flex items-center space-x-2 px-4 py-2 border-b-2 font-medium text-xs transition cursor-pointer relative ${
+            className={`flex items-center space-x-2 px-3.5 py-2 border-b-2 font-medium text-xs transition cursor-pointer relative ${
               activeTab === 'mcp_logs'
                 ? 'border-[#7b68ee] text-[#7b68ee] font-bold bg-[#222427]/60 rounded-t-lg'
                 : 'border-transparent text-gray-400 hover:text-gray-200'
             }`}
           >
             <ClipboardList size={14} />
-            <span>ประวัติ & รายงาน AI ภายนอก (MCP Logs)</span>
+            <span>บันทึก AI (MCP Logs)</span>
             {reportCount > 0 && (
               <span className="ml-1.5 px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-purple-600/30 text-purple-300 border border-purple-500/40">
                 {reportCount} รายงาน
@@ -246,133 +347,316 @@ export default function SettingsModal({
           </button>
         </div>
 
-        {/* TAB 1: AI Settings Form */}
-        {activeTab === 'settings' && (
-          <form onSubmit={handleSave} className="p-5 space-y-4 overflow-y-auto max-h-[75vh]">
-            {/* AI Provider Radio */}
-            <div className="space-y-1.5">
-              <label className="text-gray-300 font-semibold block">ผู้ให้บริการ AI (AI Provider)</label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {[
-                  { id: 'gemini', label: 'Google Gemini', defaultModel: 'gemini-1.5-flash', hint: 'AIzaSy...' },
-                  { id: 'openai', label: 'OpenAI (ChatGPT)', defaultModel: 'gpt-4o-mini', hint: 'sk-proj-...' },
-                  { id: 'claude', label: 'Claude (Anthropic)', defaultModel: 'claude-3-5-sonnet-20241022', hint: 'sk-ant-...' },
-                  { id: 'mistral', label: 'Mistral AI', defaultModel: 'pixtral-12b-2409', hint: 'apiKey...' },
-                  { id: 'qwen', label: 'Qwen (Alibaba)', defaultModel: 'qwen-plus', hint: 'sk-...' },
-                  { id: 'kimi', label: 'Kimi (Moonshot)', defaultModel: 'moonshot-v1-8k', hint: 'sk-...' },
-                  { id: 'ollama', label: 'Local Ollama', defaultModel: 'llama3', hint: 'ไม่ต้องใช้ Key' }
-                ].map(p => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => {
-                      setProvider(p.id);
-                      setModel(p.defaultModel);
-                    }}
-                    className={`p-2 rounded-lg border text-center font-medium transition cursor-pointer ${
-                      provider === p.id 
-                        ? 'border-[#7b68ee] bg-[#7b68ee]/20 text-white font-bold shadow-sm' 
-                        : 'border-[#383a3e] bg-[#18191b] text-gray-400 hover:text-white hover:border-[#4f5258]'
-                    }`}
-                  >
-                    <div className="text-xs">{p.label}</div>
-                  </button>
-                ))}
+        {/* TAB 0: User Profile & Workspace Info */}
+        {activeTab === 'profile' && (
+          <form onSubmit={handleSave} className="p-5 flex flex-col justify-between space-y-4 overflow-y-auto max-h-[75vh]">
+            <div className="space-y-4">
+              <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-xl flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-xl bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-purple-300 font-bold text-base flex-shrink-0">
+                  {profileName.trim().charAt(0).toUpperCase() || 'U'}
+                </div>
+                <div>
+                  <h4 className="text-white text-xs font-bold">ข้อมูลผู้ใช้งาน & Workspace</h4>
+                  <p className="text-[11px] text-gray-400">กำหนดชื่อของคุณที่ใช้แสดงผลในโปรแกรม</p>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-gray-300 font-semibold block text-xs">
+                  ชื่อของคุณ (Display Name) <span className="text-purple-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={profileName}
+                  onChange={(e) => setProfileName(e.target.value)}
+                  placeholder="เช่น บอส, Boss-QA, Admin"
+                  className="w-full px-3 py-2 bg-[#18191b] border border-[#383a3e] rounded-lg text-white font-medium text-xs outline-none focus:border-[#7b68ee] shadow-inner"
+                />
+                <p className="text-[11px] text-gray-400">
+                  ชื่อนี้จะแสดงในข้อความทักทาย Home Dashboard และรายงานสรุปสถานะ
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-gray-300 font-semibold block text-xs">
+                  ชื่อ Workspace (พื้นที่ทำงาน)
+                </label>
+                <input
+                  type="text"
+                  value={profileWorkspace}
+                  onChange={(e) => setProfileWorkspace(e.target.value)}
+                  placeholder="เช่น My Workspace, Project Team"
+                  className="w-full px-3 py-2 bg-[#18191b] border border-[#383a3e] rounded-lg text-white font-medium text-xs outline-none focus:border-[#7b68ee] shadow-inner"
+                />
+                <p className="text-[11px] text-gray-400">
+                  ชื่อ Workspace หลักที่แสดงบนแถบเมนูด้านซ้ายและส่วนหัวของระบบ
+                </p>
               </div>
             </div>
 
-            {/* Model Name Input */}
-            <div className="space-y-1">
-              <label className="text-gray-300 font-medium">ชื่อโมเดล (Model Name)</label>
-              <input 
-                type="text"
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                placeholder="เช่น gemini-1.5-flash, gpt-4o-mini, claude-3-5-sonnet-20241022, mistral-large-latest, qwen-plus, moonshot-v1-8k"
-                className="w-full p-2 bg-[#18191b] border border-[#383a3e] rounded-lg text-white outline-none focus:border-[#7b68ee]"
-              />
+            {/* Bottom Actions */}
+            <div className="pt-3 border-t border-[#333538] flex items-center justify-between">
+              <div>
+                {isSaved && (
+                  <span className="text-xs text-green-400 flex items-center space-x-1">
+                    <Check size={14} />
+                    <span>บันทึกข้อมูลสำเร็จ!</span>
+                  </span>
+                )}
+              </div>
+              <div className="flex space-x-2">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-3.5 py-1.5 text-xs text-gray-400 hover:text-white rounded-lg hover:bg-[#2d2f33] transition cursor-pointer"
+                >
+                  ปิด
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 bg-[#7b68ee] hover:bg-[#6a55e0] text-white text-xs font-semibold rounded-lg shadow-md transition cursor-pointer flex items-center space-x-1.5"
+                >
+                  <Check size={14} />
+                  <span>บันทึกข้อมูล</span>
+                </button>
+              </div>
             </div>
+          </form>
+        )}
 
-            {/* API Key Input */}
-            {provider !== 'ollama' && (
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <label className="text-gray-300 font-medium">
-                    API Key ({provider === 'gemini' ? 'Google AI Studio' : provider === 'claude' ? 'Anthropic Console' : provider === 'mistral' ? 'Mistral Console' : provider === 'qwen' ? 'Alibaba DashScope' : provider === 'kimi' ? 'Moonshot Open Platform' : 'OpenAI Platform'})
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setShowKey(!showKey)}
-                    className="text-[11px] text-purple-400 hover:underline cursor-pointer"
+        {/* TAB 1: AI Provider & API Key (Clean & Streamlined) */}
+        {activeTab === 'api' && (
+          <form onSubmit={handleSave} className="p-5 flex flex-col justify-between space-y-4 overflow-y-auto max-h-[75vh]">
+            <div className="space-y-4">
+              {/* 1. AI Provider Select Dropdown */}
+              <div className="space-y-1.5">
+                <label className="text-gray-300 font-semibold block text-xs">
+                  ผู้ให้บริการ AI (AI Provider)
+                </label>
+                <div className="relative">
+                  <select
+                    value={provider}
+                    onChange={(e) => {
+                      const selected = PROVIDERS.find(p => p.id === e.target.value);
+                      setProvider(e.target.value);
+                      if (selected) setModel(selected.defaultModel);
+                      setTestResult(null);
+                    }}
+                    className="w-full px-3 py-2 bg-[#18191b] border border-[#383a3e] rounded-lg text-white font-medium text-xs outline-none focus:border-[#7b68ee] cursor-pointer appearance-none pr-8 shadow-inner"
                   >
-                    {showKey ? 'ซ่อน Key' : 'แสดง Key'}
-                  </button>
+                    {PROVIDERS.map(p => (
+                      <option key={p.id} value={p.id} className="bg-[#222427] text-white py-1">
+                        {p.label} — ({p.badge})
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown size={14} className="text-gray-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                </div>
+              </div>
+
+              {/* 2. Model Name Input & Suggestions */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-gray-300 font-semibold text-xs">ชื่อโมเดล (Model Name)</label>
+                  <span className="text-[10px] text-gray-500">พิมพ์เปลี่ยนโมเดลเองได้อิสระ</span>
                 </div>
                 <input 
-                  type={showKey ? 'text' : 'password'}
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  placeholder={
-                    provider === 'gemini' ? 'AIzaSy...' :
-                    provider === 'claude' ? 'sk-ant-api03-...' :
-                    provider === 'mistral' ? '...' :
-                    provider === 'qwen' ? 'sk-...' :
-                    provider === 'kimi' ? 'sk-...' :
-                    'sk-proj-...'
-                  }
-                  className="w-full p-2 bg-[#18191b] border border-[#383a3e] rounded-lg text-white outline-none focus:border-[#7b68ee] font-mono text-[11px]"
+                  type="text"
+                  value={model}
+                  onChange={(e) => {
+                    setModel(e.target.value);
+                    setTestResult(null);
+                  }}
+                  placeholder="เช่น gemini-1.5-flash, gpt-4o-mini, pixtral-12b-2409..."
+                  className="w-full p-2 bg-[#18191b] border border-[#383a3e] rounded-lg text-white text-xs outline-none focus:border-[#7b68ee] font-mono shadow-inner"
                 />
+                {POPULAR_MODELS[provider] && (
+                  <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                    <span className="text-[10px] text-gray-400">ตัวเลือกแนะนำ:</span>
+                    {POPULAR_MODELS[provider].map(m => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => {
+                          setModel(m.id);
+                          setTestResult(null);
+                        }}
+                        className={`px-2 py-0.5 rounded text-[10px] transition cursor-pointer border ${
+                          model === m.id
+                            ? 'bg-[#7b68ee]/30 text-purple-300 border-[#7b68ee]/60 font-semibold shadow-xs'
+                            : 'bg-[#18191b] text-gray-400 border-[#383a3e] hover:text-gray-200 hover:border-gray-500'
+                        }`}
+                      >
+                        {m.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
-            )}
 
-            {/* Workspace & Team Domain Context */}
-            <div className="space-y-1.5 pt-1 border-t border-[#333538]/60">
-              <div className="flex items-center justify-between">
-                <label className="text-gray-300 font-semibold flex items-center space-x-1.5">
-                  <Sparkles size={14} className="text-purple-400" />
-                  <span>บริบทองค์กรและมาตรฐานการทำงาน (Workspace Context)</span>
-                </label>
-                <span className="text-[10px] text-gray-400">ช่วยให้ AI ตอบได้ตรงสายงาน</span>
-              </div>
-
-              <p className="text-[11px] text-gray-400">
-                ระบุประเภทธุรกิจ ข้อกำหนด แผนก หรือมาตรฐานของทีมคุณ เพื่อให้ AI ปรับปรุงข้อความ แตกซับทาสก์ และเข้าใจเนื้องานจริง:
-              </p>
-
-              {/* Context Preset Buttons */}
-              <div className="flex flex-wrap gap-1.5 pb-1">
-                {CONTEXT_PRESETS.map((preset, idx) => (
+              {/* 3. API Key Input with Inline Test Button */}
+              {provider !== 'ollama' ? (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-gray-300 font-semibold text-xs">
+                      API Key ({PROVIDERS.find(p => p.id === provider)?.label || provider})
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setShowKey(!showKey)}
+                      className="text-[11px] text-purple-400 hover:underline cursor-pointer"
+                    >
+                      {showKey ? 'ซ่อน Key' : 'แสดง Key'}
+                    </button>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <input 
+                      type={showKey ? 'text' : 'password'}
+                      value={apiKey}
+                      onChange={(e) => {
+                        setApiKey(e.target.value);
+                        setTestResult(null);
+                      }}
+                      placeholder={
+                        provider === 'gemini' ? 'AIzaSy...' :
+                        provider === 'claude' ? 'sk-ant-api03-...' :
+                        provider === 'mistral' ? 'ใส่ Mistral API Key...' :
+                        provider === 'qwen' ? 'sk-...' :
+                        provider === 'kimi' ? 'sk-...' :
+                        'sk-proj-...'
+                      }
+                      className="flex-1 p-2 bg-[#18191b] border border-[#383a3e] rounded-lg text-white outline-none focus:border-[#7b68ee] font-mono text-xs shadow-inner"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleTestConnection}
+                      disabled={isTesting || !apiKey.trim()}
+                      className={`px-3.5 py-2 rounded-lg border text-xs font-semibold flex items-center space-x-1.5 transition whitespace-nowrap cursor-pointer shadow-xs ${
+                        isTesting || !apiKey.trim()
+                          ? 'border-[#383a3e] bg-[#1a1b1d] text-gray-500 cursor-not-allowed'
+                          : 'border-purple-500/40 bg-purple-600/20 text-purple-300 hover:bg-purple-600/30 hover:border-purple-500/60'
+                      }`}
+                    >
+                      <RefreshCw size={13} className={isTesting ? "animate-spin" : ""} />
+                      <span>{isTesting ? 'กำลังทดสอบ...' : 'ทดสอบการเชื่อมต่อ'}</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-3 bg-[#18191b] border border-[#383a3e] rounded-lg text-xs text-gray-300 flex items-center justify-between">
+                  <span>Ollama ทำงานแบบ Local บนเครื่อง (http://localhost:11434) ไม่ต้องใช้ API Key</span>
                   <button
-                    key={idx}
                     type="button"
-                    onClick={() => setWorkspaceContext(preset.context)}
-                    className="px-2 py-1 rounded bg-[#18191b] hover:bg-purple-950/40 border border-[#383a3e] hover:border-purple-500/50 text-gray-300 hover:text-purple-200 text-[10px] transition cursor-pointer"
-                    title="คลิกเพื่อใช้บริบทนี้"
+                    onClick={handleTestConnection}
+                    disabled={isTesting}
+                    className="px-3 py-1.5 rounded-lg border border-purple-500/40 bg-purple-600/20 text-purple-300 hover:bg-purple-600/30 text-xs font-semibold flex items-center space-x-1 cursor-pointer"
                   >
-                    {preset.label}
+                    <RefreshCw size={13} className={isTesting ? "animate-spin" : ""} />
+                    <span>{isTesting ? 'กำลังทดสอบ...' : 'ทดสอบการเชื่อมต่อ'}</span>
                   </button>
-                ))}
+                </div>
+              )}
+
+              {/* Test Connection Result Alert */}
+              {testResult && (
+                <div className={`p-2.5 rounded-lg border flex items-start space-x-2 text-xs transition-all ${
+                  testResult.success
+                    ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-300'
+                    : 'bg-rose-950/30 border-rose-500/40 text-rose-300'
+                }`}>
+                  {testResult.success ? (
+                    <CheckCircle2 size={16} className="text-emerald-400 flex-shrink-0 mt-0.5" />
+                  ) : (
+                    <AlertCircle size={16} className="text-rose-400 flex-shrink-0 mt-0.5" />
+                  )}
+                  <div className="flex-1">
+                    <div className="font-semibold">{testResult.success ? 'เชื่อมต่อ AI สำเร็จ!' : 'การเชื่อมต่อล้มเหลว'}</div>
+                    <div className="text-[11px] opacity-90 mt-0.5 break-all">{testResult.message}</div>
+                  </div>
+                </div>
+              )}
+
+              {/* Discreet Security Note */}
+              <div className="flex items-center space-x-1.5 text-[11px] text-gray-400 pt-1">
+                <ShieldCheck size={14} className="text-emerald-400 flex-shrink-0" />
+                <span>API Key จะถูกจัดเก็บบนเครื่องของคุณใน SQLite อย่างปลอดภัย ไม่มีการส่งต่อไปยังเซิร์ฟเวอร์ภายนอกอื่นใด</span>
+              </div>
+            </div>
+
+            {/* Footer Buttons */}
+            <div className="flex items-center justify-between pt-4 border-t border-[#333538]/60">
+              <div>
+                {isSaved && (
+                  <span className="text-emerald-400 font-semibold flex items-center space-x-1">
+                    <Check size={14} />
+                    <span>บันทึกเรียบร้อยแล้ว</span>
+                  </span>
+                )}
+              </div>
+              <div className="flex space-x-2">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-3.5 py-1.5 rounded text-gray-300 hover:bg-[#333538] transition cursor-pointer"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-1.5 bg-[#7b68ee] hover:bg-[#6a55e0] text-white font-semibold rounded shadow transition cursor-pointer"
+                >
+                  บันทึกการตั้งค่า
+                </button>
+              </div>
+            </div>
+          </form>
+        )}
+
+        {/* TAB 2: Workspace Context (Clean & Un-mocked) */}
+        {activeTab === 'context' && (
+          <form onSubmit={handleSave} className="p-5 flex flex-col justify-between space-y-4 overflow-y-auto max-h-[75vh]">
+            <div className="space-y-3.5">
+              <div>
+                <h4 className="text-white font-semibold text-xs flex items-center space-x-1.5">
+                  <Sparkles size={14} className="text-purple-400" />
+                  <span>บริบทองค์กรและการทำงาน (Workspace Context)</span>
+                </h4>
+                <p className="text-[11px] text-gray-400 mt-1 leading-relaxed">
+                  ระบุรายละเอียดเกี่ยวกับงาน องค์กร แผนก หรือมาตรฐานของคุณ เพื่อให้ AI นำไปใช้อ้างอิงในการแตกงานย่อย (Subtasks) วิเคราะห์ และตอบคำถามได้ตรงจุด
+                </p>
               </div>
 
-              <textarea
-                rows={3}
-                value={workspaceContext}
-                onChange={(e) => setWorkspaceContext(e.target.value)}
-                placeholder="ตัวอย่าง: เราเป็นทีม QA/IQA โรงงานอุตสาหกรรม มาตรฐาน ISO 9001:2015, FSC, มีการตรวจนับ Stockcard, รถขนส่ง, ประเมิน Supplier..."
-                className="w-full p-2 bg-[#18191b] border border-[#383a3e] rounded-lg text-white outline-none focus:border-[#7b68ee] text-xs resize-none"
-              />
+              {/* Textarea for custom prompt */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-gray-300 font-medium text-xs block">
+                    รายละเอียดบริบทการทำงานของคุณ
+                  </label>
+                  {workspaceContext && (
+                    <button
+                      type="button"
+                      onClick={() => setWorkspaceContext('')}
+                      className="text-[11px] text-gray-400 hover:text-rose-400 transition cursor-pointer"
+                    >
+                      ล้างข้อความ
+                    </button>
+                  )}
+                </div>
+                <textarea
+                  rows={8}
+                  value={workspaceContext}
+                  onChange={(e) => setWorkspaceContext(e.target.value)}
+                  placeholder="พิมพ์ข้อมูลบริบทองค์กร กฎระเบียบ ขั้นตอนการทำงาน หรือมาตรฐานของทีมคุณที่นี่ (เว้นว่างไว้ได้หากไม่ต้องการใช้)..."
+                  className="w-full p-3 bg-[#18191b] border border-[#383a3e] rounded-lg text-white outline-none focus:border-[#7b68ee] text-xs leading-relaxed resize-none shadow-inner font-sans"
+                />
+                <p className="text-[10px] text-gray-500">
+                  💡 ข้อมูลนี้จะถูกส่งเป็น System Prompt ประกอบการทำงานของ AI ในทุกคำสั่งงาน
+                </p>
+              </div>
             </div>
 
-            {/* Security Note */}
-            <div className="p-3 bg-[#18191b] border border-[#2e3034] rounded-lg flex items-start space-x-2 text-[11px] text-gray-400">
-              <ShieldCheck size={16} className="text-emerald-400 flex-shrink-0 mt-0.5" />
-              <span>
-                API Key จะถูกบันทึกลงในไฟล์ SQLite บนเครื่องคอมพิวเตอร์ของคุณเท่านั้น ไม่มีการส่งต่อไปยังเซิร์ฟเวอร์ภายนอกอื่นใด
-              </span>
-            </div>
-
-            {/* Buttons */}
-            <div className="flex items-center justify-between pt-2">
+            {/* Footer Buttons */}
+            <div className="flex items-center justify-between pt-4 border-t border-[#333538]/60">
               <div>
                 {isSaved && (
                   <span className="text-emerald-400 font-semibold flex items-center space-x-1">

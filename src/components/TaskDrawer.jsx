@@ -16,8 +16,10 @@ import {
   CheckCircle2,
   Circle,
   ExternalLink,
-  AlertCircle
+  AlertCircle,
+  Check
 } from 'lucide-react';
+import ThaiDatePicker, { formatToDMY, formatToDMYNumeric } from './ThaiDatePicker.jsx';
 
 export default function TaskDrawer({
   task,
@@ -36,7 +38,13 @@ export default function TaskDrawer({
   const [status, setStatus] = useState(task.status || 'NOT STARTED');
   const [priority, setPriority] = useState(task.priority || 'Normal');
   const [dueDate, setDueDate] = useState(task.due_date || '');
-  const [assignee, setAssignee] = useState(task.assignee || 'JM');
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [recurringRule, setRecurringRule] = useState(() => {
+    try {
+      return task.recurring_rule ? (typeof task.recurring_rule === 'string' ? JSON.parse(task.recurring_rule) : task.recurring_rule) : null;
+    } catch(e) { return null; }
+  });
+  const [assignee, setAssignee] = useState(task.assignee || '');
   const [subtasks, setSubtasks] = useState(task.subtasks || []);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
   const [fieldValues, setFieldValues] = useState(task.fieldValues || {});
@@ -45,6 +53,9 @@ export default function TaskDrawer({
   const [aiNotice, setAiNotice] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [teamMembers, setTeamMembers] = useState([]);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
+  const currentTaskIdRef = useRef(task?.id);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -67,63 +78,102 @@ export default function TaskDrawer({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
 
-  useEffect(() => {
-    setName(task.name || '');
-    setDescription(task.description || '');
-    setStatus(task.status || 'NOT STARTED');
-    setPriority(task.priority || 'Normal');
-    setDueDate(task.due_date || '');
-    setAssignee(task.assignee || 'JM');
-    setSubtasks(task.subtasks || []);
-    setFieldValues(task.fieldValues || {});
-    setAttachments(task.attachments || []);
-  }, [task]);
-
-  // Listen for Ctrl+V (Paste image from clipboard)
-  useEffect(() => {
-    const handlePaste = async (e) => {
-      const items = e.clipboardData?.items;
-      if (!items) return;
-
-      for (let i = 0; i < items.length; i++) {
-        if (items[i].type.indexOf('image') !== -1) {
-          const blob = items[i].getAsFile();
-          const reader = new FileReader();
-          reader.onload = async (event) => {
-            const dataUrl = event.target.result;
-            try {
-              const res = await fetch(`/api/tasks/${task.id}/attachments`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ dataUrl, name: `pasted-image-${Date.now()}.png` })
-              });
-              const data = await res.json();
-              if (data.id) {
-                setAttachments(prev => [data, ...prev]);
-              }
-            } catch (err) {
-              console.error('Failed to upload pasted image:', err);
+  // Helper to sanitize dirty JSON that might have been saved in the DB previously
+  const sanitizeText = (txt) => {
+    if (!txt) return '';
+    let s = String(txt).trim();
+    if (s.startsWith('{') || s.startsWith('[') || s.includes('"task_description"') || s.includes('"scope_of_work"')) {
+      try {
+        const jsonStart = s.indexOf('{');
+        const jsonEnd = s.lastIndexOf('}');
+        if (jsonStart !== -1 && jsonEnd > jsonStart) {
+          const obj = JSON.parse(s.substring(jsonStart, jsonEnd + 1));
+          const textFromObj = (val) => {
+            if (!val) return '';
+            if (typeof val === 'string') return val.trim();
+            if (Array.isArray(val)) return val.map(textFromObj).filter(Boolean).join('\n');
+            if (typeof val === 'object') {
+              if (val.thai) return textFromObj(val.thai);
+              if (val.description) return textFromObj(val.description);
+              if (val.task_description) return textFromObj(val.task_description);
+              if (val.scope_of_work) return textFromObj(val.scope_of_work);
+              if (val.title) return textFromObj(val.title);
+              if (val.name) return textFromObj(val.name);
+              if (val.text) return textFromObj(val.text);
+              return Object.values(val).map(textFromObj).filter(Boolean).join('\n');
             }
+            return String(val);
           };
-          reader.readAsDataURL(blob);
+          const res = textFromObj(obj);
+          if (res) return res.replace(/^["'“”‘’]|["'“”‘’]$/g, '').trim();
         }
+      } catch (e) {
+        const m = s.match(/"(?:thai|description|text|title|name|task_description|scope_of_work)"\s*:\s*(?:\[\s*\{\s*"description"\s*:\s*)?"([^"\\]*(?:\\.[^"\\]*)*)/i);
+        if (m && m[1]) return m[1].replace(/\\"/g, '"').replace(/\\n/g, '\n').trim();
       }
-    };
+    }
+    return s.replace(/^["'“”‘’]|["'“”‘’]$/g, '').trim();
+  };
 
-    window.addEventListener('paste', handlePaste);
-    return () => window.removeEventListener('paste', handlePaste);
-  }, [task.id]);
+  const formatDateDMY = (dateStr) => {
+    if (!dateStr) return '';
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      const [y, m, d] = parts;
+      const thaiMonths = ['', 'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+      const mNum = parseInt(m, 10);
+      const dNum = parseInt(d, 10);
+      return `${dNum} ${thaiMonths[mNum] || m} ${y}`;
+    }
+    return dateStr;
+  };
 
-  const handleSave = () => {
-    onUpdateTask(task.id, {
-      name,
-      description,
-      status,
-      priority,
-      due_date: dueDate || null,
-      assignee,
-      fieldValues
-    });
+  useEffect(() => {
+    if (task && task.id !== currentTaskIdRef.current) {
+      currentTaskIdRef.current = task.id;
+      setName(sanitizeText(task.name || ''));
+      setDescription(sanitizeText(task.description || ''));
+      setStatus(task.status || 'NOT STARTED');
+      setPriority(task.priority || 'Normal');
+      setDueDate(task.due_date || '');
+      try {
+        setRecurringRule(task.recurring_rule ? (typeof task.recurring_rule === 'string' ? JSON.parse(task.recurring_rule) : task.recurring_rule) : null);
+      } catch(e) {
+        setRecurringRule(null);
+      }
+      setAssignee(task.assignee || '');
+      setSubtasks(task.subtasks || []);
+      setFieldValues(task.fieldValues || {});
+      setAttachments(task.attachments || []);
+    }
+  }, [task?.id]);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      if (onUpdateTask) {
+        await onUpdateTask(task.id, {
+          name,
+          description,
+          status,
+          priority,
+          due_date: dueDate || null,
+          assignee,
+          fieldValues,
+          recurring_rule: recurringRule ? JSON.stringify(recurringRule) : null,
+          attachments
+        });
+      }
+      setIsSaved(true);
+      setTimeout(() => {
+        setIsSaved(false);
+        setIsSaving(false);
+        if (onClose) onClose();
+      }, 500);
+    } catch (err) {
+      console.error('Save failed:', err);
+      setIsSaving(false);
+    }
   };
 
   // Subtask actions
@@ -180,7 +230,13 @@ export default function TaskDrawer({
       });
       const data = await res.json();
       if (data.id) {
-        setAttachments(prev => [data, ...prev]);
+        setAttachments(prev => {
+          const next = [data, ...prev];
+          if (onUpdateTask) {
+            onUpdateTask(task.id, { attachments: next });
+          }
+          return next;
+        });
       }
     } catch (err) {
       console.error('File upload failed:', err);
@@ -226,7 +282,13 @@ export default function TaskDrawer({
   const handleDeleteAttachment = async (attId) => {
     try {
       await fetch(`/api/attachments/${attId}`, { method: 'DELETE' });
-      setAttachments(prev => prev.filter(a => a.id !== attId));
+      setAttachments(prev => {
+        const next = prev.filter(a => a.id !== attId);
+        if (onUpdateTask) {
+          onUpdateTask(task.id, { attachments: next });
+        }
+        return next;
+      });
     } catch (err) {
       console.error(err);
     }
@@ -241,99 +303,52 @@ export default function TaskDrawer({
     return parts.join(', ');
   };
 
-  // AI Assistance triggers
-  const handleAiPolishTitle = async () => {
-    if (!name) return;
+  // Single Unified AI Action: "ปุ่มเดียวพอ"
+  const handleAiCompleteAll = async () => {
+    if (!task?.id) return;
     setIsAiLoading(true);
     setAiNotice('');
     try {
-      const res = await fetch('/api/ai/polish', {
+      const res = await fetch('/api/ai/complete-task', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: name, context: getContextString() })
+        body: JSON.stringify({
+          taskId: task.id,
+          title: name,
+          description: description,
+          context: getContextString()
+        })
       });
       const data = await res.json();
-      if (data.text) {
-        setName(data.text);
-        onUpdateTask(task.id, { name: data.text });
-        setAiNotice('✨ ปรับปรุงชื่องานด้วย AI สำเร็จแล้ว!');
-        setTimeout(() => setAiNotice(''), 4000);
-      }
-    } catch (err) {
-      console.error(err);
-      setAiNotice('⚠️ ไม่สามารถเรียกใช้งาน AI ได้');
-    } finally {
-      setIsAiLoading(false);
-    }
-  };
-
-  const handleAiGenerateSubtasks = async () => {
-    setIsAiLoading(true);
-    setAiNotice('');
-    try {
-      const res = await fetch('/api/ai/generate-subtasks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: name, description, context: getContextString() })
-      });
-      const data = await res.json();
-      if (data.subtasks && data.subtasks.length > 0) {
-        for (const st of data.subtasks) {
-          const subRes = await fetch(`/api/tasks/${task.id}/subtasks`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title: st })
-          });
-          const created = await subRes.json();
-          setSubtasks(prev => [...prev, created]);
+      if (data.success && data.task) {
+        const cleanTitle = sanitizeText(data.task.name || '');
+        const cleanDesc = sanitizeText(data.task.description || '');
+        setName(cleanTitle);
+        setDescription(cleanDesc);
+        setPriority(data.task.priority || 'Normal');
+        if (data.task.due_date) {
+          setDueDate(data.task.due_date);
         }
-        setAiNotice(`✨ AI แตกซับทาสก์สำเร็จ เพิ่ม ${data.subtasks.length} รายการ!`);
-        setTimeout(() => setAiNotice(''), 4000);
-      }
-    } catch (err) {
-      console.error(err);
-      setAiNotice('⚠️ ไม่สามารถเรียกใช้งาน AI ได้');
-    } finally {
-      setIsAiLoading(false);
-    }
-  };
-
-  const handleAiAutofill = async () => {
-    setIsAiLoading(true);
-    setAiNotice('');
-    try {
-      const res = await fetch('/api/ai/autofill', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: name, description, context: getContextString() })
-      });
-      const data = await res.json();
-      const updates = {};
-
-      if (data.priority) {
-        setPriority(data.priority);
-        updates.priority = data.priority;
-      }
-      if (data.description) {
-        setDescription(data.description);
-        updates.description = data.description;
-      }
-      if (data.suggestedDays && !dueDate) {
-        const d = new Date(Date.now() + 86400000 * data.suggestedDays);
-        const dateStr = d.toISOString().split('T')[0];
-        setDueDate(dateStr);
-        updates.due_date = dateStr;
-      }
-      if (data.severity) {
-        const sevField = fields.find(f => f.name.includes('Severity'));
-        if (sevField) {
-          setFieldValues(prev => ({ ...prev, [sevField.id]: data.severity }));
+        if (data.subtasks && data.subtasks.length > 0) {
+          setSubtasks(data.subtasks);
         }
+        if (data.severity) {
+          const sevField = fields.find(f => f.name.includes('Severity'));
+          if (sevField) {
+            setFieldValues(prev => ({ ...prev, [sevField.id]: data.severity }));
+          }
+        }
+        onUpdateTask(task.id, {
+          name: cleanTitle,
+          description: cleanDesc,
+          priority: data.task.priority,
+          due_date: data.task.due_date
+        });
+        setAiNotice('✨ AI จัดการข้อมูลครบถ้วนแล้ว: ปรับปรุงชื่อ, คำอธิบาย, ลำดับความสำคัญ และขั้นตอนย่อยเรียบร้อย!');
+        setTimeout(() => setAiNotice(''), 5000);
+      } else {
+        throw new Error(data.error || 'Failed');
       }
-
-      onUpdateTask(task.id, updates);
-      setAiNotice('✨ AI Auto-Fill เติมรายละเอียดและปรับแต่งข้อมูลให้แล้ว!');
-      setTimeout(() => setAiNotice(''), 4000);
     } catch (err) {
       console.error(err);
       setAiNotice('⚠️ ไม่สามารถเรียกใช้งาน AI ได้');
@@ -437,21 +452,37 @@ export default function TaskDrawer({
         </div>
       )}
 
+      {/* Unified Single AI Action Banner: "ปุ่มเดียวพอ" */}
+      <div className="px-4 py-2.5 bg-gradient-to-r from-purple-950/50 via-[#231e38] to-[#18191b] border-b border-purple-500/30 flex items-center justify-between flex-shrink-0">
+        <div className="flex items-center space-x-2.5 min-w-0 pr-2">
+          <div className="w-7 h-7 rounded-lg bg-purple-500/20 flex items-center justify-center flex-shrink-0">
+            <Sparkles size={15} className="text-purple-300 animate-pulse" />
+          </div>
+          <div className="truncate">
+            <div className="flex items-center space-x-1.5">
+              <span className="text-xs font-bold text-white">AI One-Click Assistant</span>
+              <span className="text-[9px] px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300 font-semibold uppercase">ปุ่มเดียวจบ</span>
+            </div>
+            <span className="text-[10px] text-gray-400 truncate block">ปรับปรุงชื่อ เติมคำอธิบาย จัดการความสำคัญ และแตกขั้นตอนย่อย</span>
+          </div>
+        </div>
+        <button
+          type="button"
+          disabled={isAiLoading}
+          onClick={handleAiCompleteAll}
+          className="px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-[#7b68ee] to-indigo-600 hover:from-[#6b58de] hover:to-indigo-500 text-white font-semibold text-xs shadow-md shadow-purple-950/50 flex items-center space-x-1.5 transition active:scale-95 cursor-pointer disabled:opacity-50 flex-shrink-0"
+        >
+          <Sparkles size={13} className={isAiLoading ? 'animate-spin' : ''} />
+          <span>✨ AI จัดการให้ครบ</span>
+        </button>
+      </div>
+
       {/* Main Body Scroll Area */}
       <div className="flex-1 overflow-y-auto p-5 space-y-6">
-        {/* Title input with AI Polish */}
+        {/* Title input */}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">ชื่องาน (Title)</label>
-            <button
-              type="button"
-              disabled={isAiLoading}
-              onClick={handleAiPolishTitle}
-              className="flex items-center space-x-1 text-purple-400 hover:text-purple-300 font-medium transition"
-            >
-              <Sparkles size={13} className={isAiLoading ? 'animate-spin' : ''} />
-              <span>✨ AI Polish</span>
-            </button>
           </div>
           <input 
             type="text"
@@ -493,17 +524,80 @@ export default function TaskDrawer({
             </div>
           </div>
 
-          <div className="space-y-1">
+          <div className="space-y-1 relative">
             <label className="text-[11px] font-semibold text-gray-400 flex items-center space-x-1">
               <Calendar size={12} />
-              <span>วันกำหนดส่ง (Due Date)</span>
+              <span>วันกำหนดส่ง (วัน / เดือน / ปี)</span>
             </label>
-            <input 
-              type="date"
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-              className="w-full bg-[#141517] p-2 rounded border border-[#333538] text-white outline-none"
-            />
+            <button 
+              type="button"
+              onClick={() => setShowDatePicker(prev => !prev)}
+              className="w-full flex items-center justify-between bg-[#141517] p-2 rounded border border-[#333538] text-white text-xs hover:border-[#7b68ee] transition cursor-pointer"
+            >
+              <span className={dueDate ? 'text-white font-medium' : 'text-gray-400'}>
+                {dueDate ? `${formatToDMY(dueDate)} (${formatToDMYNumeric(dueDate)})` : '+ กำหนดส่ง (วัน/เดือน/ปี)'}
+              </span>
+              <Calendar size={13} className="text-purple-400" />
+            </button>
+
+            {showDatePicker && (
+              <div className="absolute top-full left-0 mt-1 z-50">
+                <ThaiDatePicker
+                  value={dueDate}
+                  onChange={(newDate) => {
+                    setDueDate(newDate || '');
+                    setShowDatePicker(false);
+                  }}
+                  onClose={() => setShowDatePicker(false)}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Recurring Rule (รอบทำซ้ำ) */}
+          <div className="space-y-1">
+            <label className="text-[11px] font-semibold text-gray-400 flex items-center space-x-1">
+              <span>🔁</span>
+              <span>รอบทำซ้ำ (Recurring Tasks)</span>
+            </label>
+            <select
+              value={recurringRule?.type || 'none'}
+              onChange={(e) => {
+                const type = e.target.value;
+                if (type === 'none') {
+                  setRecurringRule(null);
+                } else {
+                  const day = dueDate ? parseInt(dueDate.split('-')[2], 10) : (recurringRule?.day || 1);
+                  setRecurringRule({ type, day });
+                }
+              }}
+              className="w-full bg-[#141517] p-2 rounded border border-[#333538] text-white outline-none text-xs"
+            >
+              <option value="none">ไม่ทำซ้ำ (รอบเดียวจบ)</option>
+              <option value="daily">ทุกวัน (Daily)</option>
+              <option value="weekly">ทุกสัปดาห์ (Weekly)</option>
+              <option value="monthly">ทุกเดือน (Monthly)</option>
+              <option value="monthly_date">ทุกวันที่... ของเดือน (Monthly on Day X)</option>
+              <option value="half_yearly">ทุกครึ่งปี (ทุก 6 เดือน)</option>
+              <option value="yearly">ทุกปี (Yearly)</option>
+            </select>
+            {recurringRule?.type === 'monthly_date' && (
+              <div className="flex items-center space-x-2 pt-1 text-[11px] text-gray-300">
+                <span>ทุกวันที่:</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="31"
+                  value={recurringRule.day || 1}
+                  onChange={(e) => {
+                    const val = Math.min(31, Math.max(1, parseInt(e.target.value, 10) || 1));
+                    setRecurringRule(prev => ({ ...prev, day: val }));
+                  }}
+                  className="w-16 p-1 bg-[#141517] border border-[#333538] rounded text-white text-center outline-none"
+                />
+                <span className="text-gray-400">ของทุกเดือน</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -550,15 +644,6 @@ export default function TaskDrawer({
         <div className="space-y-1.5 pt-2 border-t border-[#2e3034]">
           <div className="flex items-center justify-between">
             <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">คำอธิบายและบันทึกงาน (Description)</label>
-            <button 
-              type="button"
-              disabled={isAiLoading}
-              onClick={handleAiAutofill}
-              className="flex items-center space-x-1 text-blue-400 hover:text-blue-300 font-medium transition"
-            >
-              <Sparkles size={12} />
-              <span>✨ AI Smart Auto-Fill</span>
-            </button>
           </div>
           <textarea 
             rows={4}
@@ -577,16 +662,6 @@ export default function TaskDrawer({
               <span className="font-semibold text-gray-300">ขั้นตอนย่อย (Subtasks)</span>
               <span className="text-gray-400 text-[11px]">({completedCount}/{subtasks.length})</span>
             </div>
-
-            <button 
-              type="button"
-              disabled={isAiLoading}
-              onClick={handleAiGenerateSubtasks}
-              className="flex items-center space-x-1 text-purple-400 hover:text-purple-300 font-medium transition"
-            >
-              <Sparkles size={12} className={isAiLoading ? 'animate-spin' : ''} />
-              <span>✨ AI แตกซับทาสก์</span>
-            </button>
           </div>
 
           {/* Progress bar */}
@@ -720,9 +795,23 @@ export default function TaskDrawer({
           </button>
           <button 
             onClick={handleSave}
-            className="px-5 py-1.5 bg-[#7b68ee] hover:bg-[#6a55e0] text-white font-semibold rounded text-xs transition shadow-sm"
+            disabled={isSaving}
+            className={`px-5 py-1.5 font-semibold rounded text-xs transition shadow-sm flex items-center space-x-1.5 ${
+              isSaved 
+                ? 'bg-emerald-600 text-white' 
+                : 'bg-[#7b68ee] hover:bg-[#6a55e0] text-white disabled:opacity-50'
+            }`}
           >
-            บันทึกการแก้ไข (Save)
+            {isSaved ? (
+              <>
+                <Check size={14} className="text-white" />
+                <span>บันทึกเรียบร้อย!</span>
+              </>
+            ) : isSaving ? (
+              <span>กำลังบันทึก...</span>
+            ) : (
+              <span>บันทึกการแก้ไข (Save)</span>
+            )}
           </button>
         </div>
       </div>

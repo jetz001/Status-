@@ -6,11 +6,68 @@ function getSetting(key, defaultValue = '') {
 }
 
 /**
+ * Robustly extract clean human-readable text from any string, even if raw or malformed JSON is returned
+ */
+function extractCleanText(rawText) {
+  if (!rawText) return '';
+  let str = String(rawText).trim();
+
+  // If text is wrapped or contains JSON
+  if (str.startsWith('{') || str.startsWith('[') || str.includes('```json') || str.includes('"task_description"') || str.includes('"scope_of_work"') || str.includes('"thai"')) {
+    // Strip markdown fences
+    str = str.replace(/```(?:json)?\s*/gi, '').replace(/\s*```/g, '').trim();
+    try {
+      const jsonStart = str.indexOf('{');
+      const jsonEnd = str.lastIndexOf('}');
+      if (jsonStart !== -1 && jsonEnd > jsonStart) {
+        const jsonStr = str.substring(jsonStart, jsonEnd + 1);
+        const obj = JSON.parse(jsonStr);
+        const textFromObj = (val) => {
+          if (!val) return '';
+          if (typeof val === 'string') return val.trim();
+          if (Array.isArray(val)) {
+            return val.map(v => textFromObj(v)).filter(Boolean).join('\n');
+          }
+          if (typeof val === 'object') {
+            if (val.thai) return textFromObj(val.thai);
+            if (val.description) return textFromObj(val.description);
+            if (val.task_description) return textFromObj(val.task_description);
+            if (val.scope_of_work) return textFromObj(val.scope_of_work);
+            if (val.title) return textFromObj(val.title);
+            if (val.name) return textFromObj(val.name);
+            if (val.text) return textFromObj(val.text);
+            if (val.polished) return textFromObj(val.polished);
+            const parts = [];
+            for (const k of Object.keys(val)) {
+              const res = textFromObj(val[k]);
+              if (res) parts.push(res);
+            }
+            return parts.join('\n');
+          }
+          return String(val);
+        };
+        const extracted = textFromObj(obj);
+        if (extracted) return extracted.replace(/^["'“”‘’]|["'“”‘’]$/g, '').trim();
+      }
+    } catch (e) {
+      // If incomplete or malformed JSON like {"task_description": {"thai": "จัดทำและปรับปรุง Stockcard สำหรับ
+      const thaiMatch = str.match(/"(?:thai|description|text|title|name|task_description|scope_of_work)"\s*:\s*(?:\[\s*\{\s*"description"\s*:\s*)?"([^"\\]*(?:\\.[^"\\]*)*)/i);
+      if (thaiMatch && thaiMatch[1]) {
+        return thaiMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n').trim();
+      }
+    }
+  }
+
+  // Remove surrounding quotes and clean
+  return str.replace(/^["'“”‘’]|["'“”‘’]$/g, '').trim();
+}
+
+/**
  * Calls the configured AI Provider (Gemini / OpenAI / Ollama)
  */
-async function callLLM(prompt, systemInstruction = '', fileProcessed = null) {
+async function callLLM(prompt, systemInstruction = '', fileProcessed = null, forceJson = false) {
   const provider = getSetting('ai_provider', 'gemini');
-  const apiKey = getSetting('ai_api_key', '');
+  const apiKey = getSetting('ai_api_key', '').trim();
 
   const defaultModelMap = {
     gemini: 'gemini-1.5-flash',
@@ -88,18 +145,22 @@ async function callLLM(prompt, systemInstruction = '', fileProcessed = null) {
         messages.push({ role: 'user', content: prompt });
       }
 
+      const payload = {
+        model,
+        messages,
+        temperature: 0.2
+      };
+      if (forceJson) {
+        payload.response_format = { type: 'json_object' };
+      }
+
       const res = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${apiKey}`
         },
-        body: JSON.stringify({
-          model,
-          messages,
-          temperature: 0.2,
-          response_format: { type: 'json_object' }
-        })
+        body: JSON.stringify(payload)
       });
       const data = await res.json();
       if (data.choices && data.choices[0]?.message?.content) {
@@ -175,18 +236,22 @@ async function callLLM(prompt, systemInstruction = '', fileProcessed = null) {
       }
 
       const sendMistral = async (targetModel) => {
+        const payload = {
+          model: targetModel,
+          messages,
+          temperature: 0.2
+        };
+        if (forceJson) {
+          payload.response_format = { type: 'json_object' };
+        }
+
         return fetch(url, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${apiKey}`
           },
-          body: JSON.stringify({
-            model: targetModel,
-            messages,
-            temperature: 0.2,
-            response_format: { type: 'json_object' }
-          })
+          body: JSON.stringify(payload)
         });
       };
 
@@ -291,15 +356,16 @@ function getFullContext(extraContext = '') {
  */
 async function polishText(text, extraContext = '') {
   if (!text || !text.trim()) return text;
+  const baseText = extractCleanText(text);
   const contextStr = getFullContext(extraContext);
-  const prompt = `${contextStr ? contextStr + '\n\n' : ''}กรุณาปรับปรุงข้อความต่อไปนี้ให้เป็นภาษาไทย/อังกฤษที่กระชับ สละสลวย เป็นทางการ ชัดเจน และสอดคล้องกับบริบทงาน:\n"${text.trim()}"\nตอบกลับเฉพาะข้อความที่ปรับแก้แล้วเท่านั้น ไม่ต้องมีคำนำหรือคำลงท้ายหรือเครื่องหมายคำพูด`;
-  const llmResult = await callLLM(prompt, 'คุณคือผู้ช่วยบริหารโครงการมืออาชีพ');
+  const prompt = `${contextStr ? contextStr + '\n\n' : ''}กรุณาปรับปรุงข้อความต่อไปนี้ให้เป็นภาษาไทย/อังกฤษที่กระชับ สละสลวย เป็นทางการ ชัดเจน และสอดคล้องกับบริบทงาน:\n"${baseText}"\nตอบกลับเฉพาะข้อความธรรมดา (Plain text) ที่ปรับแก้แล้วเท่านั้น ห้ามตอบเป็น JSON หรือเครื่องหมายคำพูดเด็ดขาด`;
+  const llmResult = await callLLM(prompt, 'คุณคือผู้ช่วยบริหารโครงการมืออาชีพ ตอบเฉพาะข้อความธรรมดา ห้ามใช้ JSON เด็ดขาด', null, false);
   if (llmResult && llmResult.trim()) {
-    return llmResult.trim().replace(/^["'“”‘’]|["'“”‘’]$/g, '');
+    return extractCleanText(llmResult.trim());
   }
 
   // Local rule-based smart polish fallback
-  let polished = text.trim();
+  let polished = baseText;
   polished = polished.replace(/%/g, 'ร้อยละ ');
   polished = polished.replace(/^ทำ\s*/g, 'ดำเนินการจัดทำ ');
   polished = polished.replace(/^เช็ค\s*/g, 'ตรวจสอบและประเมินผล ');
@@ -312,8 +378,8 @@ async function polishText(text, extraContext = '') {
   // Keyword specific enrichment
   if (polished.includes('ความพึงพอใจลูกค้า') && !polished.includes('รายงาน')) {
     polished = `จัดทำและแจกแจงรายงานการวิเคราะห์ร้อยละความพึงพอใจของลูกค้า (Customer Satisfaction Report)`;
-  } else if (polished === text.trim()) {
-    polished = `จัดทำและบริหารงาน: ${text.trim()}`;
+  } else if (polished === baseText) {
+    polished = `จัดทำและบริหารงาน: ${baseText}`;
   }
 
   return polished;
@@ -323,19 +389,21 @@ async function polishText(text, extraContext = '') {
  * Generate subtask checklist items from task title
  */
 async function generateSubtasks(title, description = '', extraContext = '') {
+  const cleanTitle = extractCleanText(title);
+  const cleanDesc = extractCleanText(description);
   const contextStr = getFullContext(extraContext);
-  const prompt = `${contextStr ? contextStr + '\n\n' : ''}วิเคราะห์ชื่องาน: "${title}" ${description ? 'รายละเอียด: ' + description : ''}\nแตกเป็นขั้นตอนย่อย (Subtasks Checklist) สำหรับการทำงานจริง 3 ถึง 5 ข้อ ที่สอดคล้องกับมาตรฐานและบริบทงาน\nตอบกลับในรูปแบบรายการ 1 บรรทัดต่อ 1 ข้อความเท่านั้น โดยขึ้นต้นด้วยขีด (-) หรือตัวเลข`;
-  const llmResult = await callLLM(prompt, 'คุณคือ AI Project Planner');
+  const prompt = `${contextStr ? contextStr + '\n\n' : ''}วิเคราะห์ชื่องาน: "${cleanTitle}" ${cleanDesc ? 'รายละเอียด: ' + cleanDesc : ''}\nแตกเป็นขั้นตอนย่อย (Subtasks Checklist) สำหรับการทำงานจริง 3 ถึง 5 ข้อ ที่สอดคล้องกับมาตรฐานและบริบทงาน\nตอบกลับในรูปแบบรายการ 1 บรรทัดต่อ 1 ข้อความเท่านั้น โดยขึ้นต้นด้วยขีด (-) หรือตัวเลข ห้ามตอบเป็น JSON`;
+  const llmResult = await callLLM(prompt, 'คุณคือ AI Project Planner ตอบเฉพาะรายการบรรทัดละ 1 ข้อ ห้ามใช้ JSON', null, false);
   
   if (llmResult) {
     const lines = llmResult.split('\n')
-      .map(l => l.replace(/^[-*•\d.]+\s*/, '').trim())
-      .filter(l => l.length > 2);
+      .map(l => extractCleanText(l.replace(/^[-*•\d.]+\s*/, '').trim()))
+      .filter(l => l.length > 2 && !l.startsWith('{') && !l.startsWith('}'));
     if (lines.length > 0) return lines;
   }
 
   // Local rule-based fallback based on keywords
-  const titleLower = title.toLowerCase();
+  const titleLower = cleanTitle.toLowerCase();
   if (titleLower.includes('kpi') || titleLower.includes('format')) {
     return [
       'รวบรวมฟอร์แมต KPI เดิมจากทุกแผนก',
@@ -371,7 +439,7 @@ async function generateSubtasks(title, description = '', extraContext = '') {
 
   // Generic fallback
   return [
-    `วางแผนและรวบรวมข้อมูลเริ่มต้นสำหรับ: ${title}`,
+    `วางแผนและรวบรวมข้อมูลเริ่มต้นสำหรับ: ${cleanTitle}`,
     'ดำเนินการจัดเตรียมเอกสารและประสานงานผู้เกี่ยวข้อง',
     'ตรวจสอบความถูกต้องและความเรียบร้อยตามมาตรฐาน',
     'สรุปผลและบันทึกความคืบหน้าโครงการ'
@@ -382,9 +450,10 @@ async function generateSubtasks(title, description = '', extraContext = '') {
  * Smart Auto-fill metadata (Priority, Defect Severity, suggested due days)
  */
 async function autofillMetadata(title, extraContext = '') {
+  const cleanTitle = extractCleanText(title);
   const contextStr = getFullContext(extraContext);
-  const prompt = `${contextStr ? contextStr + '\n\n' : ''}วิเคราะห์ชื่องาน: "${title}"\nให้แนะนำค่าในรูปแบบ JSON ดังนี้:\n{"priority": "Urgent"|"High"|"Normal"|"Low", "severity": "Critical"|"Major"|"Minor"|"Low", "suggestedDays": 3}\nตอบเฉพาะ JSON เท่านั้น`;
-  const llmResult = await callLLM(prompt);
+  const prompt = `${contextStr ? contextStr + '\n\n' : ''}วิเคราะห์ชื่องาน: "${cleanTitle}"\nให้แนะนำค่าในรูปแบบ JSON ดังนี้:\n{"priority": "Urgent"|"High"|"Normal"|"Low", "severity": "Critical"|"Major"|"Minor"|"Low", "suggestedDays": 3}\nตอบเฉพาะ JSON เท่านั้น`;
+  const llmResult = await callLLM(prompt, 'ตอบเฉพาะ JSON Object เท่านั้น', null, true);
   if (llmResult) {
     try {
       const match = llmResult.match(/\{[\s\S]*\}/);
@@ -393,7 +462,7 @@ async function autofillMetadata(title, extraContext = '') {
   }
 
   // Local rule-based fallback
-  const t = title.toLowerCase();
+  const t = cleanTitle.toLowerCase();
   let priority = 'Normal';
   let severity = 'Minor';
   let days = 7;
@@ -420,6 +489,44 @@ async function autofillMetadata(title, extraContext = '') {
 }
 
 /**
+ * Single Unified AI Action: Auto-complete, Polish, Description & Subtasks in One Go
+ */
+async function completeTaskAll(title, description = '', extraContext = '') {
+  const cleanTitle = extractCleanText(title);
+  const cleanDesc = extractCleanText(description);
+  const contextStr = getFullContext(extraContext);
+
+  const [polishedTitle, autofillData, subtasksList] = await Promise.all([
+    polishText(cleanTitle, extraContext),
+    (async () => {
+      const meta = await autofillMetadata(cleanTitle, extraContext);
+      const descPrompt = `${contextStr ? contextStr + '\n\n' : ''}วิเคราะห์ชื่องาน: "${cleanTitle}" ${cleanDesc ? 'รายละเอียดเดิม: ' + cleanDesc : ''}
+กรุณาเขียนคำอธิบายงานและแนวทางการปฏิบัติงาน (Scope of Work & Key Deliverables) สำหรับชิ้นงานนี้
+สรุปเป็น 2-4 บรรทัด หรือรายการข้อที่กระชับ ชัดเจน เป็นภาษาไทยสำหรับฝ่ายบริหารและทีมงาน
+ตอบเป็นข้อความธรรมดาหรือรายการข้อ ห้ามตอบเป็น JSON หรือโค้ดเด็ดขาด`;
+      const descRes = await callLLM(descPrompt, 'คุณคือผู้จัดการโครงการมืออาชีพ ตอบเฉพาะข้อความธรรมดา ห้ามใช้ JSON', null, false);
+      const finalDesc = descRes ? extractCleanText(descRes) : (cleanDesc || `รายละเอียดการดำเนินงานสำหรับ: ${cleanTitle}\n- ตรวจสอบความถูกต้องและรวบรวมข้อมูลที่เกี่ยวข้อง\n- ดำเนินการตามขั้นตอนและมาตรฐานของโครงการ\n- ประเมินผลลัพธ์และสรุปรายงานเสนอฝ่ายบริหาร`);
+      return {
+        priority: meta.priority || 'Normal',
+        severity: meta.severity || 'Minor',
+        suggestedDays: meta.suggestedDays || 7,
+        description: finalDesc
+      };
+    })(),
+    generateSubtasks(cleanTitle, cleanDesc, extraContext)
+  ]);
+
+  return {
+    title: polishedTitle || cleanTitle,
+    description: autofillData.description,
+    priority: autofillData.priority,
+    severity: autofillData.severity,
+    suggestedDays: autofillData.suggestedDays,
+    subtasks: subtasksList
+  };
+}
+
+/**
  * Conversational Assistant with Project & RAG Context
  */
 async function chatAssistant(messages, ragContext, extraContext = '') {
@@ -442,9 +549,11 @@ ${contextStr ? `\n${contextStr}\n` : ''}
 }
 
 module.exports = {
+  extractCleanText,
   callLLM,
   polishText,
   generateSubtasks,
   autofillMetadata,
+  completeTaskAll,
   chatAssistant
 };

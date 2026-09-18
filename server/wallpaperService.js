@@ -2,7 +2,8 @@ const { exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
-const WALLPAPER_DIR = path.join(__dirname, '..', 'uploads', 'wallpapers');
+const USER_DATA_DIR = process.env.STATUS_USER_DATA || path.join(__dirname, '..');
+const WALLPAPER_DIR = path.join(USER_DATA_DIR, 'uploads', 'wallpapers');
 if (!fs.existsSync(WALLPAPER_DIR)) {
   fs.mkdirSync(WALLPAPER_DIR, { recursive: true });
 }
@@ -113,16 +114,16 @@ const STOCK_WALLPAPERS = [
     id: 'stock-dark-obsidian',
     name: 'Dark Obsidian Glass',
     category: 'Dark Minimalist',
-    imageUrl: '/wallpapers/dark-obsidian.jpg',
-    thumbnail: '/wallpapers/dark-obsidian.jpg',
+    imageUrl: '/api/wallpaper/file/dark-obsidian.jpg',
+    thumbnail: '/api/wallpaper/file/dark-obsidian.jpg',
     accent: '#7b68ee'
   },
   {
     id: 'stock-dark-polygon',
     name: 'Geometric Polygonal Mesh',
     category: 'Dark Minimalist',
-    imageUrl: '/wallpapers/dark-polygon.jpg',
-    thumbnail: '/wallpapers/dark-polygon.jpg',
+    imageUrl: '/api/wallpaper/file/dark-polygon.jpg',
+    thumbnail: '/api/wallpaper/file/dark-polygon.jpg',
     accent: '#3b82f6'
   },
   // 2. Cyber & Neon
@@ -130,16 +131,16 @@ const STOCK_WALLPAPERS = [
     id: 'stock-cyber-city',
     name: 'Tokyo Cyberpunk Rain',
     category: 'Cyber Neon',
-    imageUrl: '/wallpapers/cyber-neon-city.jpg',
-    thumbnail: '/wallpapers/cyber-neon-city.jpg',
+    imageUrl: '/api/wallpaper/file/cyber-neon-city.jpg',
+    thumbnail: '/api/wallpaper/file/cyber-neon-city.jpg',
     accent: '#06b6d4'
   },
   {
     id: 'stock-neon-horizon',
     name: 'Neon Violet Horizon',
     category: 'Cyber Neon',
-    imageUrl: '/wallpapers/neon-horizon.jpg',
-    thumbnail: '/wallpapers/neon-horizon.jpg',
+    imageUrl: '/api/wallpaper/file/neon-horizon.jpg',
+    thumbnail: '/api/wallpaper/file/neon-horizon.jpg',
     accent: '#ec4899'
   },
   // 3. Deep Nature & Mountains
@@ -147,24 +148,24 @@ const STOCK_WALLPAPERS = [
     id: 'stock-midnight-mountain',
     name: 'Deep Midnight Mountain',
     category: 'Nature & Landscape',
-    imageUrl: '/wallpapers/midnight-mountain.jpg',
-    thumbnail: '/wallpapers/midnight-mountain.jpg',
+    imageUrl: '/api/wallpaper/file/midnight-mountain.jpg',
+    thumbnail: '/api/wallpaper/file/midnight-mountain.jpg',
     accent: '#38bdf8'
   },
   {
     id: 'stock-pine-forest',
     name: 'Nordic Pine Forest Mist',
     category: 'Nature & Landscape',
-    imageUrl: '/wallpapers/pine-forest-mist.jpg',
-    thumbnail: '/wallpapers/pine-forest-mist.jpg',
+    imageUrl: '/api/wallpaper/file/pine-forest-mist.jpg',
+    thumbnail: '/api/wallpaper/file/pine-forest-mist.jpg',
     accent: '#10b981'
   },
   {
     id: 'stock-milky-way',
     name: 'Milky Way Starry Night',
     category: 'Nature & Landscape',
-    imageUrl: '/wallpapers/milky-way-galaxy.jpg',
-    thumbnail: '/wallpapers/milky-way-galaxy.jpg',
+    imageUrl: '/api/wallpaper/file/milky-way-galaxy.jpg',
+    thumbnail: '/api/wallpaper/file/milky-way-galaxy.jpg',
     accent: '#818cf8'
   },
   // 4. Architecture & Workspace
@@ -172,16 +173,16 @@ const STOCK_WALLPAPERS = [
     id: 'stock-minimalist-desk',
     name: 'Clean Workspace Studio',
     category: 'Architecture & Desk',
-    imageUrl: '/wallpapers/minimalist-desk.jpg',
-    thumbnail: '/wallpapers/minimalist-desk.jpg',
+    imageUrl: '/api/wallpaper/file/minimalist-desk.jpg',
+    thumbnail: '/api/wallpaper/file/minimalist-desk.jpg',
     accent: '#f59e0b'
   },
   {
     id: 'stock-modern-architecture',
     name: 'Modern Geometric Architecture',
     category: 'Architecture & Desk',
-    imageUrl: '/wallpapers/modern-architecture.jpg',
-    thumbnail: '/wallpapers/modern-architecture.jpg',
+    imageUrl: '/api/wallpaper/file/modern-architecture.jpg',
+    thumbnail: '/api/wallpaper/file/modern-architecture.jpg',
     accent: '#64748b'
   },
   // 5. Abstract 3D
@@ -189,24 +190,24 @@ const STOCK_WALLPAPERS = [
     id: 'stock-purple-spheres',
     name: '3D Purple Liquid Spheres',
     category: 'Abstract 3D',
-    imageUrl: '/wallpapers/purple-liquid-spheres.jpg',
-    thumbnail: '/wallpapers/purple-liquid-spheres.jpg',
+    imageUrl: '/api/wallpaper/file/purple-liquid-spheres.jpg',
+    thumbnail: '/api/wallpaper/file/purple-liquid-spheres.jpg',
     accent: '#a855f7'
   },
   {
     id: 'stock-silk-flow',
     name: 'Silk Flow Gradient Wave',
     category: 'Abstract 3D',
-    imageUrl: '/wallpapers/silk-gradient-flow.jpg',
-    thumbnail: '/wallpapers/silk-gradient-flow.jpg',
+    imageUrl: '/api/wallpaper/file/silk-gradient-flow.jpg',
+    thumbnail: '/api/wallpaper/file/silk-gradient-flow.jpg',
     accent: '#ec4899'
   },
   {
     id: 'stock-cyber-sunset',
     name: 'Cyber Sunset Horizon',
     category: 'Abstract 3D',
-    imageUrl: '/wallpapers/cyber-sunset.jpg',
-    thumbnail: '/wallpapers/cyber-sunset.jpg',
+    imageUrl: '/api/wallpaper/file/cyber-sunset.jpg',
+    thumbnail: '/api/wallpaper/file/cyber-sunset.jpg',
     accent: '#f97316'
   }
 ];

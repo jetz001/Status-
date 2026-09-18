@@ -3,7 +3,8 @@ const fs = require('fs');
 const { db } = require('./db');
 const { indexTask, reindexAll } = require('./ragService');
 
-const BACKUP_DIR = path.join(__dirname, '..', 'backups');
+const USER_DATA_DIR = process.env.STATUS_USER_DATA || path.join(__dirname, '..');
+const BACKUP_DIR = path.join(USER_DATA_DIR, 'backups');
 if (!fs.existsSync(BACKUP_DIR)) {
   fs.mkdirSync(BACKUP_DIR, { recursive: true });
 }
@@ -70,7 +71,7 @@ function createFullBackup(note = 'manual') {
     };
 
     const dateStr = new Date().toISOString().replace(/[:.]/g, '-');
-    const filename = `backup-${note}-${dateStr}.json`;
+    const filename = `backup-${note}-${dateStr}.statusbackup`;
     const filePath = path.join(BACKUP_DIR, filename);
 
     fs.writeFileSync(filePath, JSON.stringify(backupData, null, 2), 'utf8');
@@ -95,7 +96,7 @@ function createFullBackup(note = 'manual') {
 function listBackups() {
   try {
     cleanOldBackups(7);
-    const files = fs.readdirSync(BACKUP_DIR).filter(f => f.endsWith('.json'));
+    const files = fs.readdirSync(BACKUP_DIR).filter(f => f.endsWith('.statusbackup') || f.endsWith('.spbackup') || f.endsWith('.json'));
     const list = files.map(file => {
       const filePath = path.join(BACKUP_DIR, file);
       const stats = fs.statSync(filePath);
@@ -155,19 +156,32 @@ function restoreBackupData(backupData, mode = 'replace') {
 
       // Insert workspaces
       const insWs = db.prepare('INSERT INTO workspaces (id, name, created_at) VALUES (?, ?, ?)');
-      (data.workspaces || []).forEach(w => insWs.run(w.id, w.name, w.created_at));
+      (data.workspaces || []).forEach(w => insWs.run(w.id, w.name, w.created_at || new Date().toISOString()));
 
       // Insert spaces
       const insSp = db.prepare('INSERT INTO spaces (id, workspace_id, name, color, icon, position, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
-      (data.spaces || []).forEach(s => insSp.run(s.id, s.workspace_id, s.name, s.color, s.icon, s.position, s.created_at));
+      (data.spaces || []).forEach(s => insSp.run(s.id, s.workspace_id, s.name, s.color || '#7b68ee', s.icon || 'folder', s.position || 0, s.created_at || new Date().toISOString()));
 
       // Insert lists
       const insLs = db.prepare('INSERT INTO lists (id, space_id, name, color, position, created_at) VALUES (?, ?, ?, ?, ?, ?)');
-      (data.lists || []).forEach(l => insLs.run(l.id, l.space_id, l.name, l.color, l.position, l.created_at));
+      (data.lists || []).forEach(l => insLs.run(l.id, l.space_id, l.name, l.color || '#7b68ee', l.position || 0, l.created_at || new Date().toISOString()));
 
       // Insert custom fields
       const insCf = db.prepare('INSERT INTO custom_fields (id, list_id, name, type, options_json, position) VALUES (?, ?, ?, ?, ?, ?)');
-      (data.customFields || []).forEach(cf => insCf.run(cf.id, cf.list_id, cf.name, cf.type, cf.options_json, cf.position));
+      (data.customFields || []).forEach(cf => insCf.run(cf.id, cf.list_id, cf.name, cf.type, cf.options_json || '[]', cf.position || 0));
+    } else {
+      // Merge mode: ensure all workspaces, spaces, lists, and custom fields from backup exist
+      const insWs = db.prepare('INSERT OR IGNORE INTO workspaces (id, name, created_at) VALUES (?, ?, ?)');
+      (data.workspaces || []).forEach(w => insWs.run(w.id, w.name, w.created_at || new Date().toISOString()));
+
+      const insSp = db.prepare('INSERT OR REPLACE INTO spaces (id, workspace_id, name, color, icon, position, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
+      (data.spaces || []).forEach(s => insSp.run(s.id, s.workspace_id, s.name, s.color || '#7b68ee', s.icon || 'folder', s.position || 0, s.created_at || new Date().toISOString()));
+
+      const insLs = db.prepare('INSERT OR REPLACE INTO lists (id, space_id, name, color, position, created_at) VALUES (?, ?, ?, ?, ?, ?)');
+      (data.lists || []).forEach(l => insLs.run(l.id, l.space_id, l.name, l.color || '#7b68ee', l.position || 0, l.created_at || new Date().toISOString()));
+
+      const insCf = db.prepare('INSERT OR REPLACE INTO custom_fields (id, list_id, name, type, options_json, position) VALUES (?, ?, ?, ?, ?, ?)');
+      (data.customFields || []).forEach(cf => insCf.run(cf.id, cf.list_id, cf.name, cf.type, cf.options_json || '[]', cf.position || 0));
     }
 
     // Insert tasks
@@ -185,7 +199,7 @@ function restoreBackupData(backupData, mode = 'replace') {
         t.priority || 'Normal',
         t.due_date || null,
         t.start_date || null,
-        t.assignee || 'JM',
+        t.assignee || '',
         t.position || 0,
         t.created_at || new Date().toISOString(),
         t.updated_at || new Date().toISOString()
@@ -325,7 +339,7 @@ function importTasksFromCSV(listId, csvText) {
     const status = statusIdx !== -1 && cols[statusIdx] ? cols[statusIdx].trim() : 'NOT STARTED';
     const priority = priorityIdx !== -1 && cols[priorityIdx] ? cols[priorityIdx].trim() : 'Normal';
     const dueDate = dueIdx !== -1 && cols[dueIdx] ? cols[dueIdx].trim() : null;
-    const assignee = assigneeIdx !== -1 && cols[assigneeIdx] ? cols[assigneeIdx].trim() : 'JM';
+    const assignee = assigneeIdx !== -1 && cols[assigneeIdx] ? cols[assigneeIdx].trim() : '';
     const description = descIdx !== -1 && cols[descIdx] ? cols[descIdx].trim() : '';
 
     db.prepare(`

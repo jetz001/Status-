@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <title>Loading Status+</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: transparent;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans Thai", Helvetica, Arial, sans-serif;
+    }
+    .splash-card {
+      width: 440px;
+      height: 270px;
+      background: linear-gradient(160deg, #1e1f23 0%, #131417 100%);
+      border: 1px solid rgba(123, 104, 238, 0.35);
+      border-radius: 20px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.85), 0 0 35px rgba(123, 104, 238, 0.2);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 28px;
+      position: relative;
+      color: #ffffff;
+      -webkit-app-region: drag;
+    }
+    .logo-container {
+      position: relative;
+      margin-bottom: 12px;
+    }
+    .logo {
+      width: 68px;
+      height: 68px;
+      border-radius: 16px;
+      object-fit: cover;
+      box-shadow: 0 8px 24px rgba(123, 104, 238, 0.4);
+      animation: pulse 2.2s infinite ease-in-out;
+    }
+    .brand-title {
+      font-size: 26px;
+      font-weight: 900;
+      letter-spacing: -0.5px;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      margin-bottom: 4px;
+    }
+    .brand-plus {
+      background: linear-gradient(135deg, #a855f7 0%, #06b6d4 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      font-size: 28px;
+    }
+    .brand-tag {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: #94a3b8;
+      margin-bottom: 22px;
+    }
+    .progress-track {
+      width: 100%;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 9999px;
+      overflow: hidden;
+      position: relative;
+      margin-bottom: 10px;
+    }
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #7b68ee, #c084fc, #38bdf8);
+      border-radius: 9999px;
+      transition: width 0.4s ease-out;
+      box-shadow: 0 0 12px rgba(123, 104, 238, 0.8);
+      position: relative;
+    }
+    .progress-bar::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.6), transparent);
+      animation: shimmer 1.5s infinite;
+    }
+    .status-row {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      color: #94a3b8;
+    }
+    .status-text {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 500;
+    }
+    .spinner {
+      width: 10px;
+      height: 10px;
+      border: 2px solid rgba(123, 104, 238, 0.3);
+      border-top-color: #7b68ee;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    .percent-text {
+      font-weight: 700;
+      color: #cbd5e1;
+      font-variant-numeric: tabular-nums;
+    }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); filter: drop-shadow(0 0 12px rgba(123, 104, 238, 0.3)); }
+      50% { transform: scale(1.04); filter: drop-shadow(0 0 20px rgba(123, 104, 238, 0.6)); }
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    @keyframes shimmer {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+  </style>
+</head>
+<body>
+  <div class="splash-card">
+    <div class="logo-container">
+      <img src="../public/logo.png" alt="Status+" class="logo" onerror="this.src='../public/icon.png'">
+    </div>
+    <div class="brand-title">
+      <span>Status</span><span class="brand-plus">+</span>
+    </div>
+    <div class="brand-tag">Local Workspace & AI Tracker</div>
+
+    <div class="progress-track">
+      <div class="progress-bar" id="progressBar"></div>
+    </div>
+
+    <div class="status-row">
+      <div class="status-text">
+        <div class="spinner"></div>
+        <span id="statusLabel">กำลังเริ่มระบบและโหลดแอสเซท...</span>
+      </div>
+      <div class="percent-text" id="percentLabel">15%</div>
+    </div>
+  </div>
+
+  <script>
+    const steps = [
+      { pct: 25, text: 'กำลังตรวจสอบฐานข้อมูล SQLite...' },
+      { pct: 50, text: 'กำลังโหลดแอสเซทและคลังภาพวอลเปเปอร์...' },
+      { pct: 75, text: 'กำลังเตรียมพร้อมผู้ช่วย AI และเครื่องมือ...' },
+      { pct: 92, text: 'กำลังเชื่อมต่อพื้นที่ทำงาน...' },
+      { pct: 100, text: 'พร้อมเริ่มใช้งาน!' }
+    ];
+
+    let currentStep = 0;
+    const bar = document.getElementById('progressBar');
+    const label = document.getElementById('statusLabel');
+    const pctLabel = document.getElementById('percentLabel');
+
+    bar.style.width = '15%';
+
+    const interval = setInterval(() => {
+      if (currentStep < steps.length) {
+        const step = steps[currentStep];
+        bar.style.width = step.pct + '%';
+        label.textContent = step.text;
+        pctLabel.textContent = step.pct + '%';
+        currentStep++;
+      } else {
+        clearInterval(interval);
+      }
+    }, 250);
+  </script>
+</body>
+</html>

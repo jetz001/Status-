@@ -28,6 +28,7 @@ import {
   MoreHorizontal
 } from 'lucide-react';
 import ContextMenu from './ContextMenu.jsx';
+import logoImg from '../assets/logo.png';
 
 const COLOR_PRESETS = [
   { label: 'ม่วง Purple', value: '#7b68ee' },
@@ -43,6 +44,7 @@ export default function Sidebar({
   spaces, 
   activeListId, 
   activeView,
+  workspaceName = 'My Workspace',
   onSelectList, 
   onSelectHome,
   onSelectAllTasks,
@@ -309,13 +311,10 @@ export default function Sidebar({
   return (
     <aside className="w-64 bg-[#18191b] border-r border-[#333538] flex flex-col h-screen select-none text-[#cfd3d8] flex-shrink-0 z-10 text-xs">
       {/* Workspace Header */}
-      <div 
-        onClick={onSelectHome}
-        className="p-3 border-b border-[#333538] flex items-center justify-between hover:bg-[#222427] cursor-pointer transition"
-      >
+      <div className="p-3 border-b border-[#333538] flex items-center justify-between bg-[#141517]">
         <div className="flex items-center space-x-2.5 truncate">
           <img 
-            src="/logo.png" 
+            src={logoImg} 
             alt="Status+" 
             className="w-7 h-7 rounded-lg object-cover shadow-sm ring-1 ring-[#7b68ee]/30 flex-shrink-0" 
           />
@@ -324,10 +323,9 @@ export default function Sidebar({
               <span className="font-bold text-white truncate text-xs">Status+</span>
               <span className="text-[9px] px-1 py-0.2 rounded bg-[#7b68ee]/20 text-[#a292ff] font-semibold">PRO</span>
             </div>
-            <span className="text-[10px] text-gray-400 truncate">Jet mut's Workspace</span>
+            <span className="text-[10px] text-gray-400 truncate">{workspaceName}</span>
           </div>
         </div>
-        <ChevronDown size={14} className="text-gray-400" />
       </div>
 
       {/* Main Navigation Scroll Area */}
@@ -346,7 +344,7 @@ export default function Sidebar({
             <span>Home</span>
           </div>
 
-          {/* All Tasks - Jet mut's Workspace */}
+          {/* All Tasks */}
           <div 
             onClick={onSelectAllTasks}
             className={`flex items-center space-x-2.5 px-2.5 py-1.5 rounded-lg cursor-pointer font-medium transition group ${
@@ -370,7 +368,7 @@ export default function Sidebar({
             </div>
             <div className="truncate flex-1">
               <span className="text-white font-medium">All Tasks</span>
-              <span className="text-[10px] text-gray-400 ml-1.5">- Jet mut's Workspace</span>
+              <span className="text-[10px] text-gray-400 ml-1.5">- {workspaceName}</span>
             </div>
             <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-[#242629] text-gray-400 group-hover:text-cyan-300">
               {allTasksCount || 0}

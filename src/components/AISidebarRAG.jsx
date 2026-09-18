@@ -878,7 +878,7 @@ export default function AISidebarRAG({
                               </div>
 
                               <div className="flex items-center space-x-2 text-[10px] text-gray-400">
-                                <span>ลิสต์: {act.task.listName || 'IQA26'}</span>
+                                <span>ลิสต์: {act.task.listName || 'General'}</span>
                                 <span>•</span>
                                 <span className={act.task.priority === 'Urgent' ? 'text-red-400 font-bold' : ''}>
                                   ความสำคัญ: {act.task.priority}

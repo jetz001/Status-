@@ -47,12 +47,11 @@ export default function Header({
           </div>
         ) : (
           <div className="flex items-center space-x-2 text-xs">
-            <span className="text-gray-400 font-medium">{spaceName || 'Team Space'}</span>
+            <span className="text-gray-400 font-medium">{spaceName || 'Workspace'}</span>
             <span className="text-gray-500">/</span>
             <div className="flex items-center space-x-1.5 text-white font-semibold">
               <span className="w-2 h-2 rounded-sm bg-[#7b68ee]"></span>
-              <span>{listName || 'IQA26'}</span>
-              <ChevronDown size={13} className="text-gray-400" />
+              <span>{listName || 'Tasks'}</span>
             </div>
           </div>
         )}
@@ -88,23 +87,13 @@ export default function Header({
 
           {/* Quick Export Excel/CSV Button */}
           <a 
-            href={`/api/export/csv?listId=${activeListId || 'list-iqa26'}`}
+            href={`/api/export/csv${activeListId ? `?listId=${activeListId}` : ''}`}
             title="ส่งออกตารางงานเป็น Excel CSV ทันที"
             className="flex items-center space-x-1 px-2.5 py-1.5 rounded hover:bg-[#2a2b2d] text-gray-300 hover:text-emerald-400 text-xs font-medium transition"
           >
             <Download size={15} className="text-emerald-400" />
             <span className="hidden sm:inline">Export</span>
           </a>
-
-          {/* Print / PDF Button */}
-          <button 
-            onClick={onOpenPrintReport}
-            title="พิมพ์หรือส่งออกเป็น PDF บนเบราว์เซอร์"
-            className="flex items-center space-x-1 px-2.5 py-1.5 rounded hover:bg-[#2a2b2d] text-gray-300 hover:text-white text-xs font-medium transition"
-          >
-            <Printer size={15} className="text-blue-400" />
-            <span className="hidden sm:inline">Print / PDF</span>
-          </button>
 
           {/* Notification Bell */}
           <button 
@@ -174,15 +163,60 @@ export default function Header({
           </button>
         </div>
 
-        {/* View Options */}
+        {/* View Options & Contextual Module Print Button */}
         <div className="flex items-center space-x-2 text-xs">
-          <button 
-            onClick={onOpenCustomFieldModal}
-            className="flex items-center space-x-1 px-2.5 py-1 rounded hover:bg-[#2a2b2d] text-gray-400 hover:text-white transition"
-          >
-            <SlidersHorizontal size={13} />
-            <span>Columns</span>
-          </button>
+          {activeView === 'list' && (
+            <>
+              <button 
+                onClick={() => onOpenPrintReport('list')}
+                title="พิมพ์ตารางรายการงาน (Print List View)"
+                className="flex items-center space-x-1 px-2.5 py-1 rounded hover:bg-[#2a2b2d] text-gray-300 hover:text-white transition cursor-pointer border border-[#3a3b3d]/50"
+              >
+                <Printer size={13} className="text-blue-400" />
+                <span>พิมพ์ตารางงาน</span>
+              </button>
+              <button 
+                onClick={onOpenCustomFieldModal}
+                className="flex items-center space-x-1 px-2.5 py-1 rounded hover:bg-[#2a2b2d] text-gray-400 hover:text-white transition cursor-pointer"
+              >
+                <SlidersHorizontal size={13} />
+                <span>Columns</span>
+              </button>
+            </>
+          )}
+
+          {activeView === 'board' && (
+            <button 
+              onClick={() => onOpenPrintReport('board')}
+              title="พิมพ์กระดานงาน (Print Kanban Board)"
+              className="flex items-center space-x-1 px-2.5 py-1 rounded hover:bg-[#2a2b2d] text-gray-300 hover:text-white transition cursor-pointer border border-[#3a3b3d]/50"
+            >
+              <Printer size={13} className="text-blue-400" />
+              <span>พิมพ์บอร์ด</span>
+            </button>
+          )}
+
+          {activeView === 'timeline' && (
+            <button 
+              onClick={() => onOpenPrintReport('timeline')}
+              title="พิมพ์แผนผังกำหนดเวลา (Print Gantt Timeline)"
+              className="flex items-center space-x-1 px-2.5 py-1 rounded hover:bg-[#2a2b2d] text-gray-300 hover:text-white transition cursor-pointer border border-[#3a3b3d]/50"
+            >
+              <Printer size={13} className="text-blue-400" />
+              <span>พิมพ์ Gantt</span>
+            </button>
+          )}
+
+          {activeView === 'home' && (
+            <button 
+              onClick={() => onOpenPrintReport('home')}
+              title="พิมพ์สรุปภาพรวมเวิร์กสเปซ (Print Workspace Summary)"
+              className="flex items-center space-x-1 px-2.5 py-1 rounded hover:bg-[#2a2b2d] text-gray-300 hover:text-white transition cursor-pointer border border-[#3a3b3d]/50"
+            >
+              <Printer size={13} className="text-blue-400" />
+              <span>พิมพ์สรุปภาพรวม</span>
+            </button>
+          )}
         </div>
       </div>
     </header>

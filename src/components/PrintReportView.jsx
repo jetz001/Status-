@@ -2,11 +2,13 @@ import React, { useEffect } from 'react';
 import { Printer, X, CheckSquare, Calendar, User, Flag } from 'lucide-react';
 
 export default function PrintReportView({
-  type = 'list', // 'list' or 'task'
+  type = 'list', // 'list', 'board', 'timeline', 'home', 'task'
   tasks = [],
   singleTask = null,
-  listName = 'IQA26',
-  spaceName = 'Team Space',
+  listName = 'Tasks',
+  spaceName = 'Workspace',
+  workspaceName = 'พื้นที่ทำงาน',
+  userName = 'ผู้ใช้งาน',
   onClose
 }) {
   const handlePrint = () => {
@@ -19,25 +21,86 @@ export default function PrintReportView({
     year: 'numeric'
   });
 
+  const completedTasks = tasks.filter(t => t.status === 'COMPLETED');
+  const inProgressTasks = tasks.filter(t => t.status === 'IN PROGRESS');
+  const notStartedTasks = tasks.filter(t => t.status === 'NOT STARTED');
+  const completionRate = tasks.length > 0 ? Math.round((completedTasks.length / tasks.length) * 100) : 0;
+
+  // Real Gantt Chart Timeline Calculations (21-Day Landscape Grid)
+  const todayDate = new Date();
+  const todayDateStr = todayDate.toISOString().split('T')[0];
+
+  let startGanttDate = new Date(todayDate);
+  startGanttDate.setDate(startGanttDate.getDate() - 3);
+
+  const validDueDates = tasks.map(t => t.due_date).filter(Boolean).sort();
+  if (validDueDates.length > 0) {
+    const earliestDue = new Date(validDueDates[0]);
+    if (!isNaN(earliestDue) && earliestDue < startGanttDate) {
+      startGanttDate = new Date(earliestDue);
+      startGanttDate.setDate(startGanttDate.getDate() - 1);
+    }
+  }
+
+  const totalGanttCols = 21; // 3 Full Calendar Weeks
+  const ganttDateList = [];
+  for (let i = 0; i < totalGanttCols; i++) {
+    const d = new Date(startGanttDate);
+    d.setDate(startGanttDate.getDate() + i);
+    ganttDateList.push(d);
+  }
+
+  const thaiDayInitials = ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'];
+
   return (
     <div className="fixed inset-0 bg-white text-black z-50 overflow-y-auto print:p-0 print:m-0">
+      {/* Print Page Orientation & Color Adjustment Styles */}
+      <style>{`
+        @media print {
+          @page {
+            size: ${type === 'timeline' ? 'landscape' : 'portrait'};
+            margin: 6mm;
+          }
+          body {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          .print-landscape-sheet {
+            max-width: 100% !important;
+            width: 100% !important;
+            padding: 0 !important;
+            margin: 0 !important;
+          }
+          .no-break {
+            break-inside: avoid;
+            page-break-inside: avoid;
+          }
+        }
+      `}</style>
+
       {/* On-screen control bar (Hidden during actual print) */}
       <div className="sticky top-0 bg-[#1e1f21] text-white p-3 flex items-center justify-between border-b border-[#333538] shadow-md no-print text-xs">
         <div className="flex items-center space-x-2 font-bold">
           <Printer size={16} className="text-blue-400" />
-          <span>พรีวิวเอกสารสำหรับสั่งพิมพ์หรือบันทึกเป็น PDF (Print Preview)</span>
+          <span>
+            {type === 'list' && 'พรีวิวเอกสารตารางรายการงาน (Print List View)'}
+            {type === 'board' && 'พรีวิวเอกสารกระดานงาน (Print Kanban Board)'}
+            {type === 'timeline' && 'พรีวิวเอกสารผังกำหนดการ Gantt Chart แนวนอน (Print Gantt Chart Landscape)'}
+            {type === 'home' && 'พรีวิวเอกสารสรุปภาพรวมพื้นที่ทำงาน (Print Executive Summary)'}
+            {type === 'task' && 'พรีวิวเอกสารคำสั่งงาน (Print Task Sheet)'}
+          </span>
         </div>
         <div className="flex items-center space-x-2">
           <button
             onClick={handlePrint}
-            className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded shadow transition flex items-center space-x-1.5"
+            className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded shadow transition flex items-center space-x-1.5 cursor-pointer"
           >
             <Printer size={14} />
             <span>สั่งพิมพ์ / บันทึก PDF (Print Now)</span>
           </button>
           <button
             onClick={onClose}
-            className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white rounded transition flex items-center space-x-1"
+            className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white rounded transition flex items-center space-x-1 cursor-pointer"
           >
             <X size={14} />
             <span>ปิดหน้าต่าง</span>
@@ -46,7 +109,9 @@ export default function PrintReportView({
       </div>
 
       {/* Printable Sheet Container */}
-      <div className="max-w-4xl mx-auto p-8 font-['Noto_Sans_Thai',_sans-serif] print-page space-y-6">
+      <div className={`mx-auto p-8 font-['Noto_Sans_Thai',_sans-serif] print-page space-y-6 ${
+        type === 'timeline' ? 'max-w-[1360px] print-landscape-sheet' : 'max-w-4xl'
+      }`}>
         {/* ============================================================ */}
         {/* VIEW 1: FULL PROJECT LIST REPORT */}
         {/* ============================================================ */}
@@ -56,7 +121,7 @@ export default function PrintReportView({
             <div className="border-b-2 border-gray-800 pb-4 flex items-start justify-between">
               <div>
                 <h1 className="text-2xl font-black text-gray-900 tracking-tight">
-                  รายงานสรุปสถานะโครงการ (Project Status Report)
+                  รายงานตารางงานโครงการ (Project Task List Report)
                 </h1>
                 <p className="text-sm text-gray-600 mt-1">
                   พื้นที่งาน: <span className="font-semibold text-gray-800">{spaceName}</span> &gt; ลิสต์งาน: <span className="font-semibold text-gray-800">{listName}</span>
@@ -73,19 +138,19 @@ export default function PrintReportView({
               <div className="border border-gray-300 rounded p-3 bg-gray-50">
                 <span className="text-xs text-gray-600 block">งานที่เสร็จสมบูรณ์ (COMPLETED)</span>
                 <span className="text-xl font-bold text-emerald-600">
-                  {tasks.filter(t => t.status === 'COMPLETED').length} รายการ
+                  {completedTasks.length} รายการ ({completionRate}%)
                 </span>
               </div>
               <div className="border border-gray-300 rounded p-3 bg-gray-50">
                 <span className="text-xs text-gray-600 block">งานที่กำลังดำเนินการ (IN PROGRESS)</span>
                 <span className="text-xl font-bold text-blue-600">
-                  {tasks.filter(t => t.status === 'IN PROGRESS').length} รายการ
+                  {inProgressTasks.length} รายการ
                 </span>
               </div>
               <div className="border border-gray-300 rounded p-3 bg-gray-50">
                 <span className="text-xs text-gray-600 block">งานที่ยังไม่เริ่ม (NOT STARTED)</span>
                 <span className="text-xl font-bold text-red-600">
-                  {tasks.filter(t => t.status === 'NOT STARTED').length} รายการ
+                  {notStartedTasks.length} รายการ
                 </span>
               </div>
             </div>
@@ -99,54 +164,475 @@ export default function PrintReportView({
                   <th className="p-2 border-r border-gray-300 w-28 text-center">สถานะ</th>
                   <th className="p-2 border-r border-gray-300 w-20 text-center">ความสำคัญ</th>
                   <th className="p-2 border-r border-gray-300 w-24 text-center">กำหนดส่ง</th>
-                  <th className="p-2 border-r border-gray-300 w-20 text-center">ผู้รับผิดชอบ</th>
-                  <th className="p-2 w-24 text-center">ซับทาสก์</th>
+                  <th className="p-2 border-r border-gray-300 w-24 text-center">ผู้รับผิดชอบ</th>
+                  <th className="p-2 w-20 text-center">ซับทาสก์</th>
                 </tr>
               </thead>
               <tbody>
-                {tasks.map((t, idx) => {
-                  const completedSubs = (t.subtasks || []).filter(s => s.completed).length;
-                  const totalSubs = (t.subtasks || []).length;
+                {tasks.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="p-6 text-center text-gray-400 italic">
+                      ไม่มีรายการงานในลิสต์นี้
+                    </td>
+                  </tr>
+                ) : (
+                  tasks.map((t, idx) => {
+                    const completedSubs = (t.subtasks || []).filter(s => s.completed).length;
+                    const totalSubs = (t.subtasks || []).length;
 
-                  return (
-                    <tr key={t.id} className="border-b border-gray-200 even:bg-gray-50/60">
-                      <td className="p-2 border-r border-gray-300 text-center font-medium text-gray-600">
-                        {idx + 1}
-                      </td>
-                      <td className="p-2 border-r border-gray-300 font-semibold text-gray-900">
-                        {t.name}
-                        {t.description && (
-                          <span className="block text-[11px] text-gray-500 font-normal pt-0.5 truncate max-w-sm">
-                            {t.description}
+                    return (
+                      <tr key={t.id} className="border-b border-gray-200 even:bg-gray-50/60">
+                        <td className="p-2 border-r border-gray-300 text-center font-medium text-gray-600">
+                          {idx + 1}
+                        </td>
+                        <td className="p-2 border-r border-gray-300 font-semibold text-gray-900">
+                          {t.name}
+                          {t.description && (
+                            <span className="block text-[11px] text-gray-500 font-normal pt-0.5 truncate max-w-sm">
+                              {t.description}
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-2 border-r border-gray-300 text-center">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            t.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-800' :
+                            t.status === 'IN PROGRESS' ? 'bg-blue-100 text-blue-800' :
+                            'bg-red-100 text-red-800'
+                          }`}>
+                            {t.status}
                           </span>
-                        )}
-                      </td>
-                      <td className="p-2 border-r border-gray-300 text-center">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          t.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-800' :
-                          t.status === 'IN PROGRESS' ? 'bg-blue-100 text-blue-800' :
-                          'bg-red-100 text-red-800'
-                        }`}>
-                          {t.status}
-                        </span>
-                      </td>
-                      <td className="p-2 border-r border-gray-300 text-center font-medium text-gray-700">
-                        {t.priority}
-                      </td>
-                      <td className="p-2 border-r border-gray-300 text-center text-gray-700">
-                        {t.due_date || '-'}
-                      </td>
-                      <td className="p-2 border-r border-gray-300 text-center font-semibold text-gray-800">
-                        {t.assignee || 'JM'}
-                      </td>
-                      <td className="p-2 text-center text-gray-600 font-medium">
-                        {totalSubs > 0 ? `${completedSubs}/${totalSubs}` : '-'}
-                      </td>
-                    </tr>
-                  );
-                })}
+                        </td>
+                        <td className="p-2 border-r border-gray-300 text-center font-medium text-gray-700">
+                          {t.priority}
+                        </td>
+                        <td className="p-2 border-r border-gray-300 text-center text-gray-700">
+                          {t.due_date || '-'}
+                        </td>
+                        <td className="p-2 border-r border-gray-300 text-center font-semibold text-gray-800">
+                          {t.assignee || '-'}
+                        </td>
+                        <td className="p-2 text-center text-gray-600 font-medium">
+                          {totalSubs > 0 ? `${completedSubs}/${totalSubs}` : '-'}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {/* ============================================================ */}
+        {/* VIEW 2: KANBAN BOARD REPORT */}
+        {/* ============================================================ */}
+        {type === 'board' && (
+          <div className="space-y-6">
+            {/* Report Header */}
+            <div className="border-b-2 border-gray-800 pb-4 flex items-start justify-between">
+              <div>
+                <h1 className="text-2xl font-black text-gray-900 tracking-tight">
+                  รายงานกระดานงาน Kanban (Board View Report)
+                </h1>
+                <p className="text-sm text-gray-600 mt-1">
+                  พื้นที่งาน: <span className="font-semibold text-gray-800">{spaceName}</span> &gt; ลิสต์งาน: <span className="font-semibold text-gray-800">{listName}</span>
+                </p>
+              </div>
+              <div className="text-right text-xs text-gray-500">
+                <p>วันที่พิมพ์: <span className="font-medium text-gray-800">{currentDate}</span></p>
+                <p>รวมงานทั้งหมด: <span className="font-bold text-gray-800">{tasks.length} รายการ</span></p>
+              </div>
+            </div>
+
+            {/* Kanban Columns */}
+            <div className="grid grid-cols-3 gap-4">
+              {/* Not Started Column */}
+              <div className="border border-red-200 rounded-lg bg-red-50/30 overflow-hidden">
+                <div className="bg-red-100 border-b border-red-200 p-2.5 font-bold text-red-900 text-xs flex justify-between items-center">
+                  <span>ยังไม่เริ่ม (NOT STARTED)</span>
+                  <span className="bg-red-200 text-red-900 px-1.5 py-0.5 rounded text-[10px]">{notStartedTasks.length}</span>
+                </div>
+                <div className="p-2.5 space-y-2">
+                  {notStartedTasks.length === 0 ? (
+                    <p className="text-xs text-gray-400 italic text-center py-4">ไม่มีงาน</p>
+                  ) : (
+                    notStartedTasks.map(t => (
+                      <div key={t.id} className="bg-white border border-gray-200 rounded p-2 text-xs shadow-sm space-y-1">
+                        <p className="font-bold text-gray-800">{t.name}</p>
+                        {t.description && <p className="text-[11px] text-gray-500 line-clamp-2">{t.description}</p>}
+                        <div className="flex items-center justify-between pt-1 border-t border-gray-100 text-[10px] text-gray-500">
+                          <span className="font-medium text-red-700">{t.priority}</span>
+                          <span>{t.assignee || 'ไม่ระบุผู้รับผิดชอบ'}</span>
+                        </div>
+                        {t.due_date && <p className="text-[10px] text-gray-400">กำหนดส่ง: {t.due_date}</p>}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* In Progress Column */}
+              <div className="border border-blue-200 rounded-lg bg-blue-50/30 overflow-hidden">
+                <div className="bg-blue-100 border-b border-blue-200 p-2.5 font-bold text-blue-900 text-xs flex justify-between items-center">
+                  <span>กำลังทำ (IN PROGRESS)</span>
+                  <span className="bg-blue-200 text-blue-900 px-1.5 py-0.5 rounded text-[10px]">{inProgressTasks.length}</span>
+                </div>
+                <div className="p-2.5 space-y-2">
+                  {inProgressTasks.length === 0 ? (
+                    <p className="text-xs text-gray-400 italic text-center py-4">ไม่มีงาน</p>
+                  ) : (
+                    inProgressTasks.map(t => (
+                      <div key={t.id} className="bg-white border border-gray-200 rounded p-2 text-xs shadow-sm space-y-1">
+                        <p className="font-bold text-gray-800">{t.name}</p>
+                        {t.description && <p className="text-[11px] text-gray-500 line-clamp-2">{t.description}</p>}
+                        <div className="flex items-center justify-between pt-1 border-t border-gray-100 text-[10px] text-gray-500">
+                          <span className="font-medium text-blue-700">{t.priority}</span>
+                          <span>{t.assignee || 'ไม่ระบุผู้รับผิดชอบ'}</span>
+                        </div>
+                        {t.due_date && <p className="text-[10px] text-gray-400">กำหนดส่ง: {t.due_date}</p>}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Completed Column */}
+              <div className="border border-emerald-200 rounded-lg bg-emerald-50/30 overflow-hidden">
+                <div className="bg-emerald-100 border-b border-emerald-200 p-2.5 font-bold text-emerald-900 text-xs flex justify-between items-center">
+                  <span>เสร็จสิ้น (COMPLETED)</span>
+                  <span className="bg-emerald-200 text-emerald-900 px-1.5 py-0.5 rounded text-[10px]">{completedTasks.length}</span>
+                </div>
+                <div className="p-2.5 space-y-2">
+                  {completedTasks.length === 0 ? (
+                    <p className="text-xs text-gray-400 italic text-center py-4">ไม่มีงาน</p>
+                  ) : (
+                    completedTasks.map(t => (
+                      <div key={t.id} className="bg-white border border-gray-200 rounded p-2 text-xs shadow-sm space-y-1 opacity-90">
+                        <p className="font-bold text-gray-800 line-through">{t.name}</p>
+                        <div className="flex items-center justify-between pt-1 border-t border-gray-100 text-[10px] text-gray-500">
+                          <span className="font-medium text-emerald-700">เสร็จแล้ว</span>
+                          <span>{t.assignee || '-'}</span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ============================================================ */}
+        {/* VIEW 3: AUTHENTIC GANTT CHART TIMELINE REPORT (LANDSCAPE) */}
+        {/* ============================================================ */}
+        {type === 'timeline' && (
+          <div className="space-y-4">
+            {/* Report Header */}
+            <div className="border-b-2 border-gray-800 pb-3 flex items-start justify-between">
+              <div>
+                <h1 className="text-xl font-black text-gray-900 tracking-tight flex items-center space-x-2">
+                  <span>แผนผังกำหนดการปฏิบัติงาน Gantt Chart (Gantt Timeline Report)</span>
+                </h1>
+                <p className="text-xs text-gray-600 mt-0.5">
+                  พื้นที่งาน: <span className="font-semibold text-gray-800">{spaceName}</span> &gt; ลิสต์งาน: <span className="font-semibold text-gray-800">{listName}</span>
+                  <span className="mx-2 text-gray-400">|</span>
+                  ช่วงปฏิทิน: <span className="font-medium text-gray-800">
+                    {ganttDateList[0].toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })} - {ganttDateList[totalGanttCols - 1].toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </span>
+                </p>
+              </div>
+              <div className="text-right text-xs text-gray-500">
+                <p>วันที่พิมพ์: <span className="font-medium text-gray-800">{currentDate}</span></p>
+                <p>จำนวนงานทั้งหมด: <span className="font-bold text-gray-800">{tasks.length} รายการ</span></p>
+              </div>
+            </div>
+
+            {/* Legend Bar */}
+            <div className="flex items-center justify-between bg-gray-50 border border-gray-300 rounded p-2 text-xs">
+              <div className="flex items-center space-x-4">
+                <span className="font-bold text-gray-700">สัญลักษณ์สีบาร์งาน (Legend):</span>
+                <span className="flex items-center space-x-1.5">
+                  <span className="w-3 h-3 rounded bg-emerald-600 inline-block shadow-xs"></span>
+                  <span className="text-gray-700">เสร็จสมบูรณ์ ({completedTasks.length})</span>
+                </span>
+                <span className="flex items-center space-x-1.5">
+                  <span className="w-3 h-3 rounded bg-blue-600 inline-block shadow-xs"></span>
+                  <span className="text-gray-700">กำลังดำเนินการ ({inProgressTasks.length})</span>
+                </span>
+                <span className="flex items-center space-x-1.5">
+                  <span className="w-3 h-3 rounded bg-rose-500 inline-block shadow-xs"></span>
+                  <span className="text-gray-700">ยังไม่เริ่ม ({notStartedTasks.length})</span>
+                </span>
+              </div>
+              <div className="flex items-center space-x-3 text-[11px] text-gray-500">
+                <span className="flex items-center space-x-1">
+                  <span className="w-3 h-3 border-2 border-purple-600 bg-purple-100 inline-block rounded-xs"></span>
+                  <span>วันนี้ (Today)</span>
+                </span>
+                <span className="flex items-center space-x-1">
+                  <span className="w-3 h-3 bg-gray-200 inline-block rounded-xs"></span>
+                  <span>วันหยุดเสาร์-อาทิตย์</span>
+                </span>
+              </div>
+            </div>
+
+            {/* Real Gantt Chart Grid Table */}
+            <div className="border border-gray-300 rounded overflow-hidden shadow-xs">
+              <table className="w-full text-left text-xs border-collapse table-fixed">
+                <thead>
+                  {/* Top Header: Left Task Info + Right Calendar Days */}
+                  <tr className="bg-gray-100 border-b border-gray-300 text-gray-700 font-bold">
+                    <th className="p-2 border-r border-gray-300 w-8 text-center">#</th>
+                    <th className="p-2 border-r border-gray-300 w-48 truncate">ชื่องาน (Task Name)</th>
+                    <th className="p-2 border-r border-gray-300 w-20 text-center">สถานะ</th>
+                    <th className="p-2 border-r border-gray-300 w-16 text-center">ความสำคัญ</th>
+                    <th className="p-2 border-r border-gray-300 w-20 text-center">ผู้รับผิดชอบ</th>
+                    <th className="p-2 border-r border-gray-300 w-20 text-center">กำหนดส่ง</th>
+                    
+                    {/* 21 Calendar Date Columns */}
+                    {ganttDateList.map(d => {
+                      const dIso = d.toISOString().split('T')[0];
+                      const isToday = dIso === todayDateStr;
+                      const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+
+                      return (
+                        <th 
+                          key={dIso} 
+                          className={`p-1 border-r border-gray-300 text-center text-[10px] select-none ${
+                            isToday ? 'bg-purple-600 text-white font-black' :
+                            isWeekend ? 'bg-gray-200 text-gray-600' : 'bg-gray-100 text-gray-700'
+                          }`}
+                        >
+                          <div className="leading-tight">{thaiDayInitials[d.getDay()]}</div>
+                          <div className="font-bold text-xs">{d.getDate()}</div>
+                        </th>
+                      );
+                    })}
+                  </tr>
+                </thead>
+                <tbody>
+                  {tasks.length === 0 ? (
+                    <tr>
+                      <td colSpan={6 + totalGanttCols} className="p-8 text-center text-gray-400 italic">
+                        ไม่มีรายการงานในโครงการนี้
+                      </td>
+                    </tr>
+                  ) : (
+                    tasks.map((t, idx) => {
+                      const dueIso = t.due_date ? t.due_date.split('T')[0] : null;
+                      let dueColIdx = dueIso ? ganttDateList.findIndex(d => d.toISOString().split('T')[0] === dueIso) : -1;
+                      
+                      let startColIdx = -1;
+                      if (t.created_at) {
+                        const createdIso = t.created_at.split('T')[0];
+                        startColIdx = ganttDateList.findIndex(d => d.toISOString().split('T')[0] === createdIso);
+                      }
+                      if (startColIdx === -1 && dueColIdx !== -1) {
+                        startColIdx = Math.max(0, dueColIdx - 2); // default 3-day duration
+                      }
+
+                      const isCompleted = t.status === 'COMPLETED';
+                      const isInProgress = t.status === 'IN PROGRESS';
+
+                      return (
+                        <tr key={t.id} className="border-b border-gray-200 even:bg-gray-50/40 no-break h-10">
+                          {/* 1. Index */}
+                          <td className="p-2 border-r border-gray-300 text-center font-medium text-gray-500 text-[11px]">
+                            {idx + 1}
+                          </td>
+
+                          {/* 2. Task Name */}
+                          <td className="p-2 border-r border-gray-300 font-bold text-gray-900 truncate" title={t.name}>
+                            {t.name}
+                          </td>
+
+                          {/* 3. Status Badge */}
+                          <td className="p-1 border-r border-gray-300 text-center">
+                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold block truncate ${
+                              isCompleted ? 'bg-emerald-100 text-emerald-800' :
+                              isInProgress ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'
+                            }`}>
+                              {t.status}
+                            </span>
+                          </td>
+
+                          {/* 4. Priority */}
+                          <td className="p-1 border-r border-gray-300 text-center text-[10px] font-medium text-gray-700">
+                            {t.priority}
+                          </td>
+
+                          {/* 5. Assignee */}
+                          <td className="p-1 border-r border-gray-300 text-center text-[10px] text-gray-700 truncate" title={t.assignee || ''}>
+                            {t.assignee || '-'}
+                          </td>
+
+                          {/* 6. Due Date */}
+                          <td className="p-1 border-r border-gray-300 text-center text-[10px] font-mono text-gray-700">
+                            {t.due_date || '-'}
+                          </td>
+
+                          {/* 7. Right 21-Day Calendar Grid with Overlaid Gantt Bar */}
+                          <td colSpan={totalGanttCols} className="relative p-0 h-10 border-r border-gray-300">
+                            {/* Background Calendar Grid Columns */}
+                            <div className="absolute inset-0 flex pointer-events-none">
+                              {ganttDateList.map((d, colIndex) => {
+                                const dIso = d.toISOString().split('T')[0];
+                                const isToday = dIso === todayDateStr;
+                                const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+
+                                return (
+                                  <div 
+                                    key={colIndex}
+                                    className={`flex-1 h-full border-r border-gray-200/70 ${
+                                      isToday ? 'bg-purple-100/40 border-l-2 border-r-2 border-purple-400' :
+                                      isWeekend ? 'bg-gray-100/60' : ''
+                                    }`}
+                                  />
+                                );
+                              })}
+                            </div>
+
+                            {/* Overlaid Authentic Gantt Bar */}
+                            {dueColIdx >= 0 ? (
+                              <div
+                                style={{
+                                  left: `${(startColIdx / totalGanttCols) * 100}%`,
+                                  width: `${Math.max(4.5, ((dueColIdx - startColIdx + 1) / totalGanttCols) * 100)}%`
+                                }}
+                                className={`absolute top-2 bottom-2 rounded px-2 flex items-center justify-between text-[10px] font-bold text-white shadow-xs z-10 truncate ${
+                                  isCompleted ? 'bg-emerald-600' :
+                                  isInProgress ? 'bg-blue-600' : 'bg-rose-500'
+                                }`}
+                                title={`${t.name} (กำหนดส่ง: ${t.due_date})`}
+                              >
+                                <span className="truncate mr-1">{t.name}</span>
+                                <span className="text-[9px] font-mono opacity-90 flex-shrink-0">
+                                  {isCompleted ? '✓ เสร็จ' : (t.due_date ? t.due_date.slice(5) : '')}
+                                </span>
+                              </div>
+                            ) : dueIso ? (
+                              dueIso < ganttDateList[0].toISOString().split('T')[0] ? (
+                                <div className="absolute left-1 top-2 px-1.5 py-0.5 bg-red-100 border border-red-300 text-red-700 rounded text-[9px] font-medium z-10">
+                                  ◄ เลยกำหนด ({dueIso})
+                                </div>
+                              ) : (
+                                <div className="absolute right-1 top-2 px-1.5 py-0.5 bg-blue-100 border border-blue-300 text-blue-700 rounded text-[9px] font-medium z-10">
+                                  กำหนดส่ง {dueIso} ►
+                                </div>
+                              )
+                            ) : (
+                              <div className="absolute left-1/3 top-2 px-2 py-0.5 bg-gray-100 border border-gray-200 text-gray-400 rounded text-[9px] italic z-10">
+                                ไม่ระบุวันส่ง
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* ============================================================ */}
+        {/* VIEW 4: WORKSPACE EXECUTIVE SUMMARY REPORT */}
+        {/* ============================================================ */}
+        {type === 'home' && (
+          <div className="space-y-6">
+            {/* Report Header */}
+            <div className="border-b-2 border-gray-800 pb-4 flex items-start justify-between">
+              <div>
+                <h1 className="text-2xl font-black text-gray-900 tracking-tight">
+                  รายงานสรุปภาพรวมพื้นที่ทำงาน (Workspace Executive Summary)
+                </h1>
+                <p className="text-sm text-gray-600 mt-1">
+                  เวิร์กสเปซ: <span className="font-semibold text-gray-800">{workspaceName || 'My Workspace'}</span> | ผู้จัดทำ: <span className="font-semibold text-gray-800">{userName || 'Admin'}</span>
+                </p>
+              </div>
+              <div className="text-right text-xs text-gray-500">
+                <p>วันที่พิมพ์: <span className="font-medium text-gray-800">{currentDate}</span></p>
+                <p>รวมทั้งระบบ: <span className="font-bold text-gray-800">{tasks.length} งาน</span></p>
+              </div>
+            </div>
+
+            {/* High Level KPI Metrics */}
+            <div className="grid grid-cols-4 gap-3">
+              <div className="border border-gray-300 rounded-lg p-3 bg-gray-50 text-center">
+                <span className="text-xs text-gray-500 block">งานทั้งหมด (Total Tasks)</span>
+                <span className="text-2xl font-black text-gray-900">{tasks.length}</span>
+              </div>
+              <div className="border border-emerald-200 rounded-lg p-3 bg-emerald-50 text-center">
+                <span className="text-xs text-emerald-700 block">อัตราความสำเร็จ (Completed)</span>
+                <span className="text-2xl font-black text-emerald-600">{completionRate}%</span>
+                <span className="text-[10px] text-emerald-700">({completedTasks.length} งาน)</span>
+              </div>
+              <div className="border border-blue-200 rounded-lg p-3 bg-blue-50 text-center">
+                <span className="text-xs text-blue-700 block">กำลังดำเนินการ (Active)</span>
+                <span className="text-2xl font-black text-blue-600">{inProgressTasks.length}</span>
+                <span className="text-[10px] text-blue-700">งาน</span>
+              </div>
+              <div className="border border-red-200 rounded-lg p-3 bg-red-50 text-center">
+                <span className="text-xs text-red-700 block">รอดำเนินการ (Backlog)</span>
+                <span className="text-2xl font-black text-red-600">{notStartedTasks.length}</span>
+                <span className="text-[10px] text-red-700">งาน</span>
+              </div>
+            </div>
+
+            {/* Priority Tasks Table */}
+            <div className="space-y-2">
+              <h3 className="font-bold text-sm text-gray-900 border-b border-gray-300 pb-1 flex items-center justify-between">
+                <span>รายการงานที่ต้องให้ความสำคัญเร่งด่วน (Urgent & High Priority Tasks)</span>
+                <span className="text-xs font-normal text-gray-500">
+                  {tasks.filter(t => (t.priority === 'URGENT' || t.priority === 'HIGH') && t.status !== 'COMPLETED').length} งานคงค้าง
+                </span>
+              </h3>
+              <table className="w-full text-left text-xs border-collapse border border-gray-300">
+                <thead>
+                  <tr className="bg-gray-100 border-b border-gray-300 font-bold text-gray-700">
+                    <th className="p-2 border-r border-gray-300 w-10 text-center">ลำดับ</th>
+                    <th className="p-2 border-r border-gray-300">ชื่องาน</th>
+                    <th className="p-2 border-r border-gray-300 w-24 text-center">ความสำคัญ</th>
+                    <th className="p-2 border-r border-gray-300 w-24 text-center">สถานะ</th>
+                    <th className="p-2 border-r border-gray-300 w-28 text-center">กำหนดส่ง</th>
+                    <th className="p-2 w-28 text-center">ผู้รับผิดชอบ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tasks.filter(t => (t.priority === 'URGENT' || t.priority === 'HIGH') && t.status !== 'COMPLETED').length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="p-4 text-center text-emerald-600 font-medium italic">
+                        ไม่มีงานด่วนหรือความสำคัญสูงที่คั่งค้าง
+                      </td>
+                    </tr>
+                  ) : (
+                    tasks
+                      .filter(t => (t.priority === 'URGENT' || t.priority === 'HIGH') && t.status !== 'COMPLETED')
+                      .map((t, i) => (
+                        <tr key={t.id} className="border-b border-gray-200">
+                          <td className="p-2 border-r border-gray-300 text-center">{i + 1}</td>
+                          <td className="p-2 border-r border-gray-300 font-semibold text-gray-900">{t.name}</td>
+                          <td className="p-2 border-r border-gray-300 text-center">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-800">
+                              {t.priority}
+                            </span>
+                          </td>
+                          <td className="p-2 border-r border-gray-300 text-center">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              t.status === 'IN PROGRESS' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'
+                            }`}>
+                              {t.status}
+                            </span>
+                          </td>
+                          <td className="p-2 border-r border-gray-300 text-center">{t.due_date || '-'}</td>
+                          <td className="p-2 text-center">{t.assignee || '-'}</td>
+                        </tr>
+                      ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
@@ -182,7 +668,7 @@ export default function PrintReportView({
             <div className="grid grid-cols-3 gap-4 border border-gray-300 rounded p-3 bg-gray-50 text-xs">
               <div>
                 <span className="text-gray-500 block font-medium">ผู้รับผิดชอบ (Assignee)</span>
-                <span className="font-bold text-gray-900 text-sm">{singleTask.assignee || 'JM'}</span>
+                <span className="font-bold text-gray-900 text-sm">{singleTask.assignee || 'ยังไม่ระบุ'}</span>
               </div>
               <div>
                 <span className="text-gray-500 block font-medium">ระดับความสำคัญ (Priority)</span>

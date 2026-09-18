@@ -2,7 +2,11 @@ const { DatabaseSync } = require('node:sqlite');
 const path = require('path');
 const fs = require('fs');
 
-const DB_PATH = path.join(__dirname, '..', 'project_management.db');
+const USER_DATA_DIR = process.env.STATUS_USER_DATA || path.join(__dirname, '..');
+if (!fs.existsSync(USER_DATA_DIR)) {
+  fs.mkdirSync(USER_DATA_DIR, { recursive: true });
+}
+const DB_PATH = path.join(USER_DATA_DIR, 'project_management.db');
 const db = new DatabaseSync(DB_PATH);
 
 // Enable WAL mode for performance
@@ -46,8 +50,9 @@ function initSchema() {
       priority TEXT DEFAULT 'Normal',
       due_date TEXT,
       start_date TEXT,
-      assignee TEXT DEFAULT 'JM',
+      assignee TEXT DEFAULT '',
       position INTEGER DEFAULT 0,
+      recurring_rule TEXT DEFAULT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
@@ -149,6 +154,11 @@ function initSchema() {
     );
   `);
 
+  // Safe migration for recurring_rule
+  try {
+    db.prepare('ALTER TABLE tasks ADD COLUMN recurring_rule TEXT DEFAULT NULL').run();
+  } catch (e) {}
+
   // Clean up legacy mock test case columns if present
   try {
     db.prepare("DELETE FROM custom_fields WHERE id IN ('f-tester', 'f-case-id', 'f-severity', 'f-exec-date', 'f-qa-ai')").run();
@@ -159,7 +169,7 @@ function initSchema() {
   try {
     const tmCount = db.prepare('SELECT COUNT(*) as count FROM team_members').get().count;
     if (tmCount === 0) {
-      db.prepare('INSERT INTO team_members (id, name, label, color) VALUES (?, ?, ?, ?)').run('tm-1', 'JM', 'JM (Jet Mut)', '#7b68ee');
+      db.prepare('INSERT INTO team_members (id, name, label, color) VALUES (?, ?, ?, ?)').run('tm-1', 'Me', 'Me', '#7b68ee');
     }
   } catch (e) {}
 
@@ -170,157 +180,18 @@ function seedDefaultData() {
   const wsCount = db.prepare('SELECT COUNT(*) as count FROM workspaces').get().count;
   if (wsCount > 0) return; // Already seeded
 
-  console.log('Seeding initial ClickUp project data...');
+  console.log('Seeding initial clean workspace data...');
 
   const wsId = 'ws-default';
-  db.prepare('INSERT INTO workspaces (id, name) VALUES (?, ?)').run(wsId, "Jet mut's Workspace");
+  db.prepare('INSERT INTO workspaces (id, name) VALUES (?, ?)').run(wsId, 'My Workspace');
 
   const spaceId = 'space-team';
   db.prepare('INSERT INTO spaces (id, workspace_id, name, color, icon, position) VALUES (?, ?, ?, ?, ?, ?)')
-    .run(spaceId, wsId, 'Team Space', '#7b68ee', 'users', 0);
+    .run(spaceId, wsId, 'General', '#7b68ee', 'folder', 0);
 
-  // Lists matching the user's workflow
-  const listIQA26 = 'list-iqa26';
-  const listFSC = 'list-fsc';
-  const listRoutine = 'list-routine';
-  const listSafety = 'list-safety';
-  const listDocs = 'list-docs';
-
+  const listTasks = 'list-tasks';
   const insertList = db.prepare('INSERT INTO lists (id, space_id, name, color, position) VALUES (?, ?, ?, ?, ?)');
-  insertList.run(listFSC, spaceId, 'งาน FSC', '#3b82f6', 0);
-  insertList.run(listIQA26, spaceId, 'IQA26', '#7b68ee', 1);
-  insertList.run(listRoutine, spaceId, 'Routine', '#10b981', 2);
-  insertList.run(listSafety, spaceId, 'งาน Safety', '#f59e0b', 3);
-  insertList.run(listDocs, spaceId, 'Team Docs', '#8b5cf6', 4);
-
-  // The 10 Tasks from the user's project
-  const initialTasks = [
-    {
-      id: 'task-1',
-      name: 'Revise KPI Format ทุกแผนก',
-      description: 'ทบทวนและปรับปรุงฟอร์แมต KPI ของทุกแผนกให้สอดคล้องกับมาตรฐานปี 2026',
-      status: 'NOT STARTED',
-      priority: 'High',
-      assignee: 'JM',
-      due_date: new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0],
-      severity: 'Major'
-    },
-    {
-      id: 'task-2',
-      name: 'ทำ Feasibility + Risk Analysis',
-      description: 'วิเคราะห์ความเป็นไปได้และการประเมินความเสี่ยงเชิงลึกของโครงการและกระบวนการ',
-      status: 'NOT STARTED',
-      priority: 'Urgent',
-      assignee: 'JM',
-      due_date: new Date(Date.now() + 86400000 * 3).toISOString().split('T')[0],
-      severity: 'Critical'
-    },
-    {
-      id: 'task-3',
-      name: 'ทำประเมิน Supplier List2026',
-      description: 'ดำเนินการประเมินผลการดำเนินงานของผู้ขายและคู่ค้า (Supplier Performance Evaluation 2026)',
-      status: 'NOT STARTED',
-      priority: 'Normal',
-      assignee: 'JM',
-      due_date: new Date(Date.now() + 86400000 * 5).toISOString().split('T')[0],
-      severity: 'Minor'
-    },
-    {
-      id: 'task-4',
-      name: 'ตรวจสอบ Supplier ที่มีการใช้งานในปี2026',
-      description: 'ตรวจสอบรายชื่อประวัติการสั่งซื้อและคุณภาพของ Supplier ที่มีกิจกรรมการค้าในปี 2026',
-      status: 'NOT STARTED',
-      priority: 'Normal',
-      assignee: 'JM',
-      due_date: new Date(Date.now() + 86400000 * 6).toISOString().split('T')[0],
-      severity: 'Minor'
-    },
-    {
-      id: 'task-5',
-      name: 'ให้ทำวันทำ Stockcard Adella',
-      description: 'จัดทำระบบบันทึกและวันตรวจนับ Stockcard ผลิตภัณฑ์ Adella ให้เป็นปัจจุบัน',
-      status: 'NOT STARTED',
-      priority: 'Normal',
-      assignee: 'JM',
-      due_date: new Date(Date.now() + 86400000 * 7).toISOString().split('T')[0],
-      severity: 'Low'
-    },
-    {
-      id: 'task-6',
-      name: 'หาข้อมูลการประเมินผลการฝึกอบรมนอก26',
-      description: 'รวบรวมหลักฐานและผลการประเมินความพึงพอใจและประสิทธิผลการฝึกอบรมภายนอกปี 26',
-      status: 'NOT STARTED',
-      priority: 'Normal',
-      assignee: 'JM',
-      due_date: new Date(Date.now() + 86400000 * 8).toISOString().split('T')[0],
-      severity: 'Minor'
-    },
-    {
-      id: 'task-7',
-      name: 'ขึ้นทะเบียน F-TR-02 บัญชี รถขนส่ง',
-      description: 'จัดทำแบบฟอร์มขึ้นทะเบียน F-TR-02 สำหรับรายการและประวัติรถขนส่งทั้งหมด',
-      status: 'NOT STARTED',
-      priority: 'Normal',
-      assignee: 'JM',
-      due_date: new Date(Date.now() + 86400000 * 9).toISOString().split('T')[0],
-      severity: 'Normal'
-    },
-    {
-      id: 'task-8',
-      name: 'ขึ้นทะเบียน ฟอร์มความสามารถผู้ตรวจติดตาม A...',
-      description: 'ขึ้นทะเบียนฟอร์มประเมินความสามารถและคุณสมบัติของผู้ตรวจติดตามภายใน (Internal Auditor Competency)',
-      status: 'NOT STARTED',
-      priority: 'High',
-      assignee: 'JM',
-      due_date: new Date(Date.now() + 86400000 * 10).toISOString().split('T')[0],
-      severity: 'Major'
-    },
-    {
-      id: 'task-9',
-      name: 'แจก % ความพึงพอใจลูกค้า',
-      description: 'สรุปและแจกแจงผลวิเคราะห์ร้อยละความพึงพอใจของลูกค้าให้กับฝ่ายบริหารและทีมงาน',
-      status: 'NOT STARTED',
-      priority: 'Normal',
-      assignee: 'JM',
-      due_date: new Date(Date.now() + 86400000 * 12).toISOString().split('T')[0],
-      severity: 'Minor'
-    },
-    {
-      id: 'task-10',
-      name: 'เพิ่มขึ้นทะเบียน IQA audit report',
-      description: 'จัดระบบทะเบียนและอัปโหลดรายงานผลการตรวจติดตามคุณภาพภายใน (IQA Audit Report) ฉบับสมบูรณ์',
-      status: 'NOT STARTED',
-      priority: 'High',
-      assignee: 'JM',
-      due_date: new Date(Date.now() + 86400000 * 14).toISOString().split('T')[0],
-      severity: 'Major'
-    }
-  ];
-
-  const insertTask = db.prepare(`
-    INSERT INTO tasks (id, list_id, name, description, status, priority, due_date, assignee, position)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-
-  const insertFieldValue = db.prepare(`
-    INSERT INTO task_field_values (id, task_id, field_id, value)
-    VALUES (?, ?, ?, ?)
-  `);
-
-  const insertSubtask = db.prepare(`
-    INSERT INTO subtasks (id, task_id, title, completed, position)
-    VALUES (?, ?, ?, ?, ?)
-  `);
-
-  initialTasks.forEach((t, idx) => {
-    insertTask.run(t.id, listIQA26, t.name, t.description, t.status, t.priority, t.due_date, t.assignee, idx);
-    insertFieldValue.run(`val-${t.id}-sev`, t.id, 'f-severity', t.severity);
-    insertFieldValue.run(`val-${t.id}-case`, t.id, 'f-case-id', `TC-2026-${String(idx + 1).padStart(3, '0')}`);
-    
-    // Add sample subtasks to demonstrate checklist feature
-    insertSubtask.run(`sub-${t.id}-1`, t.id, 'รวบรวมเอกสารและข้อกำหนดที่เกี่ยวข้อง', 0, 0);
-    insertSubtask.run(`sub-${t.id}-2`, t.id, 'จัดทำร่างฉบับแรกและตรวจสอบความถูกต้อง', 0, 1);
-  });
+  insertList.run(listTasks, spaceId, 'Tasks', '#7b68ee', 0);
 
   // Default app settings
   const insertSetting = db.prepare('INSERT INTO app_settings (key, value) VALUES (?, ?)');
@@ -332,7 +203,7 @@ function seedDefaultData() {
   insertSetting.run('wallpaper_blur', '10');
   insertSetting.run('wallpaper_opacity', '85');
 
-  console.log('Default data successfully seeded.');
+  console.log('Initial clean workspace created with 0 tasks.');
 }
 
 initSchema();

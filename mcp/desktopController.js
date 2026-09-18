@@ -2,6 +2,7 @@ const { exec, execSync, spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
+const USER_DATA_DIR = process.env.STATUS_USER_DATA || path.resolve(__dirname, '..');
 const PROJECT_DIR = path.resolve(__dirname, '..');
 
 /**
@@ -19,9 +20,13 @@ function runPowerShell(script) {
   });
 }
 
-const TEMP_SCREENSHOTS_DIR = path.join(PROJECT_DIR, 'data', 'temp_screenshots');
-if (!fs.existsSync(TEMP_SCREENSHOTS_DIR)) {
-  fs.mkdirSync(TEMP_SCREENSHOTS_DIR, { recursive: true });
+const TEMP_SCREENSHOTS_DIR = path.join(USER_DATA_DIR, 'data', 'temp_screenshots');
+try {
+  if (!fs.existsSync(TEMP_SCREENSHOTS_DIR)) {
+    fs.mkdirSync(TEMP_SCREENSHOTS_DIR, { recursive: true });
+  }
+} catch (err) {
+  console.error('[DesktopController] Error creating temp screenshots dir:', err.message);
 }
 
 function formatBytes(bytes) {
@@ -57,7 +62,7 @@ function getTempFilesStatus() {
   }
 
   // Check loose screenshots in data/
-  const dataDir = path.join(PROJECT_DIR, 'data');
+  const dataDir = path.join(USER_DATA_DIR, 'data');
   if (fs.existsSync(dataDir)) {
     const list = fs.readdirSync(dataDir);
     list.forEach(f => {
