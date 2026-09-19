@@ -88,11 +88,158 @@ function routeSkill(userText, hasAttachment = false) {
 }
 
 /**
+ * Executes direct, high-accuracy query for Urgent & Due Soon tasks from SQLite
+ */
+function executeDueSoonAndUrgentQuery({ activeListId = null, queryText = '' } = {}) {
+  const today = new Date();
+  const todayIso = today.toISOString().split('T')[0];
+  const next7Days = new Date(today);
+  next7Days.setDate(next7Days.getDate() + 7);
+  const next7DaysIso = next7Days.toISOString().split('T')[0];
+
+  // Helper for Thai Date formatting
+  const formatThaiDate = (iso) => {
+    if (!iso) return 'ไม่ระบุวันส่ง';
+    const parts = iso.split('-');
+    if (parts.length < 3) return iso;
+    const [y, m, d] = parts;
+    const thaiMonthsShort = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+    const mIdx = parseInt(m, 10) - 1;
+    const beYear = parseInt(y, 10) + 543;
+    let badge = '';
+    if (iso === todayIso) badge = ' 🔴 [วันนี้!]';
+    else if (iso < todayIso) badge = ' ⚠️ [เลยกำหนดส่งแล้ว]';
+    else {
+      const diffMs = new Date(iso) - new Date(todayIso);
+      const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+      if (diffDays === 1) badge = ' 🟡 [พรุ่งนี้]';
+      else if (diffDays <= 7) badge = ` 🟡 [อีก ${diffDays} วัน]`;
+    }
+    return `${parseInt(d, 10)} ${thaiMonthsShort[mIdx] || m} ${beYear}${badge}`;
+  };
+
+  // 1. Query Urgent & High Priority Tasks (Not Completed)
+  let priorityTasks = [];
+  try {
+    priorityTasks = db.prepare(`
+      SELECT t.id, t.name, t.status, t.priority, t.due_date, t.assignee, l.name as list_name, s.name as space_name, t.list_id
+      FROM tasks t
+      LEFT JOIN lists l ON t.list_id = l.id
+      LEFT JOIN spaces s ON l.space_id = s.id
+      WHERE (t.status IS NULL OR UPPER(t.status) != 'COMPLETED')
+        AND (UPPER(t.priority) = 'URGENT' OR UPPER(t.priority) = 'HIGH')
+      ORDER BY 
+        CASE WHEN UPPER(t.priority) = 'URGENT' THEN 0 ELSE 1 END,
+        CASE WHEN t.due_date IS NULL OR t.due_date = '' THEN 1 ELSE 0 END,
+        t.due_date ASC
+    `).all();
+  } catch (e) {
+    console.error('Error querying priority tasks:', e);
+  }
+
+  // 2. Query All Incomplete Tasks with due_date
+  let dueTasks = [];
+  try {
+    dueTasks = db.prepare(`
+      SELECT t.id, t.name, t.status, t.priority, t.due_date, t.assignee, l.name as list_name, s.name as space_name, t.list_id
+      FROM tasks t
+      LEFT JOIN lists l ON t.list_id = l.id
+      LEFT JOIN spaces s ON l.space_id = s.id
+      WHERE (t.status IS NULL OR UPPER(t.status) != 'COMPLETED')
+        AND t.due_date IS NOT NULL AND t.due_date != ''
+      ORDER BY t.due_date ASC
+    `).all();
+  } catch (e) {
+    console.error('Error querying due tasks:', e);
+  }
+
+  const overdueTasks = dueTasks.filter(t => t.due_date < todayIso);
+  const dueSoonTasks = dueTasks.filter(t => t.due_date >= todayIso && t.due_date <= next7DaysIso);
+  const upcomingTasks = dueTasks.filter(t => t.due_date > next7DaysIso);
+
+  // Check activeList context name if any
+  let currentListNotice = '';
+  if (activeListId && activeListId !== 'all') {
+    try {
+      const listRow = db.prepare('SELECT l.name as list_name, s.name as space_name FROM lists l LEFT JOIN spaces s ON l.space_id = s.id WHERE l.id = ?').get(activeListId);
+      if (listRow) {
+        currentListNotice = `*(มุมมองปัจจุบัน: Space **"${listRow.space_name}"** › List **"${listRow.list_name}"**)*\n\n`;
+      }
+    } catch (e) {}
+  }
+
+  let md = `### ⏰ สรุปงานด่วนและความสำคัญระดับ Urgent / งานใกล้ถึงกำหนดส่ง\n\n${currentListNotice}`;
+
+  // Section 1: Urgent & High Priority
+  md += `#### 🚨 1. งานที่มีความสำคัญระดับ Urgent & High (${priorityTasks.length} รายการ):\n`;
+  if (priorityTasks.length === 0) {
+    md += `• *ไม่มีงานระดับ Urgent หรือ High ที่คั่งค้างในระบบ* ✨\n\n`;
+  } else {
+    priorityTasks.forEach((t, i) => {
+      const isUrgent = (t.priority || '').toUpperCase() === 'URGENT';
+      const badge = isUrgent ? '🔴 **URGENT**' : '🟠 **High**';
+      const isCurrent = activeListId && t.list_id === activeListId;
+      md += `${i + 1}. **${t.name}** ${isCurrent ? '📌 *(ในลิสต์ปัจจุบัน)*' : ''}\n`;
+      md += `   • ระดับความสำคัญ: ${badge} | สถานะ: \`${t.status || 'NOT STARTED'}\`\n`;
+      md += `   • กำหนดส่ง: **${formatThaiDate(t.due_date)}**\n`;
+      md += `   • สังกัด: Space **"${t.space_name || '-'}"** › List **"${t.list_name || '-'}"**${t.assignee ? ` | ผู้รับผิดชอบ: ${t.assignee}` : ''}\n\n`;
+    });
+  }
+
+  // Section 2: Overdue Tasks (if any)
+  if (overdueTasks.length > 0) {
+    md += `#### ⚠️ 2. งานที่เลยกำหนดส่งแล้ว (Overdue - ${overdueTasks.length} รายการ):\n`;
+    overdueTasks.forEach((t, i) => {
+      md += `${i + 1}. **${t.name}**\n`;
+      md += `   • เลยกำหนดส่งตั้งแต่: **${formatThaiDate(t.due_date)}**\n`;
+      md += `   • ความสำคัญ: \`${t.priority || 'Normal'}\` | สังกัด: Space **"${t.space_name || '-'}"** › List **"${t.list_name || '-'}"**\n\n`;
+    });
+  }
+
+  // Section 3: Due Soon (Within 7 Days)
+  const sectionNum = overdueTasks.length > 0 ? '3' : '2';
+  md += `#### 📅 ${sectionNum}. งานที่ใกล้ถึงกำหนดส่ง (ภายใน 7 วันนี้: ${dueSoonTasks.length} รายการ):\n`;
+  if (dueSoonTasks.length === 0) {
+    md += `• *ไม่มีงานที่ต้องส่งภายใน 7 วันข้างหน้า*\n\n`;
+  } else {
+    dueSoonTasks.forEach((t, i) => {
+      const isCurrent = activeListId && t.list_id === activeListId;
+      md += `${i + 1}. **${t.name}** ${isCurrent ? '📌 *(ในลิสต์ปัจจุบัน)*' : ''}\n`;
+      md += `   • กำหนดส่ง: **${formatThaiDate(t.due_date)}**\n`;
+      md += `   • ความสำคัญ: \`${t.priority || 'Normal'}\` | สังกัด: Space **"${t.space_name || '-'}"** › List **"${t.list_name || '-'}"**\n\n`;
+    });
+  }
+
+  // Section 4: Upcoming Tasks summary if any
+  if (upcomingTasks.length > 0) {
+    const nextNum = (overdueTasks.length > 0 ? 3 : 2) + 1;
+    md += `#### 🗓️ ${nextNum}. งานกำหนดส่งถัดไป (หลังจาก 7 วัน: ${upcomingTasks.length} รายการ):\n`;
+    upcomingTasks.slice(0, 5).forEach((t) => {
+      md += `• **${t.name}** — กำหนดส่ง: ${formatThaiDate(t.due_date)} (Space "${t.space_name || '-'}" › "${t.list_name || '-'}")\n`;
+    });
+    if (upcomingTasks.length > 5) {
+      md += `• *...และอีก ${upcomingTasks.length - 5} งานในรอบถัดไป*\n`;
+    }
+    md += '\n';
+  }
+
+  md += `> 💡 **ต้องการให้ผมช่วยอะไรต่อ:** พิมพ์สั่ง *เปลี่ยนวันส่ง*, *ติ๊กงานเสร็จ*, หรือ *สร้างงานใหม่* ได้ทันทีครับ!`;
+
+  return {
+    skill: SKILLS.advisor,
+    actions: [],
+    reply: md
+  };
+}
+
+/**
  * Rule-based tool extractor fallback (handles commands even without external LLM API key)
  */
 async function fallbackRuleExecution(skill, query, fileProcessed = null, activeListId = null) {
   const actions = [];
   let reply = '';
+  const text = (query || '').toLowerCase().trim();
+
   // Friendly Greeting & Introduction Intent
   if (/^(?:ดี|หวัดดี|สวัสดี|hello|hi|hey|ดีครับ|ดีค่ะ|สวัสดีครับ|สวัสดีค่ะ|ทำอะไรได้บ้าง|ช่วยอะไรได้บ้าง|คุณคือใคร|แนะนำตัว|คุยกันหน่อย)[\s\!\?\.]*$/i.test(text)) {
     reply = `สวัสดีครับ! ผมคือ Status+ AI ผู้ช่วยอัจฉริยะด้านการบริหารจัดการงานและโครงการครับ 😊\n\nยินดีที่ได้พูดคุยและพร้อมช่วยเหลือคุณเสมอครับ คุณสามารถสั่งงานหรือปรึกษาผมได้หลายด้าน เช่น:\n• 📊 **สรุปภาพรวมงาน & KPI** (พิมพ์ *สรุปงาน* หรือ *ภาพรวม*)\n• 📋 **สร้างหรือปรับปรุงงาน** (พิมพ์ *สร้างงาน...* หรือสั่งย้าย/ลบงาน)\n• 🔁 **ตั้งค่างานแบบทำซ้ำเป็นประจำ (Recurring Tasks)**\n• 📄 **อ่านเอกสาร PDF หรือรูปภาพ** เพื่อแปลงเป็นรายการงานอัตโนมัติ\n• 🖥️ **แคปหน้าจอและสั่งการคอมพิวเตอร์ Windows**\n\nวันนี้อยากให้ช่วยดูแลงานส่วนไหน พิมพ์บอกหรือสอบถามได้เลยครับ!`;
@@ -245,6 +392,11 @@ async function fallbackRuleExecution(skill, query, fileProcessed = null, activeL
     }
   }
 
+  // 4.5. DUE SOON / URGENT / DEADLINE QUERY
+  if (/(?:ใกล้.*กำหนด|กำหนดส่ง|due\s*soon|urgent|ด่วน|ค้างส่ง|overdue|งานที่ต้องทำ|มีงานอะไร|มีงานไหน|งานค้าง)/i.test(text) && !/สร้าง|ลบ|เพิ่ม|ย้าย/i.test(text)) {
+    return executeDueSoonAndUrgentQuery({ activeListId, queryText: text });
+  }
+
   // 5. PROJECT OVERVIEW / STATUS SUMMARY QUERY
   if (/สรุป|ภาพรวม|สถานะ|งานทั้งหมด|รายงาน|overview|dashboard|kpi|งานในระบบ/i.test(text)) {
     const overview = await executeTool('get_project_overview', { list_id: activeListId });
@@ -318,9 +470,56 @@ async function processAgentQuery({
   const cleanMsg = (userMessage || '').trim();
   const isAffirmative = /^(?:จัดมาเลย|จัดไป|เอาเลย|สร้างเลย|อนุมัติ|ตกลง|โอเค|ลุยเลย|สร้างตามนี้|ตามนั้น|เอาตามนี้|confirm|approve|ok|yes|จัดเลย|ดำเนินการเลย)/i.test(cleanMsg);
 
+  // 0. Follow-up Ready Check (e.g. user typed "ได้ยัง", "เสร็จยัง", "ได้หรือยัง")
+  const isFollowUpReadyCheck = /^(?:ได้ยัง|เสร็จยัง|ได้หรือยัง|เสร็จหรือยัง|ถึงไหนแล้ว|ผลเป็นไง|สรุปยัง|ไหน|ขอดูผล|ตรวจยัง|เสร็จมั้ย)[\s\!\?\.]*$/i.test(cleanMsg);
+  if (isFollowUpReadyCheck && !fileProcessed && sessionId) {
+    let pendingPlan = null;
+    let lastTopic = '';
+    try {
+      const sess = db.prepare('SELECT messages_json FROM ai_chat_sessions WHERE id = ?').get(sessionId);
+      if (sess && sess.messages_json) {
+        const msgs = JSON.parse(sess.messages_json);
+        for (let i = msgs.length - 1; i >= 0; i--) {
+          if (msgs[i].role === 'assistant' && Array.isArray(msgs[i].actions)) {
+            const found = msgs[i].actions.find(a => (a.action === 'plan_proposal' || a.type === 'plan_proposal') && a.plan);
+            if (found) {
+              pendingPlan = found.plan;
+              break;
+            }
+          }
+        }
+        const userMsgs = msgs.filter(m => m.role === 'user');
+        if (userMsgs.length > 0) {
+          lastTopic = userMsgs[userMsgs.length - 1].content || '';
+        }
+      }
+    } catch (e) {}
+
+    if (pendingPlan) {
+      return {
+        skill: SKILLS.task_ops,
+        actions: [{
+          action: 'plan_proposal',
+          title: '📋 ร่างแผนงาน (รออนุมัติก่อนสร้าง)',
+          plan: pendingPlan,
+          availableLists: flatLists
+        }],
+        reply: `นี่คือร่างแผนงานที่จัดเตรียมไว้ให้เรียบร้อยแล้วครับ สามารถเลือก Space และ List ปลายทาง แล้วกดอนุมัติด้านล่างเพื่อสร้างงานได้เลยครับ:`
+      };
+    }
+
+    // Deliver actual live task query results immediately!
+    return executeDueSoonAndUrgentQuery({ activeListId, queryText: lastTopic || cleanMsg });
+  }
+
   // Intercept greetings & casual chat directly
   if (!fileProcessed && /^(?:ดี|หวัดดี|สวัสดี|hello|hi|hey|ดีครับ|ดีค่ะ|สวัสดีครับ|สวัสดีค่ะ|ทำอะไรได้บ้าง|ช่วยอะไรได้บ้าง|คุณคือใคร|แนะนำตัว|คุยกันหน่อย)[\s\!\?\.]*$/i.test(cleanMsg)) {
     return await fallbackRuleExecution(SKILLS.advisor, cleanMsg, null, activeListId);
+  }
+
+  // Intercept Due Soon / Urgent / Deadline queries directly so user gets INSTANT accurate results
+  if (!fileProcessed && /(?:ใกล้.*กำหนด|กำหนดส่ง|due\s*soon|urgent|ด่วน|ค้างส่ง|overdue|งานที่ต้องทำ|มีงานอะไร|มีงานไหน|งานค้าง)/i.test(cleanMsg) && !/สร้าง|ลบ|เพิ่ม|ย้าย/i.test(cleanMsg)) {
+    return executeDueSoonAndUrgentQuery({ activeListId, queryText: cleanMsg });
   }
 
   // Intercept project overview / status query directly so user gets instant stats & task list
@@ -485,6 +684,26 @@ async function processAgentQuery({
     `• Space "${sp.name}": Lists: [${sp.lists.map(l => `"${l.name}" (ID: "${l.id}")`).join(', ')}]`
   ).join('\n');
 
+  // Grounding tasks context for LLM
+  let realTasksForPrompt = [];
+  try {
+    realTasksForPrompt = db.prepare(`
+      SELECT t.id, t.name, t.status, t.priority, t.due_date, t.assignee, l.name as list_name, s.name as space_name
+      FROM tasks t
+      LEFT JOIN lists l ON t.list_id = l.id
+      LEFT JOIN spaces s ON l.space_id = s.id
+      ORDER BY 
+        CASE WHEN t.status = 'COMPLETED' THEN 1 ELSE 0 END,
+        CASE WHEN t.due_date IS NULL OR t.due_date = '' THEN 1 ELSE 0 END,
+        t.due_date ASC
+      LIMIT 50
+    `).all();
+  } catch (e) {}
+
+  const realTasksText = realTasksForPrompt.map(t =>
+    `- "${t.name}" | สถานะ: ${t.status || 'NOT STARTED'} | ความสำคัญ: ${t.priority || 'Normal'} | กำหนดส่ง: ${t.due_date || 'ไม่ระบุ'} | ผู้รับผิดชอบ: ${t.assignee || '-'} | Space: "${t.space_name || '-'}" › List: "${t.list_name || '-'}"`
+  ).join('\n');
+
   // System instructions for structured tool execution
   const systemInstruction = `
 คุณคือ Status+ AI Agent ผู้ช่วยอัจฉริยะด้านการบริหารจัดการงานและโครงการ (Project & Task Management System)
@@ -496,12 +715,12 @@ async function processAgentQuery({
 โครงสร้าง Spaces และ Lists ในระบบปัจจุบัน:
 ${spacesListText}
 
-${fileProcessed ? `
-มีไฟล์แนบเข้ามา: "${fileProcessed.originalName}" (${fileProcessed.type})
-${fileProcessed.text ? `เนื้อหาในเอกสารที่สกัดได้:\n"""\n${fileProcessed.text.slice(0, 3000)}\n"""` : 'ไฟล์รูปภาพ (ให้คุณทำหน้าที่ Vision OCR อ่านข้อความ ลายมือ ตาราง รายชื่อ Task หัวข้อเอกสาร และรายละเอียดในภาพอย่างถี่ถ้วน เพื่อวิเคราะห์งาน)'}
-` : ''}
+ข้อมูลรายการงานจริงในระบบปัจจุบัน (Real-time Tasks Ground Truth):
+วันที่ปัจจุบันในระบบ: ${new Date().toISOString().split('T')[0]}
+${realTasksText || '(ยังไม่มีรายการงานในระบบ)'}
 
-## ข้อควรระวังและบริบทสำคัญ (CRITICAL RULES):
+## กฎสำคัญและข้อห้ามเด็ดขาด (CRITICAL STRICT RULES):
+0. **ห้ามตอบว่า "กำลังตรวจสอบ... โปรดรอสักครู่" หรือ "กำลังเรียกใช้เครื่องมือ..." หรือผัดผ่อนเวลาเด็ดขาด!** คุณมีข้อมูลงานจริงทั้งหมดในระบบอยู่ด้านบนแล้ว หากผู้ใช้สอบถามเรื่องงาน กำหนดส่ง หรืองานด่วน ให้สรุปข้อมูลจริงจากรายการงานด้านบนและตอบผู้ใช้ทันที
 1. **บริบทของระบบ**: Status+ คือระบบจัดการงาน/โปรเจกต์ (Task & Workflow Management) คล้าย ClickUp / Jira
    - คำว่า "งาน" หรือ "จัดงาน" หมายถึง **ภาระงาน (Tasks / Work Items)** เช่น งานซ่อมบำรุง, ตรวจสอบความปลอดภัย, งานเอกสาร, ติดตามผล, ปรับปรุงระบบ ฯลฯ
    - **ห้ามเข้าใจผิดว่าเป็นการจัดงานเลี้ยง งานสังสรรค์ หรืองานอีเวนต์ (Event Planning) เด็ดขาด!**
@@ -809,6 +1028,13 @@ function safeJsonParse(rawText) {
             : 'วิเคราะห์ข้อมูลและดำเนินการตามคำสั่งเรียบร้อยแล้วครับ';
         }
 
+        // Safety Guard: if LLM returned stalling text without executing actions, substitute with live task report!
+        if (/กำลังตรวจสอบ|โปรดรอสักครู่|กำลังเรียกใช้เครื่องมือ/i.test(replyText) && executedActions.length === 0) {
+          console.warn('Detected LLM stalling response, substituting with live task query results');
+          const liveResult = executeDueSoonAndUrgentQuery({ activeListId, queryText: cleanMsg });
+          replyText = liveResult.reply;
+        }
+
         return {
           skill,
           actions: executedActions,
@@ -818,10 +1044,17 @@ function safeJsonParse(rawText) {
 
       // If safeJsonParse returned null:
       if (!fileProcessed) {
+        let textReply = llmResponse.trim();
+        // Safety Guard against raw stalling text:
+        if (/กำลังตรวจสอบ|โปรดรอสักครู่|กำลังเรียกใช้เครื่องมือ/i.test(textReply)) {
+          console.warn('Detected LLM stalling response in raw text, substituting with live task query results');
+          const liveResult = executeDueSoonAndUrgentQuery({ activeListId, queryText: cleanMsg });
+          textReply = liveResult.reply;
+        }
         return {
           skill,
           actions: [],
-          reply: llmResponse.trim()
+          reply: textReply
         };
       }
 
