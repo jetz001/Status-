@@ -76,6 +76,7 @@ async function callLLM(prompt, systemInstruction = '', fileProcessed = null, for
     mistral: 'pixtral-12b-2409',
     qwen: 'qwen-plus',
     kimi: 'moonshot-v1-8k',
+    openrouter: 'google/gemini-2.0-flash-exp:free',
     ollama: 'llama3'
   };
 
@@ -273,7 +274,54 @@ async function callLLM(prompt, systemInstruction = '', fileProcessed = null, for
       throw new Error(data.error?.message || data.message || errorDetail || `Mistral API Error (${res.status})`);
     }
 
-    // 5. Qwen (Alibaba Cloud DashScope)
+    // 5. OpenRouter (OpenAI-compatible, multi-model gateway)
+    if (provider === 'openrouter') {
+      const url = 'https://openrouter.ai/api/v1/chat/completions';
+      const messages = [];
+      if (systemInstruction) messages.push({ role: 'system', content: systemInstruction });
+
+      if (hasImage) {
+        messages.push({
+          role: 'user',
+          content: [
+            { type: 'text', text: prompt },
+            {
+              type: 'image_url',
+              image_url: { url: `data:${fileProcessed.mimeType || 'image/png'};base64,${fileProcessed.base64}` }
+            }
+          ]
+        });
+      } else {
+        messages.push({ role: 'user', content: prompt });
+      }
+
+      const payload = {
+        model: model || 'google/gemini-2.0-flash-exp:free',
+        messages,
+        temperature: 0.7
+      };
+      if (forceJson) {
+        payload.response_format = { type: 'json_object' };
+      }
+
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+          'HTTP-Referer': 'https://status-plus.app',
+          'X-Title': 'Status+'
+        },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (data.choices && data.choices[0]?.message?.content) {
+        return data.choices[0].message.content.trim();
+      }
+      throw new Error(data.error?.message || `OpenRouter API Error (${res.status})`);
+    }
+
+    // 6. Qwen (Alibaba Cloud DashScope)
     if (provider === 'qwen') {
       const url = 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions';
       const messages = [];

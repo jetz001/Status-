@@ -48,6 +48,7 @@ export default function SettingsModal({
 
   const PROVIDERS = [
     { id: 'gemini', label: 'Google Gemini', defaultModel: 'gemini-1.5-flash', badge: 'แนะนำ / ฟรี' },
+    { id: 'openrouter', label: 'OpenRouter', defaultModel: 'google/gemini-2.0-flash-exp:free', badge: 'หลายโมเดล / ฟรี' },
     { id: 'openai', label: 'OpenAI (ChatGPT)', defaultModel: 'gpt-4o-mini', badge: 'ยอดนิยม' },
     { id: 'claude', label: 'Claude (Anthropic)', defaultModel: 'claude-3-5-sonnet-20241022', badge: 'ฉลาดขั้นสูง' },
     { id: 'mistral', label: 'Mistral AI', defaultModel: 'pixtral-12b-2409', badge: 'เร็ว & รองรับภาพ' },
@@ -75,6 +76,16 @@ export default function SettingsModal({
     claude: [
       { id: 'claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet' },
       { id: 'claude-3-5-haiku-20241022', label: 'Claude 3.5 Haiku' }
+    ],
+    openrouter: [
+      { id: 'google/gemini-2.0-flash-exp:free', label: 'Gemini 2.0 Flash (ฟรี)' },
+      { id: 'google/gemini-flash-1.5-8b:free', label: 'Gemini 1.5 Flash 8B (ฟรี)' },
+      { id: 'meta-llama/llama-3.3-70b-instruct:free', label: 'Llama 3.3 70B (ฟรี)' },
+      { id: 'deepseek/deepseek-chat-v3-0324:free', label: 'DeepSeek V3 (ฟรี)' },
+      { id: 'mistralai/mistral-7b-instruct:free', label: 'Mistral 7B (ฟรี)' },
+      { id: 'anthropic/claude-3.5-sonnet', label: 'Claude 3.5 Sonnet' },
+      { id: 'openai/gpt-4o-mini', label: 'GPT-4o Mini' },
+      { id: 'openai/gpt-4o', label: 'GPT-4o' }
     ]
   };
 

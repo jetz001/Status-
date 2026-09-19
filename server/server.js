@@ -1225,6 +1225,33 @@ app.post('/api/ai/test-connection', async (req, res) => {
       return res.json({ success: true, reply: data.choices?.[0]?.message?.content || 'OK' });
     }
 
+    if (provider === 'openrouter') {
+      const orModel = (model || 'google/gemini-2.0-flash-exp:free').trim();
+      const url = 'https://openrouter.ai/api/v1/chat/completions';
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${trimmedKey}`,
+          'HTTP-Referer': 'https://status-plus.app',
+          'X-Title': 'Status+'
+        },
+        body: JSON.stringify({
+          model: orModel,
+          messages: [{ role: 'user', content: testPrompt }],
+          max_tokens: 10
+        })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        return res.status(response.status).json({
+          success: false,
+          error: data.error?.message || `OpenRouter API Error (${response.status})`
+        });
+      }
+      return res.json({ success: true, reply: data.choices?.[0]?.message?.content || 'OK' });
+    }
+
     if (provider === 'claude') {
       const claudeModel = (model || 'claude-3-5-sonnet-20241022').trim();
       const url = 'https://api.anthropic.com/v1/messages';
