@@ -1,5 +1,5 @@
 const { tools, executeTool, getDefaultListId, getSpacesAndLists } = require('./aiTools');
-const { callLLM } = require('./aiService');
+const { callLLM, extractCleanText } = require('./aiService');
 const { processFileForAI } = require('./fileProcessor');
 const { semanticSearch } = require('./ragService');
 const { db } = require('./db');
@@ -829,6 +829,75 @@ ${realTasksText || '(ยังไม่มีรายการงานใน�
   "actions": [],
   "reply": "สวัสดีครับ! ผมคือ Status+ AI พร้อมช่วยจัดการ วางแผน และติดตามงานในระบบให้คุณครับ 😊 วันนี้มีอะไรให้ผมช่วยดูแล หรืออยากปรึกษาเรื่องงานตัวไหน บอกได้เลยนะครับ!"
 }
+
+ตัวอย่างเมื่อผู้ใช้สั่งการให้เรียกใช้เครื่องมือในระบบ (Tool Execution Examples):
+- เมื่อผู้ใช้สั่งอัปเดตงาน (เปลี่ยนสถานะ / วันกำหนดส่ง / ความสำคัญ / ผู้รับผิดชอบ):
+{
+  "actions": [
+    {
+      "tool": "update_task",
+      "args": {
+        "name": "ชื่องานที่ต้องการอัปเดต",
+        "status": "COMPLETED",
+        "due_date": "2026-09-20",
+        "priority": "High"
+      }
+    }
+  ],
+  "reply": "อัปเดตข้อมูลงานเรียบร้อยแล้วครับ!"
+}
+
+- เมื่อผู้ใช้สั่งเพิ่ม Checklist หรือ Subtasks ในงาน:
+{
+  "actions": [
+    {
+      "tool": "create_subtasks",
+      "args": {
+        "task_name": "ชื่องาน",
+        "subtasks": ["ขั้นตอนย่อยที่ 1", "ขั้นตอนย่อยที่ 2"]
+      }
+    }
+  ],
+  "reply": "เพิ่มรายการ Checklist ในงานเรียบร้อยแล้วครับ!"
+}
+
+- เมื่อผู้ใช้สั่งลบงาน:
+{
+  "actions": [
+    {
+      "tool": "delete_task",
+      "args": {
+        "name": "ชื่องานที่ต้องการลบ"
+      }
+    }
+  ],
+  "reply": "ผมได้เตรียมคำสั่งลบงานให้แล้วครับ กรุณายืนยันการลบที่การ์ดแจ้งเตือน"
+}
+
+- เมื่อผู้ใช้สั่งย้ายงานข้าม List:
+{
+  "actions": [
+    {
+      "tool": "move_task",
+      "args": {
+        "name": "ชื่องาน",
+        "target_list_id": "ID ของ List ปลายทาง"
+      }
+    }
+  ],
+  "reply": "ย้ายงานไปยัง List ปลายทางเรียบร้อยแล้วครับ!"
+}
+
+- เมื่อผู้ใช้สั่งสรุปภาพรวม KPI:
+{
+  "actions": [
+    {
+      "tool": "get_project_overview",
+      "args": {}
+    }
+  ],
+  "reply": "นี่คือสรุปภาพรวมสถานะงานทั้งหมดในระบบครับ"
+}
 `;
 
 // Safe JSON parser that handles markdown fences and unescaped newlines from LLMs
@@ -1080,7 +1149,7 @@ function formatReplyToMarkdown(replyVal, topObj = null) {
               }
             }
 
-            if (ALL_TOOLS[act.tool] || skill.tools.includes(act.tool)) {
+            if (tools[act.tool] || skill.tools.includes(act.tool)) {
               try {
                 if (act.tool === 'create_task' && (!act.args.list_id || act.args.list_id === 'default')) {
                   act.args.list_id = activeListId || (flatLists[0]?.listId || '');

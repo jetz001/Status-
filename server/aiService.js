@@ -240,7 +240,8 @@ async function callLLM(prompt, systemInstruction = '', fileProcessed = null, for
         const payload = {
           model: targetModel,
           messages,
-          temperature: 0.2
+          temperature: 0.2,
+          max_tokens: 4096
         };
         if (forceJson) {
           payload.response_format = { type: 'json_object' };

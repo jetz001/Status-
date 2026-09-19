@@ -52,7 +52,7 @@ function FormattedAiMessage({ content, onSelectTaskById }) {
       const tasksToRender = [...currentTaskGroup];
       currentTaskGroup = [];
       renderedBlocks.push(
-        <div key={`task-group-${renderedBlocks.length}`} className="my-2 space-y-1.5">
+        <div key={`task-group-${renderedBlocks.length}`} className="my-1.5 space-y-1">
           {tasksToRender.map((taskItem, tIdx) => (
             <div 
               key={tIdx}
@@ -61,43 +61,43 @@ function FormattedAiMessage({ content, onSelectTaskById }) {
                   onSelectTaskById(taskItem.taskId);
                 }
               }}
-              className="flex items-center justify-between p-2.5 rounded-lg bg-[#151619] hover:bg-[#1e2024] border border-[#2c2f34] hover:border-cyan-500/40 transition group cursor-pointer shadow-xs"
+              className="flex items-center justify-between py-1 px-2 rounded-md bg-[#181a1e] hover:bg-[#202227] border border-[#2b2d33] transition group cursor-pointer text-[11px]"
               title={taskItem.taskId ? 'คลิกเพื่อเปิดดูงาน' : ''}
             >
-              <div className="flex items-center space-x-2 truncate flex-1">
+              <div className="flex items-center space-x-1.5 truncate flex-1">
                 {taskItem.status === 'COMPLETED' ? (
-                  <CheckCircle2 size={14} className="text-emerald-400 flex-shrink-0" />
+                  <CheckCircle2 size={12} className="text-emerald-400 flex-shrink-0" />
                 ) : taskItem.status === 'IN PROGRESS' ? (
-                  <Clock size={14} className="text-blue-400 flex-shrink-0" />
+                  <Clock size={12} className="text-blue-400 flex-shrink-0" />
                 ) : (
-                  <Circle size={13} className="text-rose-400/80 flex-shrink-0" />
+                  <Circle size={10} className="text-gray-500 flex-shrink-0" />
                 )}
-                <span className={`text-xs font-medium truncate ${
-                  taskItem.status === 'COMPLETED' ? 'line-through text-gray-500' : 'text-gray-100 group-hover:text-cyan-300 transition'
+                <span className={`truncate ${
+                  taskItem.status === 'COMPLETED' ? 'line-through text-gray-500' : 'text-gray-200 group-hover:text-cyan-300'
                 }`}>
                   {taskItem.name}
                 </span>
               </div>
 
-              <div className="flex items-center space-x-1.5 flex-shrink-0 ml-2">
+              <div className="flex items-center space-x-1 flex-shrink-0 ml-2">
                 {taskItem.status && (
-                  <span className={`px-1.5 py-0.2 rounded text-[9px] font-semibold tracking-wide ${
+                  <span className={`px-1 py-0.2 rounded text-[8.5px] font-medium ${
                     taskItem.status === 'COMPLETED' 
                       ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30' 
                       : taskItem.status === 'IN PROGRESS'
                       ? 'bg-blue-500/15 text-blue-300 border border-blue-500/30'
-                      : 'bg-rose-500/15 text-rose-300 border border-rose-500/30'
+                      : 'bg-gray-800 text-gray-400 border border-gray-700'
                   }`}>
                     {taskItem.status}
                   </span>
                 )}
                 {taskItem.listName && (
-                  <span className="px-1.5 py-0.2 rounded bg-[#222428] text-gray-400 text-[9px] border border-[#34373d]">
+                  <span className="px-1 py-0.2 rounded bg-[#202226] text-gray-400 text-[8.5px] border border-[#303338]">
                     {taskItem.listName}
                   </span>
                 )}
                 {taskItem.dueDate && (
-                  <span className="text-[9px] text-gray-400 hidden sm:inline">
+                  <span className="text-[8.5px] text-gray-400 hidden sm:inline">
                     📅 {taskItem.dueDate}
                   </span>
                 )}
@@ -190,9 +190,9 @@ function FormattedAiMessage({ content, onSelectTaskById }) {
       continue;
     }
 
-    // 4. Task Bullet Item: e.g. "• แจก % ... (สถานะ: COMPLETED, ลิสต์: QMS26)"
-    const taskBulletMatch = line.match(/^[•\-\*]\s*(.+?)(?:\s*\((?:สถานะ|status):\s*([^,]+?)(?:,\s*(?:ลิสต์|list):\s*([^,\)]+?))?(?:,\s*(?:กำหนดส่ง|due):\s*([^\)]+?))?\))?$/i);
-    if (taskBulletMatch && (taskBulletMatch[2] || taskBulletMatch[1].length > 5)) {
+    // 4. Actual Task Item with explicit status and list: e.g. "• แจก % ... (สถานะ: COMPLETED, ลิสต์: QMS26)"
+    const taskBulletMatch = line.match(/^[•\-\*]\s*(.+?)\s*\((?:สถานะ|status):\s*([^,]+?)(?:,\s*(?:ลิสต์|list):\s*([^,\)]+?))?(?:,\s*(?:กำหนดส่ง|due):\s*([^\)]+?))?\)$/i);
+    if (taskBulletMatch && taskBulletMatch[2]) {
       const rawName = taskBulletMatch[1].replace(/\*\*/g, '').trim();
       const status = taskBulletMatch[2]?.trim().toUpperCase();
       const listName = taskBulletMatch[3]?.trim();
@@ -212,23 +212,63 @@ function FormattedAiMessage({ content, onSelectTaskById }) {
       flushTaskGroup();
       const cleanCallout = line.replace(/^>\s*/, '');
       renderedBlocks.push(
-        <div key={`callout-${i}`} className="p-2.5 rounded-lg bg-gradient-to-r from-purple-950/20 to-indigo-950/20 border border-purple-500/30 text-[11px] text-gray-300 space-y-1 my-2">
+        <div key={`callout-${i}`} className="p-2 rounded-lg bg-gradient-to-r from-purple-950/20 to-indigo-950/20 border border-purple-500/30 text-[11px] text-gray-300 space-y-0.5 my-1.5 leading-relaxed">
           {formatInlineMarkup(cleanCallout)}
         </div>
       );
       continue;
     }
 
-    // 6. Regular Empty line
+    // 6. Indented sub-bullets / explanation lines (e.g. starts with "↳", or contains "เหตุผล:", "คำแนะนำ:", "แนะนำ:", "ตรวจสอบ:")
+    const subBulletMatch = line.match(/^(?:[•\-\*]\s*)?(?:↳|->|\s{2,})?\s*(?:↳\s*)?(เหตุผล|คำแนะนำ|แนะนำ|ข้อสังเกต|ตรวจสอบ|หมายเหตุ)\s*[:\-]\s*(.+)/i)
+      || line.match(/^(?:[•\-\*]\s*)?(?:↳|->)\s*(.+)/i);
+    if (subBulletMatch) {
+      flushTaskGroup();
+      renderedBlocks.push(
+        <div key={`sub-${i}`} className="flex items-start space-x-1.5 my-0.5 pl-4 text-[11px] text-gray-300/90 leading-relaxed">
+          <span className="text-cyan-400/70 mt-0.5 flex-shrink-0 text-xs font-mono">↳</span>
+          <span className="flex-1">{formatInlineMarkup(line.replace(/^[•\-\*]\s*/, '').replace(/^↳\s*/, ''))}</span>
+        </div>
+      );
+      continue;
+    }
+
+    // 7. Numbered List Items: e.g. "1. ...", "1) ...", or "1️⃣ ..."
+    const numMatch = line.match(/^(\d+)[\.\)]\s*(.+)/);
+    if (numMatch) {
+      flushTaskGroup();
+      renderedBlocks.push(
+        <div key={`num-${i}`} className="flex items-start space-x-1.5 my-0.5 pl-1 text-[11.5px] text-gray-200 leading-relaxed">
+          <span className="text-cyan-400 font-semibold flex-shrink-0 text-xs min-w-[14px]">{numMatch[1]}.</span>
+          <span className="flex-1">{formatInlineMarkup(numMatch[2])}</span>
+        </div>
+      );
+      continue;
+    }
+
+    // 8. Regular Bullet Point: starts with "•", "-", "*"
+    const bulletMatch = line.match(/^[•\-\*]\s*(.+)/);
+    if (bulletMatch) {
+      flushTaskGroup();
+      renderedBlocks.push(
+        <div key={`bullet-${i}`} className="flex items-start space-x-1.5 my-0.5 pl-1 text-[11.5px] text-gray-200 leading-relaxed">
+          <span className="text-cyan-400 mt-1 flex-shrink-0 text-[9px]">•</span>
+          <span className="flex-1">{formatInlineMarkup(bulletMatch[1])}</span>
+        </div>
+      );
+      continue;
+    }
+
+    // 9. Regular Empty line
     if (!line) {
       flushTaskGroup();
       continue;
     }
 
-    // 7. Regular paragraph / text line
+    // 10. Regular paragraph / text line
     flushTaskGroup();
     renderedBlocks.push(
-      <p key={`p-${i}`} className="text-[11.5px] text-gray-200 leading-relaxed my-1">
+      <p key={`p-${i}`} className="text-[11.5px] text-gray-200 leading-relaxed my-0.5">
         {formatInlineMarkup(line)}
       </p>
     );

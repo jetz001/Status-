@@ -157,7 +157,7 @@ export default function ListView({
   const [customDateInput, setCustomDateInput] = useState('');
   const [newSubtaskInput, setNewSubtaskInput] = useState('');
 
-  // Close popovers on Escape key
+  // Close popovers on Escape key or click outside
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
@@ -165,9 +165,25 @@ export default function ListView({
         setEditingMember(null);
       }
     };
+
+    const handleClickOutside = (e) => {
+      if (e.target.closest('[data-popover-content]') || e.target.closest('[data-popover-trigger]')) {
+        return;
+      }
+      setActivePopover(null);
+      setEditingMember(null);
+    };
+
     if (activePopover) {
       window.addEventListener('keydown', handleKeyDown);
-      return () => window.removeEventListener('keydown', handleKeyDown);
+      const timer = setTimeout(() => {
+        document.addEventListener('mousedown', handleClickOutside);
+      }, 10);
+      return () => {
+        window.removeEventListener('keydown', handleKeyDown);
+        clearTimeout(timer);
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
     }
   }, [activePopover]);
 
@@ -348,26 +364,8 @@ export default function ListView({
 
   return (
     <>
-      {/* Invisible backdrop overlay to catch any click outside of popovers */}
-      {activePopover && (
-        <div 
-          className="fixed inset-0 z-40 bg-transparent"
-          onClick={(e) => {
-            e.stopPropagation();
-            setActivePopover(null);
-            setEditingMember(null);
-          }}
-        />
-      )}
-
       <div 
         className="flex-1 overflow-x-auto overflow-y-auto p-4 space-y-6 text-xs select-none relative"
-        onClick={() => {
-          if (activePopover) {
-            setActivePopover(null);
-            setEditingMember(null);
-          }
-        }}
       >
       {statuses.map(status => {
         const config = STATUS_CONFIG[status];
@@ -420,7 +418,9 @@ export default function ListView({
                         key={task.id}
                         onClick={() => onSelectTask(task)}
                         onContextMenu={(e) => handleTaskContextMenu(e, task)}
-                        className="hover:bg-[#252629] cursor-pointer group transition duration-150 relative"
+                        className={`hover:bg-[#252629] cursor-pointer group transition duration-150 relative ${
+                          activePopover?.taskId === task.id ? 'z-40' : 'z-0'
+                        }`}
                         title="คลิกขวาเพื่อเปิดเมนูลัด"
                       >
                         {/* 1. Name Column with inline rename & status toggle */}
@@ -504,10 +504,11 @@ export default function ListView({
                         </td>
 
                         {/* 2. Interactive Assignee Column */}
-                        <td className="py-2.5 px-2 relative truncate">
+                        <td className={`py-2.5 px-2 relative ${activePopover?.taskId === task.id && activePopover?.type === 'assignee' ? 'z-50' : ''}`}>
                           <div 
+                            data-popover-trigger="true"
                             onClick={(e) => handleTogglePopover(e, task.id, 'assignee')}
-                            className="inline-flex items-center space-x-1.5 px-2 py-1 rounded bg-[#24262b] hover:bg-[#2c2f35] border border-[#383a3f] cursor-pointer transition shadow-sm max-w-full truncate"
+                            className="inline-flex items-center space-x-1.5 px-2 py-1 rounded bg-[#24262b] hover:bg-[#2c2f35] border border-[#383a3f] cursor-pointer transition shadow-sm max-w-full"
                             title="คลิกเพื่อเลือกผู้รับผิดชอบงาน"
                           >
                             <div className="w-5 h-5 rounded-full bg-[#7b68ee]/30 border border-[#7b68ee]/60 flex items-center justify-center text-[9px] font-bold text-purple-200 flex-shrink-0">
@@ -521,6 +522,7 @@ export default function ListView({
                           {/* Assignee Popover */}
                           {activePopover?.taskId === task.id && activePopover?.type === 'assignee' && (
                             <div 
+                              data-popover-content="true"
                               onClick={(e) => e.stopPropagation()}
                               className={`absolute ${activePopover?.opensUp ? 'bottom-full mb-1.5' : 'top-full mt-1.5'} ${activePopover?.opensLeft ? 'right-0' : 'left-0'} z-50 w-64 bg-[#222427] border border-[#383a3e] rounded-lg shadow-2xl p-2.5 space-y-2 text-xs`}
                             >
@@ -576,7 +578,8 @@ export default function ListView({
                                       >
                                         <button
                                           type="button"
-                                          onClick={() => {
+                                          onClick={(e) => {
+                                            e.stopPropagation();
                                             onUpdateTask && onUpdateTask(task.id, { assignee: member.name });
                                             setActivePopover(null);
                                           }}
@@ -628,7 +631,8 @@ export default function ListView({
                               {/* Unassign button */}
                               <button
                                 type="button"
-                                onClick={() => {
+                                onClick={(e) => {
+                                  e.stopPropagation();
                                   onUpdateTask && onUpdateTask(task.id, { assignee: '' });
                                   setActivePopover(null);
                                 }}
@@ -677,8 +681,8 @@ export default function ListView({
                         </td>
 
                         {/* 3. Interactive Due Date Column */}
-                        <td className="py-2.5 px-2 relative">
-                          <div className="flex items-center space-x-1">
+                        <td className={`py-2.5 px-2 relative ${activePopover?.taskId === task.id && activePopover?.type === 'dueDate' ? 'z-50' : ''}`}>
+                          <div className="flex items-center space-x-1" data-popover-trigger="true">
                             <div 
                               onClick={(e) => handleTogglePopover(e, task.id, 'dueDate')}
                               className={`inline-flex items-center space-x-1.5 px-2 py-1 rounded border cursor-pointer transition shadow-sm ${
@@ -708,6 +712,7 @@ export default function ListView({
                           {/* Due Date Popover with Thai Calendar, Day-Month-Year format & Anti-Clipping */}
                           {activePopover?.taskId === task.id && activePopover?.type === 'dueDate' && (
                             <div 
+                              data-popover-content="true"
                               onClick={(e) => e.stopPropagation()}
                               className={`absolute ${activePopover?.opensUp ? 'bottom-full mb-1.5' : 'top-full mt-1.5'} ${activePopover?.opensLeft ? 'right-0' : 'left-0'} z-50`}
                             >
@@ -731,8 +736,9 @@ export default function ListView({
                         </td>
 
                         {/* 4. Interactive Priority Column */}
-                        <td className="py-2.5 px-2 relative">
+                        <td className={`py-2.5 px-2 relative ${activePopover?.taskId === task.id && activePopover?.type === 'priority' ? 'z-50' : ''}`}>
                           <div 
+                            data-popover-trigger="true"
                             onClick={(e) => handleTogglePopover(e, task.id, 'priority')}
                             className="inline-flex items-center space-x-1.5 px-2 py-1 rounded bg-[#24262b] hover:bg-[#2c2f35] border border-[#383a3f] cursor-pointer transition shadow-sm"
                             title="คลิกเพื่อเปลี่ยนระดับความสำคัญ"
@@ -746,6 +752,7 @@ export default function ListView({
                           {/* Priority Popover */}
                           {activePopover?.taskId === task.id && activePopover?.type === 'priority' && (
                             <div 
+                              data-popover-content="true"
                               onClick={(e) => e.stopPropagation()}
                               className={`absolute ${activePopover?.opensUp ? 'bottom-full mb-1.5' : 'top-full mt-1.5'} ${activePopover?.opensLeft ? 'right-0' : 'left-0'} z-50 w-48 bg-[#222427] border border-[#383a3e] rounded-lg shadow-2xl p-1.5 space-y-1 text-xs`}
                             >
@@ -756,7 +763,8 @@ export default function ListView({
                                 <button
                                   key={p.id}
                                   type="button"
-                                  onClick={() => {
+                                  onClick={(e) => {
+                                    e.stopPropagation();
                                     onUpdateTaskPriority && onUpdateTaskPriority(task.id, p.id);
                                     setActivePopover(null);
                                   }}
@@ -776,8 +784,9 @@ export default function ListView({
                         </td>
 
                         {/* 5. Interactive Subtasks Column */}
-                        <td className="py-2.5 px-2 relative">
+                        <td className={`py-2.5 px-2 relative ${activePopover?.taskId === task.id && activePopover?.type === 'subtasks' ? 'z-50' : ''}`}>
                           <div 
+                            data-popover-trigger="true"
                             onClick={(e) => handleTogglePopover(e, task.id, 'subtasks')}
                             className={`inline-flex items-center space-x-1.5 px-2 py-1 rounded border cursor-pointer transition shadow-sm ${
                               totalSubs > 0 
@@ -795,6 +804,7 @@ export default function ListView({
                           {/* Subtasks Checklist Popover */}
                           {activePopover?.taskId === task.id && activePopover?.type === 'subtasks' && (
                             <div 
+                              data-popover-content="true"
                               onClick={(e) => e.stopPropagation()}
                               className={`absolute ${activePopover?.opensUp ? 'bottom-full mb-1.5' : 'top-full mt-1.5'} ${activePopover?.opensLeft ? 'right-0' : 'left-0'} z-50 w-72 bg-[#222427] border border-[#383a3e] rounded-lg shadow-2xl p-3 space-y-2 text-xs`}
                             >
@@ -869,8 +879,9 @@ export default function ListView({
                         </td>
 
                         {/* 6. Interactive Status Badge Column */}
-                        <td className="py-2.5 px-2 relative">
+                        <td className={`py-2.5 px-2 relative ${activePopover?.taskId === task.id && activePopover?.type === 'status' ? 'z-50' : ''}`}>
                           <div 
+                            data-popover-trigger="true"
                             onClick={(e) => handleTogglePopover(e, task.id, 'status')}
                             className="px-2.5 py-1 rounded text-[10px] font-bold tracking-wider inline-block cursor-pointer hover:opacity-90 transition shadow-sm"
                             style={{ backgroundColor: config.color, color: '#fff' }}
@@ -882,6 +893,7 @@ export default function ListView({
                           {/* Status Popover */}
                           {activePopover?.taskId === task.id && activePopover?.type === 'status' && (
                             <div 
+                              data-popover-content="true"
                               onClick={(e) => e.stopPropagation()}
                               className={`absolute ${activePopover?.opensUp ? 'bottom-full mb-1.5' : 'top-full mt-1.5'} ${activePopover?.opensLeft ? 'right-0' : 'left-0'} z-50 w-48 bg-[#222427] border border-[#383a3e] rounded-lg shadow-2xl p-1.5 space-y-1 text-xs`}
                             >
@@ -894,7 +906,8 @@ export default function ListView({
                                   <button
                                     key={st}
                                     type="button"
-                                    onClick={() => {
+                                    onClick={(e) => {
+                                      e.stopPropagation();
                                       onUpdateTaskStatus && onUpdateTaskStatus(task.id, st);
                                       setActivePopover(null);
                                     }}
