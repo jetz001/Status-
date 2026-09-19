@@ -23,3 +23,19 @@
       nsExec::Exec 'powershell -NoProfile -Command "Stop-Process -Name ''Status*'' -Force -ErrorAction SilentlyContinue"'
   ${EndIf}
 !macroend
+
+!macro customUnInstall
+  MessageBox MB_YESNO|MB_ICONQUESTION "คุณต้องการลบข้อมูลโปรเจกต์ ฐานข้อมูล SQLite และการตั้งค่าทั้งหมดของ Status+ ออกจากเครื่องด้วยหรือไม่?$\r$\n$\r$\n(หากเลือก 'Yes' จะลบข้อมูลใน AppData ทั้งหมด เพื่อเริ่มระบบใหม่แบบว่างเปล่า)$\r$\n(หากเลือก 'No' จะเก็บข้อมูลงานและประวัติทั้งหมดไว้ เผื่อติดตั้งใหม่ในภายหลัง)" /SD IDNO IDNO keep_data IDYES delete_data
+
+  delete_data:
+    RMDir /r "$APPDATA\status-plus"
+    RMDir /r "$LOCALAPPDATA\status-plus"
+    RMDir /r "$APPDATA\Status+"
+    RMDir /r "$LOCALAPPDATA\Status+"
+    Goto done
+
+  keep_data:
+    Goto done
+
+  done:
+!macroend
