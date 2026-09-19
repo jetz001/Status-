@@ -543,7 +543,10 @@ export default function WallpaperModal({
 
       if (data.success) {
         setApplySuccess(true);
-        setTimeout(() => setApplySuccess(false), 3500);
+        setTimeout(() => {
+          setApplySuccess(false);
+          if (onClose) onClose();
+        }, 800);
       } else {
         alert(`เกิดข้อผิดพลาด: ${data.error || 'ไม่สามารถตั้งค่าวอลเปเปอร์ได้'}`);
       }
