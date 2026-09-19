@@ -792,8 +792,14 @@ export default function HomeView({
       {/* 3. CONVERT NOTE TO TASK MODAL */}
       {/* ========================================================= */}
       {showConvertModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-[#24262b] border border-[#383a3e] rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-4">
+        <div 
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={(e) => { if (e.target === e.currentTarget) setShowConvertModal(false); }}
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-[#24262b] border border-[#383a3e] rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-4"
+          >
             <div className="flex items-center space-x-2 text-purple-400">
               <Sparkles size={18} />
               <h3 className="text-sm font-bold text-white">แปลงโน้ตเป็น Task ใหม่</h3>

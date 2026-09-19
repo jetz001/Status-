@@ -646,8 +646,14 @@ export default function WallpaperModal({
     : stocks.filter(s => s.category === selectedCategory);
 
   return (
-    <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-3 sm:p-5 select-none text-xs">
-      <div className="bg-[#1e1f21] border border-[#383a3e] rounded-xl w-[1240px] max-w-full h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+    <div 
+      className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-3 sm:p-5 select-none text-xs"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div 
+        onClick={(e) => e.stopPropagation()}
+        className="bg-[#1e1f21] border border-[#383a3e] rounded-xl w-[1240px] max-w-full h-[90vh] flex flex-col shadow-2xl overflow-hidden"
+      >
         
         {/* Header */}
         <div className="p-4 border-b border-[#333538] flex items-center justify-between bg-[#18191b]">

@@ -35,8 +35,14 @@ export default function MoveCopyModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4 select-none">
-      <div className="bg-[#222427] border border-[#383a3e] rounded-xl w-[440px] max-w-full shadow-2xl p-5 space-y-4 text-xs">
+    <div 
+      className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4 select-none"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div 
+        onClick={(e) => e.stopPropagation()}
+        className="bg-[#222427] border border-[#383a3e] rounded-xl w-[440px] max-w-full shadow-2xl p-5 space-y-4 text-xs"
+      >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[#333538] pb-3">
           <div className="flex items-center space-x-2">

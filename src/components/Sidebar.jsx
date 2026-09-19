@@ -620,8 +620,14 @@ export default function Sidebar({
 
       {/* Modal to add Space */}
       {showAddSpaceModal && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-[#222427] border border-[#383a3e] rounded-lg p-4 w-80 shadow-2xl space-y-3">
+        <div 
+          className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+          onClick={(e) => { if (e.target === e.currentTarget) setShowAddSpaceModal(false); }}
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-[#222427] border border-[#383a3e] rounded-lg p-4 w-80 shadow-2xl space-y-3"
+          >
             <h3 className="font-semibold text-white text-sm">สร้าง Space ใหม่</h3>
             <form onSubmit={handleCreateSpaceSubmit} className="space-y-3">
               <input 
@@ -654,8 +660,14 @@ export default function Sidebar({
 
       {/* Modal to Rename Space or List */}
       {renameTarget && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-[#222427] border border-[#383a3e] rounded-xl p-4 w-80 shadow-2xl space-y-3">
+        <div 
+          className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+          onClick={(e) => { if (e.target === e.currentTarget) setRenameTarget(null); }}
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-[#222427] border border-[#383a3e] rounded-xl p-4 w-80 shadow-2xl space-y-3"
+          >
             <h3 className="font-semibold text-white text-sm">
               เปลี่ยนชื่อ {renameTarget.type === 'space' ? 'Space' : 'List'}
             </h3>
@@ -689,8 +701,14 @@ export default function Sidebar({
 
       {/* Modal to Confirm Delete Space or List */}
       {deleteConfirmTarget && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-[#222427] border border-red-500/30 rounded-xl p-4 w-88 shadow-2xl space-y-3">
+        <div 
+          className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+          onClick={(e) => { if (e.target === e.currentTarget) setDeleteConfirmTarget(null); }}
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-[#222427] border border-red-500/30 rounded-xl p-4 w-88 shadow-2xl space-y-3"
+          >
             <div className="flex items-center space-x-2 text-red-400">
               <AlertTriangle size={18} />
               <h3 className="font-semibold text-sm">

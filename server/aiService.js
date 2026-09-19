@@ -216,6 +216,7 @@ async function callLLM(prompt, systemInstruction = '', fileProcessed = null, for
 
     // 4. Mistral AI
     if (provider === 'mistral') {
+      const trimmedKey = (apiKey || '').trim().replace(/^Bearer\s+/i, '').replace(/^["']|["']$/g, '').trim();
       const url = 'https://api.mistral.ai/v1/chat/completions';
       const messages = [];
       if (systemInstruction) messages.push({ role: 'system', content: systemInstruction });
@@ -249,7 +250,7 @@ async function callLLM(prompt, systemInstruction = '', fileProcessed = null, for
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`
+            'Authorization': `Bearer ${trimmedKey}`
           },
           body: JSON.stringify(payload)
         });
@@ -267,7 +268,8 @@ async function callLLM(prompt, systemInstruction = '', fileProcessed = null, for
       if (data.choices && data.choices[0]?.message?.content) {
         return data.choices[0].message.content.trim();
       }
-      throw new Error(data.error?.message || data.message || 'Mistral API Error');
+      const errorDetail = typeof data.detail === 'string' ? data.detail : (data.detail ? JSON.stringify(data.detail) : null);
+      throw new Error(data.error?.message || data.message || errorDetail || `Mistral API Error (${res.status})`);
     }
 
     // 5. Qwen (Alibaba Cloud DashScope)

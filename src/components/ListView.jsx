@@ -1026,8 +1026,14 @@ export default function ListView({
 
       {/* Delete Confirmation Modal */}
       {taskToDelete && (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-          <div className="bg-[#222427] border border-red-500/40 rounded-lg p-5 w-96 shadow-2xl space-y-4">
+        <div 
+          className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4"
+          onClick={(e) => { if (e.target === e.currentTarget) setTaskToDelete(null); }}
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-[#222427] border border-red-500/40 rounded-lg p-5 w-96 shadow-2xl space-y-4"
+          >
             <div className="flex items-center space-x-2.5 text-red-400">
               <AlertCircle size={20} />
               <h3 className="font-semibold text-white text-sm">ยืนยันการลบงาน</h3>

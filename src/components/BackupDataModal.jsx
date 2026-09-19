@@ -157,8 +157,14 @@ export default function BackupDataModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 select-none text-xs">
-      <div className="bg-[#1e1f21] border border-[#383a3e] rounded-xl w-[700px] max-w-full h-[600px] flex flex-col shadow-2xl overflow-hidden">
+    <div 
+      className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 select-none text-xs"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div 
+        onClick={(e) => e.stopPropagation()}
+        className="bg-[#1e1f21] border border-[#383a3e] rounded-xl w-[700px] max-w-full h-[600px] flex flex-col shadow-2xl overflow-hidden"
+      >
         {/* Header */}
         <div className="p-4 border-b border-[#333538] flex items-center justify-between bg-[#18191b]">
           <div className="flex items-center space-x-2.5">
@@ -444,8 +450,14 @@ export default function BackupDataModal({
 
         {/* Restore Confirmation Dialog */}
         {restoreConfirmFile && (
-          <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
-            <div className="bg-[#222427] border border-amber-500/40 rounded-xl p-5 w-96 shadow-2xl space-y-4">
+          <div 
+            className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4"
+            onClick={(e) => { if (e.target === e.currentTarget) setRestoreConfirmFile(null); }}
+          >
+            <div 
+              onClick={(e) => e.stopPropagation()}
+              className="bg-[#222427] border border-amber-500/40 rounded-xl p-5 w-96 shadow-2xl space-y-4"
+            >
               <div className="flex items-center space-x-2.5 text-amber-400">
                 <AlertTriangle size={22} />
                 <h4 className="font-bold text-white text-sm">ยืนยันการกู้คืนระบบ</h4>

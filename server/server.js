@@ -1147,7 +1147,7 @@ app.post('/api/ai/test-connection', async (req, res) => {
       return res.status(400).json({ success: false, error: 'กรุณาระบุ API Key' });
     }
 
-    const trimmedKey = (apiKey || '').trim();
+    const trimmedKey = (apiKey || '').trim().replace(/^Bearer\s+/i, '').replace(/^["']|["']$/g, '').trim();
     const testPrompt = 'Hello, reply only with "OK"';
 
     if (provider === 'mistral') {
@@ -1167,9 +1167,10 @@ app.post('/api/ai/test-connection', async (req, res) => {
       });
       const data = await response.json();
       if (!response.ok) {
+        const errorDetail = typeof data.detail === 'string' ? data.detail : (data.detail ? JSON.stringify(data.detail) : null);
         return res.status(response.status).json({
           success: false,
-          error: data.error?.message || data.message || `Mistral API Error (${response.status})`
+          error: data.error?.message || data.message || errorDetail || `Mistral API Error (${response.status})`
         });
       }
       return res.json({ success: true, reply: data.choices?.[0]?.message?.content || 'OK' });

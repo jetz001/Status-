@@ -78,6 +78,8 @@ export default function SettingsModal({
     ]
   };
 
+  const sanitizeApiKey = (key) => (key || '').trim().replace(/^Bearer\s+/i, '').replace(/^["']|["']$/g, '').trim();
+
   const handleTestConnection = async () => {
     setIsTesting(true);
     setTestResult(null);
@@ -87,7 +89,7 @@ export default function SettingsModal({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           provider,
-          apiKey: apiKey.trim(),
+          apiKey: sanitizeApiKey(apiKey),
           model: model.trim()
         })
       });
@@ -226,7 +228,7 @@ export default function SettingsModal({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ai_provider: provider,
-          ai_api_key: apiKey,
+          ai_api_key: sanitizeApiKey(apiKey),
           ai_model: model,
           workspace_context: workspaceContext,
           user_name: profileName.trim(),
@@ -291,8 +293,13 @@ export default function SettingsModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4 select-none text-xs">
-      <div className={`bg-[#222427] border border-[#383a3e] rounded-xl shadow-2xl transition-all duration-200 flex flex-col ${
+    <div 
+      className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4 select-none text-xs"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div 
+        onClick={(e) => e.stopPropagation()}
+        className={`bg-[#222427] border border-[#383a3e] rounded-xl shadow-2xl transition-all duration-200 flex flex-col ${
         activeTab === 'mcp_logs' ? 'w-[780px] max-h-[88vh]' : 'w-[540px]'
       } max-w-full overflow-hidden`}>
         
