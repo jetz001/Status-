@@ -123,6 +123,34 @@ export default function SettingsModal({
   // Temp Files & Cache State
   const [tempStatus, setTempStatus] = useState({ fileCount: 0, formattedSize: '0 B' });
   const [isCleaningTemp, setIsCleaningTemp] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+
+  const handleResetDatabase = async () => {
+    const confirmed = window.confirm(
+      '⚠️ คำเตือน: คุณต้องการล้างฐานข้อมูลทั้งหมดใช่หรือไม่?\\n\\n' +
+      '• งาน รายการ และประวัติทั้งหมดจะถูกลบ\\n' +
+      '• ระบบจะเริ่มต้นใหม่ด้วยพื้นที่ว่างเปล่า (0 งาน)\\n' +
+      '• ระบบจะสร้างไฟล์สำรองข้อมูลฉุกเฉิน (Auto-Backup) ไว้ให้ก่อนลบ\\n\\n' +
+      'กด "ตกลง (OK)" เพื่อยืนยันการล้างข้อมูล'
+    );
+    if (!confirmed) return;
+
+    setIsResetting(true);
+    try {
+      const res = await fetch('/api/settings/reset-database', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        alert('ล้างฐานข้อมูลสำเร็จเรียบร้อยแล้ว ระบบจะรีเฟรชหน้าต่างใหม่');
+        window.location.reload();
+      } else {
+        alert('เกิดข้อผิดพลาด: ' + (data.error || 'ไม่สามารถรีเซ็ตได้'));
+      }
+    } catch (err) {
+      alert('เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์: ' + err.message);
+    } finally {
+      setIsResetting(false);
+    }
+  };
 
 
   const fetchSettings = () => {
@@ -392,6 +420,32 @@ export default function SettingsModal({
                   ชื่อ Workspace หลักที่แสดงบนแถบเมนูด้านซ้ายและส่วนหัวของระบบ
                 </p>
               </div>
+
+              {/* Danger Zone: Factory Reset */}
+              <div className="pt-3 mt-4 border-t border-rose-500/20">
+                <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-rose-400 text-xs font-bold flex items-center space-x-1.5">
+                        <Trash2 size={14} />
+                        <span>รีเซ็ตฐานข้อมูลทั้งหมด (Factory Reset 0 งาน)</span>
+                      </h4>
+                      <p className="text-[11px] text-gray-400 mt-0.5">
+                        ล้างข้อมูลงานทั้งหมดในเครื่องเพื่อเริ่มต้นใหม่แบบว่างเปล่า (มีระบบสำรองข้อมูลอัตโนมัติก่อนลบ)
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleResetDatabase}
+                      disabled={isResetting}
+                      className="px-3 py-1.5 bg-rose-600/20 hover:bg-rose-600/30 border border-rose-500/40 hover:border-rose-500/60 text-rose-300 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center space-x-1.5 flex-shrink-0"
+                    >
+                      <Trash2 size={13} className={isResetting ? "animate-spin" : ""} />
+                      <span>{isResetting ? 'กำลังล้างข้อมูล...' : 'ล้างข้อมูล 0 งาน'}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Bottom Actions */}
@@ -446,7 +500,7 @@ export default function SettingsModal({
                   >
                     {PROVIDERS.map(p => (
                       <option key={p.id} value={p.id} className="bg-[#222427] text-white py-1">
-                        {p.label} — ({p.badge})
+                        {p.label}
                       </option>
                     ))}
                   </select>

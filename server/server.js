@@ -1837,6 +1837,40 @@ app.get('/api/export/backup', (req, res) => {
   }
 });
 
+app.post('/api/settings/reset-database', (req, res) => {
+  try {
+    try { createFullBackup('pre-reset-safety'); } catch (_) {}
+
+    db.exec('DELETE FROM task_embeddings;');
+    db.exec('DELETE FROM task_field_values;');
+    db.exec('DELETE FROM subtasks;');
+    db.exec('DELETE FROM attachments;');
+    db.exec('DELETE FROM tasks;');
+    db.exec('DELETE FROM custom_fields;');
+    db.exec('DELETE FROM lists;');
+    db.exec('DELETE FROM spaces;');
+    db.exec('DELETE FROM workspaces;');
+    db.exec('DELETE FROM notifications;');
+    db.exec('DELETE FROM ai_chat_sessions;');
+    db.exec('DELETE FROM mcp_activity_logs;');
+
+    const wsId = 'ws-default';
+    db.prepare('INSERT INTO workspaces (id, name) VALUES (?, ?)').run(wsId, 'My Workspace');
+    const spaceId = 'space-team';
+    db.prepare('INSERT INTO spaces (id, workspace_id, name, color, icon, position) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(spaceId, wsId, 'General', '#7b68ee', 'folder', 0);
+    const listTasks = 'list-tasks';
+    db.prepare('INSERT INTO lists (id, space_id, name, color, position) VALUES (?, ?, ?, ?, ?)')
+      .run(listTasks, spaceId, 'Tasks', '#7b68ee', 0);
+
+    reindexAll();
+
+    res.json({ success: true, message: 'รีเซ็ตข้อมูลทั้งหมดเรียบร้อยแล้ว' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/import/csv', (req, res) => {
   try {
     const { listId, csvText } = req.body;

@@ -381,23 +381,6 @@ export default function HomeView({
           {/* Quick Action Buttons */}
           <div className="flex flex-wrap items-center gap-2">
             <button
-              onClick={() => onQuickAddTask({ name: 'งานใหม่...', status: 'NOT STARTED' })}
-              className="flex items-center space-x-1.5 px-3 py-2 bg-[#7b68ee] hover:bg-[#6a55e0] text-white rounded-lg text-xs font-semibold shadow-md transition cursor-pointer"
-            >
-              <Plus size={15} />
-              <span>+ เพิ่มงานใหม่</span>
-            </button>
-
-
-            <button
-              onClick={onOpenWallpaperModal}
-              className="flex items-center space-x-1.5 px-3 py-2 bg-[#2a2b2f] hover:bg-[#34363b] border border-[#383a3e] text-gray-300 hover:text-white rounded-lg text-xs font-medium transition cursor-pointer"
-            >
-              <ImageIcon size={14} className="text-blue-400" />
-              <span>วอลเปเปอร์งาน</span>
-            </button>
-
-            <button
               onClick={onOpenBackupModal}
               className="flex items-center space-x-1.5 px-3 py-2 bg-[#2a2b2f] hover:bg-[#34363b] border border-[#383a3e] text-gray-300 hover:text-white rounded-lg text-xs font-medium transition cursor-pointer"
             >
@@ -798,9 +781,7 @@ export default function HomeView({
                 </p>
               )}
 
-              <p className="text-gray-400 text-[11px] pt-1">
-                💡 คำแนะนำ: คุณสามารถใช้ปุ่ม AI Assist ในหน้ารายละเอียดเพื่อแตกซับทาสก์ หรือกด Ctrl+K เพื่อคุยปรึกษากับ AI ได้ตลอดเวลา
-              </p>
+
             </div>
 
             <button
