@@ -175,13 +175,6 @@ export default function Header({
                 <Printer size={13} className="text-blue-400" />
                 <span>พิมพ์ตารางงาน</span>
               </button>
-              <button 
-                onClick={onOpenCustomFieldModal}
-                className="flex items-center space-x-1 px-2.5 py-1 rounded hover:bg-[#2a2b2d] text-gray-400 hover:text-white transition cursor-pointer"
-              >
-                <SlidersHorizontal size={13} />
-                <span>Columns</span>
-              </button>
             </>
           )}
 

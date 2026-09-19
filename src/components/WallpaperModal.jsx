@@ -15,6 +15,7 @@ import {
   Compass
 } from 'lucide-react';
 import { formatToDMY } from './ThaiDatePicker.jsx';
+import { isFutureRoutineTask } from '../utils/routineUtils.js';
 
 const THAI_MONTHS_FULL = [
   'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
@@ -218,8 +219,12 @@ export default function WallpaperModal({
   };
 
   const drawWidget = (ctx, width, height, currentStock) => {
+    const todayStr = new Date().toISOString().split('T')[0];
     // 1. Source Tasks Filtering & Chronological Sorting
-    const sourcePool = taskSource === 'all' ? (allTasks.length > 0 ? allTasks : tasks) : tasks;
+    // Exclude future-round routine tasks so metrics are fair and user can reach 100%
+    const rawSourcePool = taskSource === 'all' ? (allTasks.length > 0 ? allTasks : tasks) : tasks;
+    const sourcePool = rawSourcePool.filter(t => !isFutureRoutineTask(t, todayStr));
+
     const filteredTasks = sourcePool.filter(t => {
       if (onlyPending) return t.status !== 'COMPLETED';
       return true;
@@ -813,7 +818,9 @@ export default function WallpaperModal({
               <label className="font-semibold text-gray-300 text-xs flex items-center justify-between">
                 <span>ขอบเขตข้อมูลงาน (Task Scope)</span>
                 <span className="text-purple-400 text-[10px] font-bold">
-                  {taskSource === 'all' ? `${allTasks.length} งานทั้งหมด` : `${tasks.length} งานในลิสต์`}
+                  {taskSource === 'all' 
+                    ? `${allTasks.filter(t => !isFutureRoutineTask(t)).length} งานรอบปัจจุบัน` 
+                    : `${tasks.filter(t => !isFutureRoutineTask(t)).length} งานในลิสต์`}
                 </span>
               </label>
 

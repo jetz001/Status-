@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import ContextMenu from './ContextMenu.jsx';
 import logoImg from '../assets/logo.png';
+import { isFutureRoutineTask } from '../utils/routineUtils.js';
 
 export default function HomeView({
   allTasks = [],
@@ -105,14 +106,17 @@ export default function HomeView({
   const next7DaysDate = new Date(Date.now() + 7 * 86400000);
   const next7DaysStr = next7DaysDate.toISOString().split('T')[0];
 
-  const overdueTasks = allTasks.filter(t => t.status !== 'COMPLETED' && t.due_date && t.due_date < todayStr);
-  const todayTasks = allTasks.filter(t => t.status !== 'COMPLETED' && (t.due_date === todayStr || t.due_date === tomorrowStr));
-  const upcomingTasks = allTasks.filter(t => t.status !== 'COMPLETED' && t.due_date && t.due_date > tomorrowStr && t.due_date <= next7DaysStr);
-  const completedTasks = allTasks.filter(t => t.status === 'COMPLETED');
-  const allActiveTasks = allTasks.filter(t => t.status !== 'COMPLETED');
+  // Active pool for current calculation: exclude future-round routine tasks until their day arrives
+  const activePool = allTasks.filter(t => !isFutureRoutineTask(t, todayStr));
 
-  // Overall metrics
-  const totalCount = allTasks.length;
+  const overdueTasks = activePool.filter(t => t.status !== 'COMPLETED' && t.due_date && t.due_date < todayStr);
+  const todayTasks = activePool.filter(t => t.status !== 'COMPLETED' && (t.due_date === todayStr || t.due_date === tomorrowStr));
+  const upcomingTasks = activePool.filter(t => t.status !== 'COMPLETED' && t.due_date && t.due_date > tomorrowStr && t.due_date <= next7DaysStr);
+  const completedTasks = activePool.filter(t => t.status === 'COMPLETED');
+  const allActiveTasks = activePool.filter(t => t.status !== 'COMPLETED');
+
+  // Overall metrics: fair calculation where next-month routines don't block 100% completion
+  const totalCount = activePool.length;
   const completedCount = completedTasks.length;
   const completionPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
@@ -686,7 +690,7 @@ export default function HomeView({
                 return (
                   <div key={space.id} className="space-y-2">
                     {space.lists && space.lists.map(list => {
-                      const listTasks = allTasks.filter(t => t.list_id === list.id);
+                      const listTasks = allTasks.filter(t => t.list_id === list.id && !isFutureRoutineTask(t, todayStr));
                       const listDone = listTasks.filter(t => t.status === 'COMPLETED').length;
                       const listTotal = listTasks.length;
                       const pct = listTotal > 0 ? Math.round((listDone / listTotal) * 100) : 0;
