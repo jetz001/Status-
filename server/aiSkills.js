@@ -480,6 +480,197 @@ ${ragSnippet || 'ยังไม่พบข้อมูลงานที่ต
   return { skill, actions, reply };
 }
 
+// Safe JSON parser that handles markdown fences, unescaped newlines, and trailing commas from LLMs
+function safeJsonParse(rawText) {
+  if (!rawText) return null;
+  let text = rawText.trim();
+
+  // Strip ```json ... ``` or ``` ... ```
+  text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+
+  const firstBrace = text.indexOf('{');
+  const lastBrace = text.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    text = text.substring(firstBrace, lastBrace + 1);
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch (e) {}
+
+  try {
+    let inString = false;
+    let escaped = false;
+    let cleaned = '';
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i];
+      if (char === '"' && !escaped) {
+        inString = !inString;
+      }
+      if (inString && (char === '\n' || char === '\r')) {
+        cleaned += '\\n';
+      } else if (inString && char === '\t') {
+        cleaned += '\\t';
+      } else {
+        cleaned += char;
+      }
+      escaped = char === '\\' && !escaped;
+    }
+    return JSON.parse(cleaned);
+  } catch (e) {}
+
+  return null;
+}
+
+// Robust formatter that converts any string, array, or rich LLM object into clean, readable Thai Markdown
+function formatReplyToMarkdown(replyVal, topObj = null) {
+  if (typeof replyVal === 'string' && replyVal.trim()) {
+    return replyVal.trim();
+  }
+
+  if (Array.isArray(replyVal)) {
+    return replyVal.map((item, idx) => {
+      if (typeof item === 'string') return `• ${item}`;
+      if (item && typeof item === 'object') {
+        const name = item.name || item.task || item.title || item.ชื่องาน || 'งาน';
+        const prio = item.priority || item.ความสำคัญ ? ` [ความสำคัญ: ${item.priority || item.ความสำคัญ}]` : '';
+        const status = item.status || item.สถานะ ? ` (${item.status || item.สถานะ})` : '';
+        const due = item.due_date || item.dueDate || item.กำหนดส่ง ? ` 📅 กำหนดส่ง: ${item.due_date || item.dueDate || item.กำหนดส่ง}` : '';
+        return `• **${name}**${status}${prio}${due}`;
+      }
+      return `• ${item}`;
+    }).join('\n');
+  }
+
+  const parts = [];
+  const obj = (replyVal && typeof replyVal === 'object') ? replyVal : (topObj || {});
+
+  if (obj.message && typeof obj.message === 'string') parts.push(obj.message);
+  if (obj.text && typeof obj.text === 'string') parts.push(obj.text);
+  if (obj.summary && typeof obj.summary === 'string') parts.push(obj.summary);
+  if (obj.suggestion && typeof obj.suggestion === 'string') parts.push(obj.suggestion);
+
+  // Check recommendations (in reply.recommendation, reply.recommendations, or top-level)
+  const rec = obj.recommendation || obj.recommendations || topObj?.recommendations || topObj?.recommendation;
+  if (rec) {
+    if (typeof rec === 'string') {
+      parts.push(rec);
+    } else if (Array.isArray(rec)) {
+      const recLines = ['### 💡 ลำดับงานที่แนะนำให้ทำก่อน-หลัง:\n'];
+      rec.forEach((item, idx) => {
+        const stepNum = item.step || idx + 1;
+        const taskName = item.task || item.name || item.title || 'งานที่ต้องทำ';
+        const reason = item.reason || item.note || item.description || '';
+        const prio = item.priority ? ` [ความสำคัญ: ${item.priority}]` : '';
+        recLines.push(`**${stepNum}. ${taskName}**${prio}${reason ? `\n   ↳ *คำแนะนำ:* ${reason}` : ''}`);
+      });
+      parts.push(recLines.join('\n'));
+    } else if (typeof rec === 'object') {
+      if (Array.isArray(rec.order)) {
+        const orderLines = ['### 💡 ลำดับงานที่แนะนำให้ทำก่อน-หลัง:\n'];
+        rec.order.forEach((item, idx) => {
+          const stepNum = item.step || idx + 1;
+          const taskName = Array.isArray(item.task) ? item.task.join(', ') : (item.task || item.name || 'งานที่ต้องทำ');
+          const note = item.note || item.reason || item.description || '';
+          orderLines.push(`**${stepNum}. ${taskName}**${note ? `\n   ↳ *คำแนะนำ:* ${note}` : ''}`);
+        });
+        parts.push(orderLines.join('\n'));
+      }
+      if (rec.additional_tips) {
+        const tips = rec.additional_tips;
+        const tipLines = ['\n#### 📌 ข้อสังเกตและคำแนะนำเพิ่มเติม:'];
+        if (typeof tips === 'string') {
+          tipLines.push(tips);
+        } else if (typeof tips === 'object') {
+          for (const [k, v] of Object.entries(tips)) {
+            const label = k === 'resource_allocation' ? 'การจัดสรรทรัพยากร' :
+                          k === 'communication' ? 'การสื่อสารและประสานงาน' :
+                          k === 'monitoring' ? 'การติดตามผล' : k;
+            tipLines.push(`• **${label}:** ${typeof v === 'object' ? JSON.stringify(v) : v}`);
+          }
+        }
+        parts.push(tipLines.join('\n'));
+      }
+    }
+  }
+
+  if (Array.isArray(obj.steps)) {
+    parts.push(obj.steps.map((s, i) => `${i + 1}. ${typeof s === 'string' ? s : JSON.stringify(s)}`).join('\n'));
+  }
+  if (obj.next_step) parts.push(`👉 **ขั้นตอนถัดไป:** ${obj.next_step}`);
+  if (obj.note) parts.push(`💡 **คำแนะนำเพิ่มเติม:** ${obj.note}`);
+
+  if (parts.length === 0 && typeof replyVal === 'object' && replyVal !== null) {
+    for (const [k, v] of Object.entries(replyVal)) {
+      if (k === 'actions') continue;
+      if (typeof v === 'string') {
+        parts.push(`• **${k}:** ${v}`);
+      } else if (typeof v === 'object' && v !== null) {
+        if (v.name || v.task || v.title || v.ชื่องาน) {
+          const name = v.name || v.task || v.title || v.ชื่องาน;
+          const prio = v.priority || v.ความสำคัญ ? ` [ความสำคัญ: ${v.priority || v.ความสำคัญ}]` : '';
+          const status = v.status || v.สถานะ ? ` (${v.status || v.สถานะ})` : '';
+          const due = v.due_date || v.dueDate || v.กำหนดส่ง ? ` 📅 ${v.due_date || v.dueDate || v.กำหนดส่ง}` : '';
+          parts.push(`• **${name}**${status}${prio}${due}`);
+        } else {
+          const nested = formatReplyToMarkdown(v);
+          if (nested) parts.push(nested);
+        }
+      }
+    }
+  }
+
+  return parts.filter(Boolean).join('\n\n');
+}
+
+// Extract clean human text if LLM returned raw JSON or incomplete JSON string
+function extractReplyFromRawJson(rawText) {
+  if (!rawText || typeof rawText !== 'string') return '';
+  let text = rawText.trim();
+
+  // Strip markdown json block fences
+  text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+
+  // 1. Try safeJsonParse
+  const parsed = safeJsonParse(text);
+  if (parsed && parsed.reply) {
+    return formatReplyToMarkdown(parsed.reply, parsed);
+  }
+
+  // 2. Extract "reply": "..." if JSON is malformed or truncated
+  const replyStrMatch = text.match(/"reply"\s*:\s*"((?:[^"\\]|\\.)*)/s);
+  if (replyStrMatch && replyStrMatch[1]) {
+    let rawReply = replyStrMatch[1];
+    rawReply = rawReply.replace(/"\s*\}*\s*$/, '');
+    try {
+      return JSON.parse(`"${rawReply}"`);
+    } catch (e) {
+      return rawReply
+        .replace(/\\n/g, '\n')
+        .replace(/\\r/g, '')
+        .replace(/\\t/g, '\t')
+        .replace(/\\"/g, '"')
+        .replace(/\\\\/g, '\\');
+    }
+  }
+
+  // 3. Extract "reply": { ... } or "reply": [ ... ]
+  const replyObjMatch = text.match(/"reply"\s*:\s*(\{[\s\S]*\}|\[[\s\S]*\])/);
+  if (replyObjMatch) {
+    try {
+      const parsedObj = JSON.parse(replyObjMatch[1]);
+      return formatReplyToMarkdown(parsedObj);
+    } catch (e) {}
+  }
+
+  // 4. If text begins with { and has "actions" or "reply", but we couldn't parse it
+  if (text.startsWith('{') && (text.includes('"actions"') || text.includes('"reply"'))) {
+    return 'ดำเนินการตามคำขอเรียบร้อยแล้วครับ หากมีจุดไหนต้องการให้ปรับเปลี่ยนเพิ่มเติม แจ้งได้เลยนะครับ';
+  }
+
+  return text;
+}
+
 /**
  * Main Agent Controller: Routes to Skill, builds schema, calls LLM or fallback, and executes tools
  */
@@ -551,13 +742,13 @@ async function processAgentQuery({
     return await fallbackRuleExecution(SKILLS.advisor, cleanMsg, null, activeListId);
   }
 
-  // Intercept Due Soon / Urgent / Deadline queries directly so user gets INSTANT accurate results (except advisory/prioritization queries which need LLM reasoning)
-  if (!fileProcessed && /(?:ใกล้.*กำหนด|กำหนดส่ง|due\s*soon|urgent|ด่วน|ค้างส่ง|overdue|งานที่ต้องทำ|มีงานอะไร|มีงานไหน|งานค้าง)/i.test(cleanMsg) && !/สร้าง|ลบ|เพิ่ม|ย้าย|ก่อน|แนะนำ|เริ่มจาก|จัดลำดับ|ควรทำ|เลือกอันไหน/i.test(cleanMsg)) {
+  // Intercept literal quick-button clicks for Due Soon so user gets instant button response
+  if (!fileProcessed && /^(?:งานด่วน\s*due\s*soon|สรุปงานด่วนและงานใกล้ถึงกำหนดส่ง|ดูงานด่วน)$/i.test(cleanMsg)) {
     return executeDueSoonAndUrgentQuery({ activeListId, queryText: cleanMsg });
   }
 
-  // Intercept project overview / status query directly so user gets instant stats & task list
-  if (!fileProcessed && /^(?:สรุป|ภาพรวม|สถานะ|รายงาน|overview|dashboard|kpi|สรุปงานทั้งหมด|สถานะงานทั้งหมด|สรุปภาพรวมและสถานะงานทั้งหมดในระบบ)/i.test(cleanMsg) && !/สร้าง|ลบ|เพิ่ม|ย้าย/i.test(cleanMsg)) {
+  // Intercept literal quick-button for All Tasks Summary
+  if (!fileProcessed && /^(?:สรุปงานทั้งหมด|สรุปภาพรวมและสถานะงานทั้งหมดในระบบ)$/i.test(cleanMsg)) {
     return await fallbackRuleExecution(SKILLS.advisor, cleanMsg, null, activeListId);
   }
 
@@ -706,7 +897,17 @@ async function processAgentQuery({
         const msgs = JSON.parse(sess.messages_json);
         const recent = msgs.slice(-6);
         if (recent.length > 0) {
-          chatHistoryContext = recent.map(m => `${m.role === 'user' ? 'ผู้ใช้' : 'AI'}: ${m.content}`).join('\n');
+          chatHistoryContext = recent.map(m => {
+            const roleName = m.role === 'user' ? 'ผู้ใช้' : 'AI';
+            let content = m.content || '';
+            // If previous assistant message contained raw JSON, extract clean reply!
+            if (m.role === 'assistant') {
+              const cleaned = extractReplyFromRawJson(content);
+              if (cleaned) content = cleaned;
+              content = content.replace(/^\{[\s\S]*?"reply":\s*"/, '').replace(/"\s*\}?$/, '');
+            }
+            return `${roleName}: ${content}`;
+          }).join('\n');
         }
       }
     } catch (e) {
@@ -738,6 +939,17 @@ async function processAgentQuery({
     `- "${t.name}" | สถานะ: ${t.status || 'NOT STARTED'} | ความสำคัญ: ${t.priority || 'Normal'} | กำหนดส่ง: ${t.due_date || 'ไม่ระบุ'} | ผู้รับผิดชอบ: ${t.assignee || '-'} | Space: "${t.space_name || '-'}" › List: "${t.list_name || '-'}"`
   ).join('\n');
 
+  // Exact Thai calendar dates
+  const todayDate = new Date();
+  const todayStr = todayDate.toISOString().split('T')[0];
+  const tomorrowDate = new Date(todayDate.getTime() + 86400000);
+  const tomorrowStr = tomorrowDate.toISOString().split('T')[0];
+
+  const thaiDays = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
+  const todayDayName = thaiDays[todayDate.getDay()];
+  const tomorrowDayName = thaiDays[tomorrowDate.getDay()];
+  const thaiMonthsFull = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+
   // System instructions for structured tool execution
   const systemInstruction = `
 คุณคือ Status+ AI Agent ผู้ช่วยอัจฉริยะและที่ปรึกษาด้านการบริหารจัดการงานและโครงการ (Project Management Copilot & Pair Partner)
@@ -749,14 +961,20 @@ async function processAgentQuery({
 โครงสร้าง Spaces และ Lists ในระบบปัจจุบัน:
 ${spacesListText}
 
+ข้อมูลปฏิทินและวันปัจจุบันในระบบ:
+• วันนี้: ${todayStr} (วัน${todayDayName}ที่ ${todayDate.getDate()} ${thaiMonthsFull[todayDate.getMonth()]} พ.ศ. ${todayDate.getFullYear() + 543})
+• วันพรุ่งนี้: ${tomorrowStr} (วัน${tomorrowDayName}ที่ ${tomorrowDate.getDate()} ${thaiMonthsFull[tomorrowDate.getMonth()]} พ.ศ. ${tomorrowDate.getFullYear() + 543})
+
 ข้อมูลรายการงานจริงในระบบปัจจุบัน (Real-time Tasks Ground Truth):
-วันที่ปัจจุบันในระบบ: ${new Date().toISOString().split('T')[0]}
 ${realTasksText || '(ยังไม่มีรายการงานในระบบ)'}
 
 ## บุคลิกภาพและน้ำเสียง (Persona, Tone & Style):
 - **คุยอย่างเป็นธรรมชาติ เป็นกันเอง ยืดหยุ่น คล่องแคล่ว มีชีวิตชีวา (Natural, conversational, warm, and helpful)**
 - ใช้คำลงท้าย "ครับ/ค่ะ" อย่างสุภาพและพอดี ไม่อึดอัด
-- **ห้ามพูดจาเป็นหุ่นยนต์แข็งกระด้าง หรือใช้ประโยคสำเร็จรูปไร้ความหมายเด็ดขาด** (เช่น "วิเคราะห์ข้อมูลและดำเนินการตามคำสั่งเรียบร้อยแล้วครับ")
+- **ห้ามพูดจาเป็นหุ่นยนต์แข็งกระด้าง หรือใช้ประโยคสำเร็จรูปไร้ความหมายเด็ดขาด**
+- เมื่อผู้ใช้ถามเจาะจงเฉพาะวัน (เช่น "พรุ่งนี้มีงานอะไร", "เอางานพรุ่งนี้", "วันนี้มีงานอะไร"):
+  - **ให้ตอบเฉพาะงานที่ตรงกับวันที่ผู้ใช้ถามโดยตรงเท่านั้น!** ห้ามนำงานวันอื่นๆ มาสรุปปนจนยาวเกินจำเป็น
+  - ระบุชื่องาน สถานะ ความสำคัญ กำหนดส่ง และ Space/List อย่างชัดเจน กระชับ อ่านง่าย
 - ให้เหตุผลที่ฉลาด มีไหวพริบ ชี้แนะแนวทางที่ชัดเจนและนำไปปฏิบัติได้จริง
 
 ## กฎสำคัญและข้อห้ามเด็ดขาด (CRITICAL STRICT RULES):
@@ -900,126 +1118,6 @@ ${realTasksText || '(ยังไม่มีรายการงานใน�
 }
 `;
 
-// Safe JSON parser that handles markdown fences and unescaped newlines from LLMs
-function safeJsonParse(rawText) {
-  if (!rawText) return null;
-  let text = rawText.trim();
-
-  // Strip ```json ... ``` or ``` ... ```
-  text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
-
-  const firstBrace = text.indexOf('{');
-  const lastBrace = text.lastIndexOf('}');
-  if (firstBrace !== -1 && lastBrace > firstBrace) {
-    text = text.substring(firstBrace, lastBrace + 1);
-  }
-
-  try {
-    return JSON.parse(text);
-  } catch (e) {}
-
-  try {
-    let inString = false;
-    let escaped = false;
-    let cleaned = '';
-    for (let i = 0; i < text.length; i++) {
-      const char = text[i];
-      if (char === '"' && !escaped) {
-        inString = !inString;
-      }
-      if (inString && (char === '\n' || char === '\r')) {
-        cleaned += '\\n';
-      } else if (inString && char === '\t') {
-        cleaned += '\\t';
-      } else {
-        cleaned += char;
-      }
-      escaped = char === '\\' && !escaped;
-    }
-    return JSON.parse(cleaned);
-  } catch (e) {}
-
-  return null;
-}
-
-// Robust formatter that converts any string, array, or rich LLM object into clean, readable Thai Markdown
-function formatReplyToMarkdown(replyVal, topObj = null) {
-  if (typeof replyVal === 'string' && replyVal.trim()) {
-    return replyVal.trim();
-  }
-
-  const parts = [];
-  const obj = (replyVal && typeof replyVal === 'object') ? replyVal : (topObj || {});
-
-  if (obj.message && typeof obj.message === 'string') parts.push(obj.message);
-  if (obj.text && typeof obj.text === 'string') parts.push(obj.text);
-  if (obj.summary && typeof obj.summary === 'string') parts.push(obj.summary);
-  if (obj.suggestion && typeof obj.suggestion === 'string') parts.push(obj.suggestion);
-
-  // Check recommendations (in reply.recommendation, reply.recommendations, or top-level)
-  const rec = obj.recommendation || obj.recommendations || topObj?.recommendations || topObj?.recommendation;
-  if (rec) {
-    if (typeof rec === 'string') {
-      parts.push(rec);
-    } else if (Array.isArray(rec)) {
-      const recLines = ['### 💡 ลำดับงานที่แนะนำให้ทำก่อน-หลัง:\n'];
-      rec.forEach((item, idx) => {
-        const stepNum = item.step || idx + 1;
-        const taskName = item.task || item.name || item.title || 'งานที่ต้องทำ';
-        const reason = item.reason || item.note || item.description || '';
-        const prio = item.priority ? ` [ความสำคัญ: ${item.priority}]` : '';
-        recLines.push(`**${stepNum}. ${taskName}**${prio}${reason ? `\n   ↳ *คำแนะนำ:* ${reason}` : ''}`);
-      });
-      parts.push(recLines.join('\n'));
-    } else if (typeof rec === 'object') {
-      if (Array.isArray(rec.order)) {
-        const orderLines = ['### 💡 ลำดับงานที่แนะนำให้ทำก่อน-หลัง:\n'];
-        rec.order.forEach((item, idx) => {
-          const stepNum = item.step || idx + 1;
-          const taskName = Array.isArray(item.task) ? item.task.join(', ') : (item.task || item.name || 'งานที่ต้องทำ');
-          const note = item.note || item.reason || item.description || '';
-          orderLines.push(`**${stepNum}. ${taskName}**${note ? `\n   ↳ *คำแนะนำ:* ${note}` : ''}`);
-        });
-        parts.push(orderLines.join('\n'));
-      }
-      if (rec.additional_tips) {
-        const tips = rec.additional_tips;
-        const tipLines = ['\n#### 📌 ข้อสังเกตและคำแนะนำเพิ่มเติม:'];
-        if (typeof tips === 'string') {
-          tipLines.push(tips);
-        } else if (typeof tips === 'object') {
-          for (const [k, v] of Object.entries(tips)) {
-            const label = k === 'resource_allocation' ? 'การจัดสรรทรัพยากร' :
-                          k === 'communication' ? 'การสื่อสารและประสานงาน' :
-                          k === 'monitoring' ? 'การติดตามผล' : k;
-            tipLines.push(`• **${label}:** ${typeof v === 'object' ? JSON.stringify(v) : v}`);
-          }
-        }
-        parts.push(tipLines.join('\n'));
-      }
-    }
-  }
-
-  if (Array.isArray(obj.steps)) {
-    parts.push(obj.steps.map((s, i) => `${i + 1}. ${typeof s === 'string' ? s : JSON.stringify(s)}`).join('\n'));
-  }
-  if (obj.next_step) parts.push(`👉 **ขั้นตอนถัดไป:** ${obj.next_step}`);
-  if (obj.note) parts.push(`💡 **คำแนะนำเพิ่มเติม:** ${obj.note}`);
-
-  if (parts.length === 0 && typeof replyVal === 'object' && replyVal !== null) {
-    for (const [k, v] of Object.entries(replyVal)) {
-      if (k === 'actions') continue;
-      if (typeof v === 'string') parts.push(`• **${k}:** ${v}`);
-      else if (typeof v === 'object' && v !== null) {
-        const nested = formatReplyToMarkdown(v);
-        if (nested) parts.push(nested);
-      }
-    }
-  }
-
-  return parts.filter(Boolean).join('\n\n');
-}
-
   // Attempt LLM execution
   try {
     let prompt = userMessage ? userMessage.trim() : '';
@@ -1037,7 +1135,13 @@ function formatReplyToMarkdown(replyVal, topObj = null) {
     const llmResponse = await callLLM(prompt, systemInstruction, fileProcessed, true);
 
     if (llmResponse) {
-      const parsed = safeJsonParse(llmResponse);
+      let parsed = safeJsonParse(llmResponse);
+      if (!parsed) {
+        const cleanedReply = extractReplyFromRawJson(llmResponse);
+        if (cleanedReply) {
+          parsed = { actions: [], reply: cleanedReply };
+        }
+      }
       if (parsed) {
         const executedActions = [];
 
@@ -1193,7 +1297,7 @@ function formatReplyToMarkdown(replyVal, topObj = null) {
 
       // If safeJsonParse returned null:
       if (!fileProcessed) {
-        let textReply = llmResponse.trim();
+        let textReply = extractReplyFromRawJson(llmResponse.trim()) || llmResponse.trim();
         // Safety Guard against raw stalling text:
         if (/กำลังตรวจสอบ|โปรดรอสักครู่|กำลังเรียกใช้เครื่องมือ/i.test(textReply)) {
           console.warn('Detected LLM stalling response in raw text, substituting with live task query results');

@@ -39,11 +39,38 @@ function formatInlineMarkup(text) {
   });
 }
 
+function extractCleanContent(raw) {
+  if (!raw || typeof raw !== 'string') return '';
+  let str = raw.trim();
+  str = str.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+
+  if (str.startsWith('{') || str.includes('"reply":')) {
+    try {
+      const parsed = JSON.parse(str);
+      if (parsed && parsed.reply) {
+        return typeof parsed.reply === 'string' ? parsed.reply : JSON.stringify(parsed.reply);
+      }
+    } catch (e) {}
+
+    const replyMatch = str.match(/"reply"\s*:\s*"((?:[^"\\]|\\.)*)/s);
+    if (replyMatch && replyMatch[1]) {
+      let rawVal = replyMatch[1].replace(/"\s*\}*\s*$/, '');
+      try {
+        return JSON.parse(`"${rawVal}"`);
+      } catch (e) {
+        return rawVal.replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+      }
+    }
+  }
+  return str;
+}
+
 // Rich Visual Formatter for AI Responses
 function FormattedAiMessage({ content, onSelectTaskById }) {
-  if (!content) return null;
+  const cleanContent = extractCleanContent(content);
+  if (!cleanContent) return null;
 
-  const lines = content.split('\n');
+  const lines = cleanContent.split('\n');
   const renderedBlocks = [];
   let currentTaskGroup = [];
 
