@@ -14,8 +14,10 @@ export function isRoutineTask(task) {
   }
   const listName = (task.list_name || '').toLowerCase();
   const spaceName = (task.space_name || '').toLowerCase();
+  const listId = (task.list_id || '').toLowerCase();
   return listName.includes('routine') || listName.includes('รูทีน') ||
-         spaceName.includes('routine') || spaceName.includes('รูทีน');
+         spaceName.includes('routine') || spaceName.includes('รูทีน') ||
+         listId.includes('routine') || listId.includes('รูทีน');
 }
 
 export function isFutureRoutineTask(task, todayStr = new Date().toISOString().split('T')[0]) {

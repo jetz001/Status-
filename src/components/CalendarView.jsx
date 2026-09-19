@@ -16,6 +16,7 @@ import {
   AlertCircle,
   GripVertical
 } from 'lucide-react';
+import { isRoutineTask } from '../utils/routineUtils.js';
 
 const THAI_MONTHS_FULL = [
   'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
@@ -60,6 +61,8 @@ export default function CalendarView({
 }) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [hideCompleted, setHideCompleted] = useState(false);
+  const [hideRoutine, setHideRoutine] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showUnscheduled, setShowUnscheduled] = useState(true);
   const [draggedTask, setDraggedTask] = useState(null);
@@ -142,6 +145,8 @@ export default function CalendarView({
   const displayTasks = useMemo(() => {
     return tasks.filter(task => {
       if (statusFilter !== 'ALL' && task.status !== statusFilter) return false;
+      if (hideCompleted && task.status === 'COMPLETED') return false;
+      if (hideRoutine && isRoutineTask(task)) return false;
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchName = (task.name || '').toLowerCase().includes(q);
@@ -150,7 +155,7 @@ export default function CalendarView({
       }
       return true;
     });
-  }, [tasks, statusFilter, searchQuery]);
+  }, [tasks, statusFilter, hideCompleted, hideRoutine, searchQuery]);
 
   // Map tasks to their dates
   const { dateTaskMap, unscheduledTasks } = useMemo(() => {
@@ -322,9 +327,27 @@ export default function CalendarView({
             </select>
           </div>
 
+          {/* Hide Completed Tasks Checkbox */}
+          <label className="flex items-center space-x-1.5 px-2.5 py-1.5 bg-[#141517] hover:bg-[#1c1d20] border border-[#383a3e] hover:border-[#4f5157] rounded-lg text-xs text-gray-300 hover:text-white cursor-pointer transition select-none">
+            <input
+              type="checkbox"
+              checked={hideCompleted}
+              onChange={(e) => setHideCompleted(e.target.checked)}
+              className="w-3.5 h-3.5 rounded text-purple-600 bg-[#24262b] border-[#383a3e] focus:ring-purple-500 cursor-pointer accent-purple-600"
+            />
+            <span className="font-medium whitespace-nowrap">ซ่อนงานเสร็จแล้ว</span>
+          </label>
 
-
-          {/* Toggle Unscheduled Sidebar */}
+          {/* Hide Routine Tasks Checkbox */}
+          <label className="flex items-center space-x-1.5 px-2.5 py-1.5 bg-[#141517] hover:bg-[#1c1d20] border border-[#383a3e] hover:border-[#4f5157] rounded-lg text-xs text-amber-300 hover:text-amber-200 cursor-pointer transition select-none">
+            <input
+              type="checkbox"
+              checked={hideRoutine}
+              onChange={(e) => setHideRoutine(e.target.checked)}
+              className="w-3.5 h-3.5 rounded text-amber-500 bg-[#24262b] border-[#383a3e] focus:ring-amber-500 cursor-pointer accent-amber-500"
+            />
+            <span className="font-medium whitespace-nowrap">ซ่อนงาน Routine</span>
+          </label>
           <button
             onClick={() => setShowUnscheduled(!showUnscheduled)}
             className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border transition font-medium cursor-pointer ${

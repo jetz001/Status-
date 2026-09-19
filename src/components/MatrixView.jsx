@@ -16,6 +16,7 @@ import {
   AlertCircle,
   GripVertical
 } from 'lucide-react';
+import { isRoutineTask } from '../utils/routineUtils.js';
 
 const QUADRANTS = {
   q1: {
@@ -130,16 +131,20 @@ export default function MatrixView({
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [hideCompleted, setHideCompleted] = useState(false);
+  const [hideRoutine, setHideRoutine] = useState(false);
   const [draggedTask, setDraggedTask] = useState(null);
   const [dragOverQuadrant, setDragOverQuadrant] = useState(null);
 
   const todayIso = new Date().toISOString().split('T')[0];
 
-  // Filter tasks by list, hideCompleted, status, search
+  // Filter tasks by list, hideCompleted, hideRoutine, status, search
   const displayTasks = useMemo(() => {
     let list = tasks.length > 0 ? tasks : allTasks;
     if (hideCompleted) {
       list = list.filter(t => t.status !== 'COMPLETED');
+    }
+    if (hideRoutine) {
+      list = list.filter(t => !isRoutineTask(t));
     }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -153,7 +158,7 @@ export default function MatrixView({
       list = list.filter(t => t.status === statusFilter);
     }
     return list;
-  }, [tasks, allTasks, hideCompleted, searchQuery, statusFilter]);
+  }, [tasks, allTasks, hideCompleted, hideRoutine, searchQuery, statusFilter]);
 
   // Group tasks by Quadrants
   const quadrantTasks = useMemo(() => {
@@ -318,6 +323,17 @@ export default function MatrixView({
               className="w-3.5 h-3.5 rounded text-purple-600 bg-[#24262b] border-[#383a3e] focus:ring-purple-500 cursor-pointer accent-purple-600"
             />
             <span className="font-medium whitespace-nowrap">ซ่อนงานเสร็จแล้ว</span>
+          </label>
+
+          {/* Hide Routine Tasks Checkbox */}
+          <label className="flex items-center space-x-1.5 px-2.5 py-1.5 bg-[#141517] hover:bg-[#1c1d20] border border-[#383a3e] hover:border-[#4f5157] rounded-lg text-xs text-amber-300 hover:text-amber-200 cursor-pointer transition select-none">
+            <input
+              type="checkbox"
+              checked={hideRoutine}
+              onChange={(e) => setHideRoutine(e.target.checked)}
+              className="w-3.5 h-3.5 rounded text-amber-500 bg-[#24262b] border-[#383a3e] focus:ring-amber-500 cursor-pointer accent-amber-500"
+            />
+            <span className="font-medium whitespace-nowrap">ซ่อนงาน Routine</span>
           </label>
         </div>
       </div>
