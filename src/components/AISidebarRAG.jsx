@@ -44,21 +44,42 @@ function extractCleanContent(raw) {
   let str = raw.trim();
   str = str.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
 
-  if (str.startsWith('{') || str.includes('"reply":')) {
-    try {
-      const parsed = JSON.parse(str);
-      if (parsed && parsed.reply) {
-        return typeof parsed.reply === 'string' ? parsed.reply : JSON.stringify(parsed.reply);
-      }
-    } catch (e) {}
+  if (!str.startsWith('{') && !str.includes('"reply"')) {
+    return str;
+  }
 
-    const replyMatch = str.match(/"reply"\s*:\s*"((?:[^"\\]|\\.)*)/s);
-    if (replyMatch && replyMatch[1]) {
-      let rawVal = replyMatch[1].replace(/"\s*\}*\s*$/, '');
-      try {
-        return JSON.parse(`"${rawVal}"`);
-      } catch (e) {
-        return rawVal.replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+  try {
+    const parsed = JSON.parse(str);
+    if (parsed && parsed.reply) {
+      return typeof parsed.reply === 'string' ? parsed.reply : JSON.stringify(parsed.reply);
+    }
+  } catch (e) {}
+
+  const replyIdx = str.indexOf('"reply"');
+  if (replyIdx !== -1) {
+    const afterReply = str.substring(replyIdx + 7);
+    const colonIdx = afterReply.indexOf(':');
+    if (colonIdx !== -1) {
+      let rest = afterReply.substring(colonIdx + 1).trim();
+      if (rest.startsWith('"')) {
+        rest = rest.substring(1);
+        let replyContent = rest;
+        const lastQuoteMatch = rest.match(/([\s\S]*)"\s*\}*\s*$/);
+        if (lastQuoteMatch) {
+          replyContent = lastQuoteMatch[1];
+        } else {
+          replyContent = rest.replace(/\s*\}\s*$/, '');
+        }
+        try {
+          return JSON.parse(`"${replyContent}"`);
+        } catch (e) {
+          return replyContent
+            .replace(/\\n/g, '\n')
+            .replace(/\\r/g, '')
+            .replace(/\\t/g, '\t')
+            .replace(/\\"/g, '"')
+            .replace(/\\\\/g, '\\');
+        }
       }
     }
   }

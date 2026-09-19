@@ -68,17 +68,25 @@ function routeSkill(userText, hasAttachment = false) {
     return SKILLS.desktop_controller;
   }
 
-  // 1. Project / Space building intent
+  // 1. Task Inquiries, Questions, or Conversation -> SKILLS.advisor
+  if (/^(?:มีงาน|งานอะไร|งานไหน|งานวันนี้|งานพรุ่งนี้|งานค้าง|งานด่วน|งานที่ต้องทำ|เอาที่ยังไม่เสร็จ|มีงานอะไรบ้าง|เหลืออะไรบ้าง|เช็คงาน|ดูงาน|สรุปงาน|ทำอันไหนก่อน|เริ่มยังไงดี|เอาที่|ขอดู)/i.test(text) ||
+      /\b(อะไรบ้าง|ไหนบ้าง|เท่าไหร่|ยังไง|หรือยัง|ทำไม|วันไหน|มีอะไร|เอาที่|ขอดู)\b/i.test(text)) {
+    if (!/^(?:สร้าง|เพิ่ม\s*งาน|ลบ\s*งาน|แก้ไข\s*งาน|อัปเดต\s*งาน|เปลี่ยน\s*สถานะ|ย้าย\s*งาน)/i.test(text)) {
+      return SKILLS.advisor;
+    }
+  }
+
+  // 2. Project / Space building intent
   if (/สร้าง\s*(โปรเจกต์|โปรเจค|project|space|list|รายการใหม่)|ตั้ง\s*(โปรเจกต์|space)/i.test(text)) {
     return SKILLS.project_builder;
   }
 
-  // 2. Task CRUD & Natural Language Task assignment operations
-  if (/สร้าง\s*งาน|เพิ่ม\s*งาน|ลบ\s*งาน|แก้ไข\s*งาน|อัปเดต|เปลี่ยน\s*(สถานะ|กำหนด|วันส่ง|ความสำคัญ)|ทำเสร็จ|ย้าย\s*งาน|เพิ่ม\s*(checklist|subtask|งานย่อย)|ป้าย|ติดตั้ง|ซ่อม|ช่าง|จัดทำ|ดำเนินการ|หัวหน้าให้ทำ|มีงาน|ช่วยวางแผน|วางแผนงาน/i.test(text)) {
+  // 3. Task CRUD & Natural Language Task assignment operations
+  if (/สร้าง\s*งาน|เพิ่ม\s*งาน|ลบ\s*งาน|แก้ไข\s*งาน|อัปเดต|เปลี่ยน\s*(สถานะ|กำหนด|วันส่ง|ความสำคัญ)|ทำเสร็จ|ย้าย\s*งาน|เพิ่ม\s*(checklist|subtask|งานย่อย)|ป้าย|ติดตั้ง|ซ่อม|ช่าง|จัดทำ|ดำเนินการ|หัวหน้าให้ทำ|ช่วยวางแผน|วางแผนงาน/i.test(text)) {
     return SKILLS.task_ops;
   }
 
-  // 3. Document keywords even without file
+  // 4. Document keywords even without file
   if (/เอกสาร|pdf|สเปก|ใบงาน|contract|scope/i.test(text) && /แยก\s*งาน|สร้าง\s*งาน/i.test(text)) {
     return SKILLS.doc_analyzer;
   }
@@ -631,26 +639,44 @@ function extractReplyFromRawJson(rawText) {
   // Strip markdown json block fences
   text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
 
+  // If plain text not containing JSON structure, return directly
+  if (!text.startsWith('{') && !text.includes('"reply"')) {
+    return text;
+  }
+
   // 1. Try safeJsonParse
   const parsed = safeJsonParse(text);
   if (parsed && parsed.reply) {
     return formatReplyToMarkdown(parsed.reply, parsed);
   }
 
-  // 2. Extract "reply": "..." if JSON is malformed or truncated
-  const replyStrMatch = text.match(/"reply"\s*:\s*"((?:[^"\\]|\\.)*)/s);
-  if (replyStrMatch && replyStrMatch[1]) {
-    let rawReply = replyStrMatch[1];
-    rawReply = rawReply.replace(/"\s*\}*\s*$/, '');
-    try {
-      return JSON.parse(`"${rawReply}"`);
-    } catch (e) {
-      return rawReply
-        .replace(/\\n/g, '\n')
-        .replace(/\\r/g, '')
-        .replace(/\\t/g, '\t')
-        .replace(/\\"/g, '"')
-        .replace(/\\\\/g, '\\');
+  // 2. Extract "reply": "..." if JSON is malformed, unescaped, or truncated
+  const replyIdx = text.indexOf('"reply"');
+  if (replyIdx !== -1) {
+    const afterReply = text.substring(replyIdx + 7);
+    const colonIdx = afterReply.indexOf(':');
+    if (colonIdx !== -1) {
+      let rest = afterReply.substring(colonIdx + 1).trim();
+      if (rest.startsWith('"')) {
+        rest = rest.substring(1);
+        let replyContent = rest;
+        const lastQuoteMatch = rest.match(/([\s\S]*)"\s*\}*\s*$/);
+        if (lastQuoteMatch) {
+          replyContent = lastQuoteMatch[1];
+        } else {
+          replyContent = rest.replace(/\s*\}\s*$/, '');
+        }
+        try {
+          return JSON.parse(`"${replyContent}"`);
+        } catch (e) {
+          return replyContent
+            .replace(/\\n/g, '\n')
+            .replace(/\\r/g, '')
+            .replace(/\\t/g, '\t')
+            .replace(/\\"/g, '"')
+            .replace(/\\\\/g, '\\');
+        }
+      }
     }
   }
 
@@ -935,9 +961,13 @@ async function processAgentQuery({
     `).all();
   } catch (e) {}
 
-  const realTasksText = realTasksForPrompt.map(t =>
-    `- "${t.name}" | สถานะ: ${t.status || 'NOT STARTED'} | ความสำคัญ: ${t.priority || 'Normal'} | กำหนดส่ง: ${t.due_date || 'ไม่ระบุ'} | ผู้รับผิดชอบ: ${t.assignee || '-'} | Space: "${t.space_name || '-'}" › List: "${t.list_name || '-'}"`
-  ).join('\n');
+  const realTasksText = realTasksForPrompt.map(t => {
+    const due = t.due_date ? ` (กำหนดส่ง: ${t.due_date})` : '';
+    const status = t.status ? ` [${t.status}]` : '';
+    const prio = t.priority && t.priority !== 'Normal' ? ` [${t.priority}]` : '';
+    const loc = (t.space_name || t.list_name) ? ` [${t.space_name || ''} › ${t.list_name || ''}]` : '';
+    return `- ${t.name}${status}${prio}${due}${loc}`;
+  }).join('\n');
 
   // Exact Thai calendar dates
   const todayDate = new Date();
@@ -950,172 +980,37 @@ async function processAgentQuery({
   const tomorrowDayName = thaiDays[tomorrowDate.getDay()];
   const thaiMonthsFull = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
 
-  // System instructions for structured tool execution
+  // Streamlined, flexible system instructions for natural PM assistance
   const systemInstruction = `
-คุณคือ Status+ AI Agent ผู้ช่วยอัจฉริยะและที่ปรึกษาด้านการบริหารจัดการงานและโครงการ (Project Management Copilot & Pair Partner)
-สกิลปัจจุบันที่ถูกเลือก: "${skill.label}" (${skill.id})
-เครื่องมือที่คุณมีสิทธิ์เรียกใช้: ${skill.tools.join(', ')}
+คุณคือ Status+ AI ผู้ช่วยคนเก่งด้านการบริหารจัดการงานและโครงการ (Project Management Copilot)
+คุยง่าย เป็นกันเอง ยืดหยุ่น คล่องตัว ตอบกระชับตรงประเด็น เหมือนเพื่อนร่วมงานหรือเลขาที่ฉลาด
 
-บริบทโปรเจกต์ปัจจุบัน: ${context || 'ทั่วไป'} (Active List ID: ${activeListId || 'default'})
+ข้อมูลปฏิทินระบบปัจจุบัน:
+• วันนี้: ${todayStr} (วัน${todayDayName}ที่ ${todayDate.getDate()} ${thaiMonthsFull[todayDate.getMonth()]} พ.ศ. ${todayDate.getFullYear() + 543})
+• พรุ่งนี้: ${tomorrowStr} (วัน${tomorrowDayName}ที่ ${tomorrowDate.getDate()} ${thaiMonthsFull[tomorrowDate.getMonth()]} พ.ศ. ${tomorrowDate.getFullYear() + 543})
 
-โครงสร้าง Spaces และ Lists ในระบบปัจจุบัน:
+โครงสร้าง Spaces & Lists ในระบบ:
 ${spacesListText}
 
-ข้อมูลปฏิทินและวันปัจจุบันในระบบ:
-• วันนี้: ${todayStr} (วัน${todayDayName}ที่ ${todayDate.getDate()} ${thaiMonthsFull[todayDate.getMonth()]} พ.ศ. ${todayDate.getFullYear() + 543})
-• วันพรุ่งนี้: ${tomorrowStr} (วัน${tomorrowDayName}ที่ ${tomorrowDate.getDate()} ${thaiMonthsFull[tomorrowDate.getMonth()]} พ.ศ. ${tomorrowDate.getFullYear() + 543})
+รายการงานจริงในระบบ (Ground Truth):
+${realTasksText || '(ยังไม่มีงานในระบบ)'}
 
-ข้อมูลรายการงานจริงในระบบปัจจุบัน (Real-time Tasks Ground Truth):
-${realTasksText || '(ยังไม่มีรายการงานในระบบ)'}
-
-## บุคลิกภาพและน้ำเสียง (Persona, Tone & Style):
-- **คุยอย่างเป็นธรรมชาติ เป็นกันเอง ยืดหยุ่น คล่องแคล่ว มีชีวิตชีวา (Natural, conversational, warm, and helpful)**
-- ใช้คำลงท้าย "ครับ/ค่ะ" อย่างสุภาพและพอดี ไม่อึดอัด
-- **ห้ามพูดจาเป็นหุ่นยนต์แข็งกระด้าง หรือใช้ประโยคสำเร็จรูปไร้ความหมายเด็ดขาด**
-- เมื่อผู้ใช้ถามเจาะจงเฉพาะวัน (เช่น "พรุ่งนี้มีงานอะไร", "เอางานพรุ่งนี้", "วันนี้มีงานอะไร"):
-  - **ให้ตอบเฉพาะงานที่ตรงกับวันที่ผู้ใช้ถามโดยตรงเท่านั้น!** ห้ามนำงานวันอื่นๆ มาสรุปปนจนยาวเกินจำเป็น
-  - ระบุชื่องาน สถานะ ความสำคัญ กำหนดส่ง และ Space/List อย่างชัดเจน กระชับ อ่านง่าย
-- ให้เหตุผลที่ฉลาด มีไหวพริบ ชี้แนะแนวทางที่ชัดเจนและนำไปปฏิบัติได้จริง
-
-## กฎสำคัญและข้อห้ามเด็ดขาด (CRITICAL STRICT RULES):
-0. **ห้ามตอบว่า "กำลังตรวจสอบ... โปรดรอสักครู่" หรือ "กำลังเรียกใช้เครื่องมือ..." หรือผัดผ่อนเวลาเด็ดขาด!** คุณมีข้อมูลงานจริงทั้งหมดในระบบอยู่ด้านบนแล้ว หากผู้ใช้สอบถามเรื่องงาน กำหนดส่ง หรืองานด่วน ให้สรุปข้อมูลจริงจากรายการงานด้านบนและตอบผู้ใช้ทันที
-1. **บริบทของระบบ**: Status+ คือระบบจัดการงาน/โปรเจกต์ (Task & Workflow Management) คล้าย ClickUp / Jira
-   - คำว่า "งาน" หรือ "จัดงาน" หมายถึง **ภาระงาน (Tasks / Work Items)** เช่น งานซ่อมบำรุง, ตรวจสอบความปลอดภัย, งานเอกสาร, ติดตามผล, ปรับปรุงระบบ ฯลฯ
-   - **ห้ามเข้าใจผิดว่าเป็นการจัดงานเลี้ยง งานสังสรรค์ หรืองานอีเวนต์ (Event Planning) เด็ดขาด!**
-
-2. **การวิเคราะห์รูปภาพและสกัดรายการงาน (Multi-Task Extraction - สำคัญที่สุด!)**:
-   - ให้อ่านตัวหนังสือ OCR และวิเคราะห์เนื้อหาในภาพอย่างละเอียด
-   - **กรณีมีหลายงานในภาพ/เอกสาร (เช่น ตาราง รายชื่อ Task หลายบรรทัด หรือ Checklist หลายหัวข้อ)**:
-     - **ห้ามเลือกมาแค่งานเดียวเด็ดขาด!** ต้องสกัดงานออกมาให้ **ครบทุกงานที่ปรากฏในภาพ**
-     - ใส่ในรูปแบบ array \`tasks\`: [ ... ] ใน \`plan\`
-   - **การตั้งชื่องานที่แนะนำ**:
-     - ต้องตั้งชื่องานจริงที่อ่านได้จากภาพอย่างเฉพาะเจาะจง สื่อความหมาย (เช่น "Patrol Audit", "iSingleForm", "Matra80", "Calibration ตลับเมตรและตาชั่ง")
-     - **ข้อห้ามเด็ดขาด (STRICT PROHIBITION)**: ห้ามนำชื่อไฟล์ เช่น "clipboard-...", "image.png", "วิเคราะห์และดำเนินงานตามรูปภาพ: ..." มาเป็นชื่องานเด็ดขาด!
-   - **Checklist (Subtasks)**: แตกข้อย่อย 2-4 ข้อที่ตรงกับขั้นตอนปฏิบัติจริงในแต่ละงาน
-
-3. **โหมดให้คำปรึกษา แนะนำลำดับงาน หรือ "ทำอันไหนก่อน / เริ่มยังไงดี / ช่วยจัดลำดับ" (Advisory & Prioritization - สำคัญมาก!)**:
-   - เมื่อผู้ใช้ถามคำถามแนวขอคำแนะนำ เช่น "ทำอันไหนก่อน", "เริ่มจากงานไหนดี", "อันไหนสำคัญสุด", "ช่วยเรียงลำดับให้หน่อย", "ทำอะไรก่อนดี":
-     - **วิเคราะห์รายการงานจริงที่มีอยู่ในระบบด้านบน โดยใช้หลักการ Eisenhower Matrix & ความเร่งด่วนของวันกำหนดส่ง (Due Date)**:
-       1. **งานเร่งด่วน & สำคัญมาก (Do First / Urgent & High / Overdue)**: แนะนำให้ทำเป็นอันดับแรก พร้อมบอกเหตุผลว่าทำไมต้องลุยก่อน (เช่น วันกำหนดส่งมาถึงแล้ว หรือเป็นเงื่อนไขสำคัญของระบบ)
-       2. **งานสำคัญที่ต้องวางแผนทำถัดไป (Schedule / High / Due Soon)**: งานที่สำคัญแต่ยังพอมีเวลา
-       3. **งานที่สามารถจัดการช่วงหลัง / งานรูทีน**: งานปกติที่ทำตามรอบ
-     - ให้คำแนะนำในภาษาพูดที่เป็นมิตร เป็นธรรมชาติ ชัดเจน จัดเป็นข้อๆ อ่านง่าย
-     - กำหนด \`"actions": []\` เป็น array ว่าง
-     - ในช่อง \`"reply"\`: **เขียนข้อความตอบผู้ใช้เป็นภาษาไทย Markdown String โดยตรง (ห้ามใส่เป็น JSON ซ้อนใน reply)**
-
-4. **รูปแบบผลลัพธ์ JSON Object ที่ต้องส่งกลับ (JSON Response Structure)**:
-{
-  "actions": [ ... ],
-  "reply": "ข้อความตอบกลับผู้ใช้เป็นภาษาไทยที่เป็นธรรมชาติ สุภาพ ชัดเจน (Markdown string เสมอ)"
-}
-
-ตัวอย่างเมื่อผู้ใช้ขอคำแนะนำเรื่องลำดับงาน ("ทำอันไหนก่อน"):
-{
-  "actions": [],
-  "reply": "ถ้าดูจากรายการงานในระบบตอนนี้ ผมแนะนำให้เริ่มตามลำดับนี้ครับ 😊\\n\\n1. 🥇 **[ชื่องานที่ 1]** (กำหนดส่ง: ... | ความสำคัญ: High)\\n   ↳ **เหตุผล:** งานนี้ครบกำหนดส่งในวันนี้/ใกล้ที่สุด และมีความสำคัญระดับสูง ควรจัดการก่อนเพื่อไม่ให้เกิดคอขวดครับ\\n\\n2. 🥈 **[ชื่องานที่ 2]** (กำหนดส่ง: ...)\\n   ↳ **เหตุผล:** ...\\n\\n💡 **คำแนะนำเพิ่มเติม:** ..."
-}
-
-ตัวอย่างเมื่อสกัดงานจากภาพ/เอกสาร (Multi-Task plan_proposal):
-{
-  "actions": [
-    {
-      "action": "plan_proposal",
-      "title": "📋 ร่างแผนงาน (รออนุมัติก่อนสร้าง)",
-      "plan": {
-        "tasks": [
-          {
-            "name": "ชื่องานที่ 1 จากภาพ",
-            "description": "รายละเอียดงานที่ 1",
-            "priority": "High",
-            "subtasks": ["ขั้นตอน 1", "ขั้นตอน 2"]
-          },
-          {
-            "name": "ชื่องานที่ 2 จากภาพ",
-            "description": "รายละเอียดงานที่ 2",
-            "priority": "Normal",
-            "subtasks": ["ขั้นตอน 1", "ขั้นตอน 2"]
-          }
-        ]
-      }
-    }
-  ],
-  "reply": "ผมได้สกัดงานทั้งหมดจากภาพมาให้เรียบร้อยแล้วครับ รวมทั้งสิ้น X รายการ สามารถเลือก Space/List และกดอนุมัติสร้างงานด้านล่างได้เลยครับ!"
-}
-
-ตัวอย่างเมื่อสนทนาทั่วไปหรือทักทาย:
-{
-  "actions": [],
-  "reply": "สวัสดีครับ! ผมคือ Status+ AI พร้อมช่วยจัดการ วางแผน และติดตามงานในระบบให้คุณครับ 😊 วันนี้มีอะไรให้ผมช่วยดูแล หรืออยากปรึกษาเรื่องงานตัวไหน บอกได้เลยนะครับ!"
-}
-
-ตัวอย่างเมื่อผู้ใช้สั่งการให้เรียกใช้เครื่องมือในระบบ (Tool Execution Examples):
-- เมื่อผู้ใช้สั่งอัปเดตงาน (เปลี่ยนสถานะ / วันกำหนดส่ง / ความสำคัญ / ผู้รับผิดชอบ):
-{
-  "actions": [
-    {
-      "tool": "update_task",
-      "args": {
-        "name": "ชื่องานที่ต้องการอัปเดต",
-        "status": "COMPLETED",
-        "due_date": "2026-09-20",
-        "priority": "High"
-      }
-    }
-  ],
-  "reply": "อัปเดตข้อมูลงานเรียบร้อยแล้วครับ!"
-}
-
-- เมื่อผู้ใช้สั่งเพิ่ม Checklist หรือ Subtasks ในงาน:
-{
-  "actions": [
-    {
-      "tool": "create_subtasks",
-      "args": {
-        "task_name": "ชื่องาน",
-        "subtasks": ["ขั้นตอนย่อยที่ 1", "ขั้นตอนย่อยที่ 2"]
-      }
-    }
-  ],
-  "reply": "เพิ่มรายการ Checklist ในงานเรียบร้อยแล้วครับ!"
-}
-
-- เมื่อผู้ใช้สั่งลบงาน:
-{
-  "actions": [
-    {
-      "tool": "delete_task",
-      "args": {
-        "name": "ชื่องานที่ต้องการลบ"
-      }
-    }
-  ],
-  "reply": "ผมได้เตรียมคำสั่งลบงานให้แล้วครับ กรุณายืนยันการลบที่การ์ดแจ้งเตือน"
-}
-
-- เมื่อผู้ใช้สั่งย้ายงานข้าม List:
-{
-  "actions": [
-    {
-      "tool": "move_task",
-      "args": {
-        "name": "ชื่องาน",
-        "target_list_id": "ID ของ List ปลายทาง"
-      }
-    }
-  ],
-  "reply": "ย้ายงานไปยัง List ปลายทางเรียบร้อยแล้วครับ!"
-}
-
-- เมื่อผู้ใช้สั่งสรุปภาพรวม KPI:
-{
-  "actions": [
-    {
-      "tool": "get_project_overview",
-      "args": {}
-    }
-  ],
-  "reply": "นี่คือสรุปภาพรวมสถานะงานทั้งหมดในระบบครับ"
-}
+แนวทางการตอบและการสนทนา (Conversational Guidelines):
+1. **พูดคุยอย่างเป็นธรรมชาติ ยืดหยุ่น และเข้าใจบริบทต่อเนื่อง (Multi-turn Context Aware)**:
+   - ตอบสั้นกระชับ อ่านง่าย สบายตา ไม่ต้องแจกแจงทุกฟิลด์ให้ยาวเป็นตารางหุ่นยนต์ (ไม่ต้องใส่ pipe | หรือระบุ Space/List/ผู้รับผิดชอบ ครบทุกข้อถ้าผู้ใช้ไม่ได้ถาม)
+   - เชื่อมโยงกับสิ่งที่เพิ่งคุยกันในห้องแชท เช่น ถ้าเพิ่งคุยเรื่องงานวันพรุ่งนี้ แล้วผู้ใช้บอก "เอาที่ยังไม่เสร็จ" ให้คัดกรองเฉพาะงานที่ยังไม่เสร็จ (NOT STARTED / IN PROGRESS) ของวันพรุ่งนี้มาตอบทันที ไม่ต้องรีเซ็ตกลับไปพูดถึงวันนี้
+   - เมื่องานเสร็จแล้ว (COMPLETED) ไม่จำเป็นต้องแจกแจงยาว เว้นแต่ผู้ใช้ถามถึงงานที่เสร็จแล้ว
+2. **การตอบคำถามเรื่องงานและกำหนดส่ง**:
+   - เมื่อผู้ใช้ถามหางาน (เช่น "พรุ่งนี้มีงานอะไร", "มีงานไหนบ้าง", "ทำอันไหนก่อนดี", "เอาที่ยังไม่เสร็จ"): สรุปจากรายการงานจริงด้านบน ตอบทันทีอย่างฉลาดและตรงประเด็น
+3. **รูปแบบการตอบกลับ**:
+   - หากเป็นการพูดคุย ถาม-ตอบ แนะนำ หรือสรุปงานทั่วไป: ตอบเป็นภาษาไทย Markdown สวยงามได้โดยตรงอย่างอิสระ
+   - เฉพาะกรณีที่ผู้ใช้สั่งการให้ระบบกระทำจริง (เช่น สร้างงาน, แก้ไขงาน, ลบงาน, ย้ายงาน) หรือสกัดงานจากรูปภาพ/เอกสาร ให้ส่งในรูปแบบ JSON Object:
+     {
+       "actions": [
+         { "tool": "create_task" | "update_task" | "delete_task" | "plan_proposal", "args": { ... } }
+       ],
+       "reply": "ข้อความอธิบายเป็นธรรมชาติ"
+     }
 `;
 
   // Attempt LLM execution
@@ -1132,7 +1027,8 @@ ${realTasksText || '(ยังไม่มีรายการงานใน�
     } else if (!prompt) {
       prompt = 'สรุปภาพรวมงานในระบบ';
     }
-    const llmResponse = await callLLM(prompt, systemInstruction, fileProcessed, true);
+    const shouldForceJson = !!fileProcessed || (skill.id !== 'advisor' && !/^(?:มีงาน|งานอะไร|งานไหน|งานวันนี้|งานพรุ่งนี้|งานค้าง|งานด่วน|งานที่ต้องทำ|เอาที่ยังไม่เสร็จ|มีงานอะไรบ้าง|เหลืออะไรบ้าง|เช็คงาน|ดูงาน|สรุปงาน|ทำอันไหนก่อน|เริ่มยังไงดี|เอาที่)/i.test(cleanMsg));
+    const llmResponse = await callLLM(prompt, systemInstruction, fileProcessed, shouldForceJson);
 
     if (llmResponse) {
       let parsed = safeJsonParse(llmResponse);
