@@ -393,8 +393,42 @@ async function fallbackRuleExecution(skill, query, fileProcessed = null, activeL
   }
 
   // 4.5. DUE SOON / URGENT / DEADLINE QUERY
-  if (/(?:ใกล้.*กำหนด|กำหนดส่ง|due\s*soon|urgent|ด่วน|ค้างส่ง|overdue|งานที่ต้องทำ|มีงานอะไร|มีงานไหน|งานค้าง)/i.test(text) && !/สร้าง|ลบ|เพิ่ม|ย้าย/i.test(text)) {
+  if (/(?:ใกล้.*กำหนด|กำหนดส่ง|due\s*soon|urgent|ด่วน|ค้างส่ง|overdue|งานที่ต้องทำ|มีงานอะไร|มีงานไหน|งานค้าง)/i.test(text) && !/สร้าง|ลบ|เพิ่ม|ย้าย|ก่อน|แนะนำ|เริ่มจาก|จัดลำดับ|ควรทำ|เลือกอันไหน/i.test(text)) {
     return executeDueSoonAndUrgentQuery({ activeListId, queryText: text });
+  }
+
+  // 4.6. ADVISORY & TASK PRIORITIZATION QUERY ("ทำอันไหนก่อน", "เริ่มยังไงดี", "จัดลำดับ")
+  if (/(?:ทำอันไหนก่อน|เริ่ม.*ก่อน|อันไหนก่อน|จัดลำดับ|แนะนำงาน|งานไหนสำคัญ|ควรทำอันไหน|เริ่มตรงไหน)/i.test(text)) {
+    const pendingTasks = db.prepare(`
+      SELECT t.id, t.name, t.status, t.priority, t.due_date, l.name as list_name, s.name as space_name
+      FROM tasks t
+      LEFT JOIN lists l ON t.list_id = l.id
+      LEFT JOIN spaces s ON l.space_id = s.id
+      WHERE (t.status IS NULL OR UPPER(t.status) != 'COMPLETED')
+      ORDER BY 
+        CASE WHEN UPPER(t.priority) = 'URGENT' THEN 0 WHEN UPPER(t.priority) = 'HIGH' THEN 1 ELSE 2 END,
+        CASE WHEN t.due_date IS NULL OR t.due_date = '' THEN 1 ELSE 0 END,
+        t.due_date ASC
+      LIMIT 5
+    `).all();
+
+    if (pendingTasks.length === 0) {
+      reply = 'ตอนนี้ในระบบไม่มีงานคั่งค้างเลยครับ สบายใจได้! 🎉 หากมีงานใหม่ที่ต้องการให้ช่วยวางแผน พิมพ์บอกได้เลยครับ';
+      return { skill, actions, reply };
+    }
+
+    const top1 = pendingTasks[0];
+    const topOthers = pendingTasks.slice(1);
+    let listStr = `1. 🥇 **${top1.name}** (ความสำคัญ: **${top1.priority || 'Normal'}**${top1.due_date ? ` | กำหนดส่ง: **${top1.due_date}**` : ''})\n   ↳ *คำแนะนำ:* แนะนำให้ลุยงานนี้ก่อนเป็นอันดับแรกครับ เพราะมีความสำคัญเร่งด่วนและกำหนดส่งใกล้ที่สุดในระบบ\n\n`;
+    if (topOthers.length > 0) {
+      listStr += '**ลำดับถัดไปที่แนะนำให้เตรียมการ:**\n';
+      topOthers.forEach((t, idx) => {
+        listStr += `${idx + 2}. **${t.name}** (ความสำคัญ: ${t.priority || 'Normal'}${t.due_date ? ` | กำหนดส่ง: ${t.due_date}` : ''})\n`;
+      });
+    }
+
+    reply = `ถ้าดูจากรายการงานในระบบตอนนี้ ผมแนะนำให้จัดคิวตามนี้ครับ 😊\n\n${listStr}\n> 💡 ต้องการให้ผมช่วยแตกขั้นตอน Checklist ย่อย หรือปรับปรุงงานรายการไหน บอกได้เลยนะครับ!`;
+    return { skill, actions, reply };
   }
 
   // 5. PROJECT OVERVIEW / STATUS SUMMARY QUERY
@@ -517,8 +551,8 @@ async function processAgentQuery({
     return await fallbackRuleExecution(SKILLS.advisor, cleanMsg, null, activeListId);
   }
 
-  // Intercept Due Soon / Urgent / Deadline queries directly so user gets INSTANT accurate results
-  if (!fileProcessed && /(?:ใกล้.*กำหนด|กำหนดส่ง|due\s*soon|urgent|ด่วน|ค้างส่ง|overdue|งานที่ต้องทำ|มีงานอะไร|มีงานไหน|งานค้าง)/i.test(cleanMsg) && !/สร้าง|ลบ|เพิ่ม|ย้าย/i.test(cleanMsg)) {
+  // Intercept Due Soon / Urgent / Deadline queries directly so user gets INSTANT accurate results (except advisory/prioritization queries which need LLM reasoning)
+  if (!fileProcessed && /(?:ใกล้.*กำหนด|กำหนดส่ง|due\s*soon|urgent|ด่วน|ค้างส่ง|overdue|งานที่ต้องทำ|มีงานอะไร|มีงานไหน|งานค้าง)/i.test(cleanMsg) && !/สร้าง|ลบ|เพิ่ม|ย้าย|ก่อน|แนะนำ|เริ่มจาก|จัดลำดับ|ควรทำ|เลือกอันไหน/i.test(cleanMsg)) {
     return executeDueSoonAndUrgentQuery({ activeListId, queryText: cleanMsg });
   }
 
@@ -706,7 +740,7 @@ async function processAgentQuery({
 
   // System instructions for structured tool execution
   const systemInstruction = `
-คุณคือ Status+ AI Agent ผู้ช่วยอัจฉริยะด้านการบริหารจัดการงานและโครงการ (Project & Task Management System)
+คุณคือ Status+ AI Agent ผู้ช่วยอัจฉริยะและที่ปรึกษาด้านการบริหารจัดการงานและโครงการ (Project Management Copilot & Pair Partner)
 สกิลปัจจุบันที่ถูกเลือก: "${skill.label}" (${skill.id})
 เครื่องมือที่คุณมีสิทธิ์เรียกใช้: ${skill.tools.join(', ')}
 
@@ -718,6 +752,12 @@ ${spacesListText}
 ข้อมูลรายการงานจริงในระบบปัจจุบัน (Real-time Tasks Ground Truth):
 วันที่ปัจจุบันในระบบ: ${new Date().toISOString().split('T')[0]}
 ${realTasksText || '(ยังไม่มีรายการงานในระบบ)'}
+
+## บุคลิกภาพและน้ำเสียง (Persona, Tone & Style):
+- **คุยอย่างเป็นธรรมชาติ เป็นกันเอง ยืดหยุ่น คล่องแคล่ว มีชีวิตชีวา (Natural, conversational, warm, and helpful)**
+- ใช้คำลงท้าย "ครับ/ค่ะ" อย่างสุภาพและพอดี ไม่อึดอัด
+- **ห้ามพูดจาเป็นหุ่นยนต์แข็งกระด้าง หรือใช้ประโยคสำเร็จรูปไร้ความหมายเด็ดขาด** (เช่น "วิเคราะห์ข้อมูลและดำเนินการตามคำสั่งเรียบร้อยแล้วครับ")
+- ให้เหตุผลที่ฉลาด มีไหวพริบ ชี้แนะแนวทางที่ชัดเจนและนำไปปฏิบัติได้จริง
 
 ## กฎสำคัญและข้อห้ามเด็ดขาด (CRITICAL STRICT RULES):
 0. **ห้ามตอบว่า "กำลังตรวจสอบ... โปรดรอสักครู่" หรือ "กำลังเรียกใช้เครื่องมือ..." หรือผัดผ่อนเวลาเด็ดขาด!** คุณมีข้อมูลงานจริงทั้งหมดในระบบอยู่ด้านบนแล้ว หากผู้ใช้สอบถามเรื่องงาน กำหนดส่ง หรืองานด่วน ให้สรุปข้อมูลจริงจากรายการงานด้านบนและตอบผู้ใช้ทันที
@@ -735,7 +775,29 @@ ${realTasksText || '(ยังไม่มีรายการงานใน�
      - **ข้อห้ามเด็ดขาด (STRICT PROHIBITION)**: ห้ามนำชื่อไฟล์ เช่น "clipboard-...", "image.png", "วิเคราะห์และดำเนินงานตามรูปภาพ: ..." มาเป็นชื่องานเด็ดขาด!
    - **Checklist (Subtasks)**: แตกข้อย่อย 2-4 ข้อที่ตรงกับขั้นตอนปฏิบัติจริงในแต่ละงาน
 
-3. **ตอบกลับเป็น JSON Object เท่านั้น (JSON Response Only)** โดยมีโครงสร้างดังนี้:
+3. **โหมดให้คำปรึกษา แนะนำลำดับงาน หรือ "ทำอันไหนก่อน / เริ่มยังไงดี / ช่วยจัดลำดับ" (Advisory & Prioritization - สำคัญมาก!)**:
+   - เมื่อผู้ใช้ถามคำถามแนวขอคำแนะนำ เช่น "ทำอันไหนก่อน", "เริ่มจากงานไหนดี", "อันไหนสำคัญสุด", "ช่วยเรียงลำดับให้หน่อย", "ทำอะไรก่อนดี":
+     - **วิเคราะห์รายการงานจริงที่มีอยู่ในระบบด้านบน โดยใช้หลักการ Eisenhower Matrix & ความเร่งด่วนของวันกำหนดส่ง (Due Date)**:
+       1. **งานเร่งด่วน & สำคัญมาก (Do First / Urgent & High / Overdue)**: แนะนำให้ทำเป็นอันดับแรก พร้อมบอกเหตุผลว่าทำไมต้องลุยก่อน (เช่น วันกำหนดส่งมาถึงแล้ว หรือเป็นเงื่อนไขสำคัญของระบบ)
+       2. **งานสำคัญที่ต้องวางแผนทำถัดไป (Schedule / High / Due Soon)**: งานที่สำคัญแต่ยังพอมีเวลา
+       3. **งานที่สามารถจัดการช่วงหลัง / งานรูทีน**: งานปกติที่ทำตามรอบ
+     - ให้คำแนะนำในภาษาพูดที่เป็นมิตร เป็นธรรมชาติ ชัดเจน จัดเป็นข้อๆ อ่านง่าย
+     - กำหนด \`"actions": []\` เป็น array ว่าง
+     - ในช่อง \`"reply"\`: **เขียนข้อความตอบผู้ใช้เป็นภาษาไทย Markdown String โดยตรง (ห้ามใส่เป็น JSON ซ้อนใน reply)**
+
+4. **รูปแบบผลลัพธ์ JSON Object ที่ต้องส่งกลับ (JSON Response Structure)**:
+{
+  "actions": [ ... ],
+  "reply": "ข้อความตอบกลับผู้ใช้เป็นภาษาไทยที่เป็นธรรมชาติ สุภาพ ชัดเจน (Markdown string เสมอ)"
+}
+
+ตัวอย่างเมื่อผู้ใช้ขอคำแนะนำเรื่องลำดับงาน ("ทำอันไหนก่อน"):
+{
+  "actions": [],
+  "reply": "ถ้าดูจากรายการงานในระบบตอนนี้ ผมแนะนำให้เริ่มตามลำดับนี้ครับ 😊\\n\\n1. 🥇 **[ชื่องานที่ 1]** (กำหนดส่ง: ... | ความสำคัญ: High)\\n   ↳ **เหตุผล:** งานนี้ครบกำหนดส่งในวันนี้/ใกล้ที่สุด และมีความสำคัญระดับสูง ควรจัดการก่อนเพื่อไม่ให้เกิดคอขวดครับ\\n\\n2. 🥈 **[ชื่องานที่ 2]** (กำหนดส่ง: ...)\\n   ↳ **เหตุผล:** ...\\n\\n💡 **คำแนะนำเพิ่มเติม:** ..."
+}
+
+ตัวอย่างเมื่อสกัดงานจากภาพ/เอกสาร (Multi-Task plan_proposal):
 {
   "actions": [
     {
@@ -746,76 +808,26 @@ ${realTasksText || '(ยังไม่มีรายการงานใน�
           {
             "name": "ชื่องานที่ 1 จากภาพ",
             "description": "รายละเอียดงานที่ 1",
-            "priority": "Normal/High/Urgent",
-            "subtasks": ["Checklist 1", "Checklist 2"]
+            "priority": "High",
+            "subtasks": ["ขั้นตอน 1", "ขั้นตอน 2"]
           },
           {
             "name": "ชื่องานที่ 2 จากภาพ",
             "description": "รายละเอียดงานที่ 2",
-            "priority": "Normal/High/Urgent",
-            "subtasks": ["Checklist 1", "Checklist 2"]
+            "priority": "Normal",
+            "subtasks": ["ขั้นตอน 1", "ขั้นตอน 2"]
           }
         ]
       }
     }
   ],
-  "reply": "สรุปรายชื่องานทั้งหมดที่สกัดได้จากภาพอย่างครบถ้วนทุกรายการ พร้อมถามผู้ใช้ว่าจะให้นำเข้า Space หรือ List ใดในระบบ"
+  "reply": "ผมได้สกัดงานทั้งหมดจากภาพมาให้เรียบร้อยแล้วครับ รวมทั้งสิ้น X รายการ สามารถเลือก Space/List และกดอนุมัติสร้างงานด้านล่างได้เลยครับ!"
 }
 
-หากผู้ใช้สั่งสร้างงานเดี่ยวโดยตรงและระบุ List ชัดเจน:
-{
-  "actions": [
-    {
-      "tool": "create_task",
-      "args": {
-        "list_id": "ID ของ List ที่ถูกต้องจากรายชื่อ Lists ในระบบ",
-        "name": "ชื่องาน",
-        "description": "รายละเอียดงาน",
-        "priority": "Normal",
-        "due_date": null,
-        "subtasks": ["ข้อย่อย 1", "ข้อย่อย 2"]
-      }
-    }
-  ],
-4. **การสนทนาทั่วไป การทักทาย และการตอบคำถามทั่วไป (General Conversation & Chatting)**:
-   - หากผู้ใช้ทักทาย (เช่น "ดี", "สวัสดี", "hello", "hi", "หวัดดี") หรือพูดคุย ปรึกษา สอบถามทั่วไป:
-     - ตอบกลับอย่างเป็นมิตร สุภาพ นอบน้อม ชัดเจน กระชับ และเป็นประโยชน์
-     - **ห้ามบังคับหรือทวงถามให้แนบรูปภาพหรือเอกสารเด็ดขาด!**
-     - กำหนด "actions": [] เป็น array ว่าง
-     - ตัวอย่าง JSON เมื่อสนทนาทั่วไป:
+ตัวอย่างเมื่อสนทนาทั่วไปหรือทักทาย:
 {
   "actions": [],
-  "reply": "สวัสดีครับ! ผมคือ Status+ AI ผู้ช่วยด้านการบริหารจัดการงานและโครงการ ยินดีที่ได้คุยกันครับ 😊 วันนี้อยากให้ช่วยวางแผน ติดตาม หรือจัดการงานส่วนไหน บอกได้เลยครับ!"
-}
-
-5. **เมื่อผู้ใช้เล่าถึงภาระงาน มอบหมายงาน หรือขอให้ช่วยวางแผนงานด้วยข้อความ (Natural Language Task Assignment & Planning)**:
-   - เช่น ผู้ใช้บอกว่า "หัวหน้าให้ทำป้ายรับสมัครงาน", "ป้ายไวนิล เอามาให้ช่างติดตั้งที่หน้าโรงงาน ป้ายเก่ามันขาด ไม่รู้จะใช้ spaceไหน", "ช่วยวางแผนงานซ่อมบำรุง", "มีงานด่วน...":
-   - **ให้ร่างแผนงาน (plan_proposal) ทันที!** โดย:
-     - กำหนด name: ชื่องานที่กระชับและเป็นทางการ (เช่น "ติดตั้งป้ายไวนิลรับสมัครงานหน้าโรงงาน (ทดแทนป้ายเก่า)")
-     - กำหนด description: รายละเอียดงานและที่มา
-     - กำหนด priority: ความสำคัญที่เหมาะสม เช่น "High" หรือ "Normal"
-     - กำหนด subtasks: ขั้นตอน Checklist สำหรับการปฏิบัติงานจริง 3-5 ข้อ
-     - โครงสร้าง JSON:
-{
-  "actions": [
-    {
-      "action": "plan_proposal",
-      "title": "📋 ร่างแผนงาน (รออนุมัติก่อนสร้าง)",
-      "plan": {
-        "name": "ติดตั้งป้ายไวนิลรับสมัครงานหน้าโรงงาน (ทดแทนป้ายเก่า)",
-        "description": "ป้ายเดิมชำรุด/ขาด ส่งมอบป้ายไวนิลรับสมัครงานใหม่ให้ช่างดำเนินการติดตั้งบริเวณหน้าโรงงาน",
-        "priority": "High",
-        "subtasks": [
-          "ตรวจสอบสภาพและขนาดของป้ายไวนิลใหม่",
-          "ประสานงานช่างเพื่อนัดหมายและส่งมอบงานติดตั้ง",
-          "รื้อถอนป้ายเดิมที่ชำรุดออก",
-          "ดำเนินการติดตั้งป้ายใหม่บริเวณหน้าโรงงาน",
-          "ตรวจรับความเรียบร้อยหลังการติดตั้ง"
-        ]
-      }
-    }
-  ],
-  "reply": "ผมได้ร่างแผนงานและขั้นตอน Checklist สำหรับการติดตั้งป้ายรับสมัครงานมาให้เรียบร้อยแล้วครับ เนื่องจากยังไม่ได้ระบุ Space/List คุณสามารถเลือก Space/List ที่ต้องการจากการ์ดด้านล่าง หรือกดอนุมัติเพื่อสร้างงานลงในระบบได้เลยครับ!"
+  "reply": "สวัสดีครับ! ผมคือ Status+ AI พร้อมช่วยจัดการ วางแผน และติดตามงานในระบบให้คุณครับ 😊 วันนี้มีอะไรให้ผมช่วยดูแล หรืออยากปรึกษาเรื่องงานตัวไหน บอกได้เลยนะครับ!"
 }
 `;
 
@@ -859,6 +871,84 @@ function safeJsonParse(rawText) {
   } catch (e) {}
 
   return null;
+}
+
+// Robust formatter that converts any string, array, or rich LLM object into clean, readable Thai Markdown
+function formatReplyToMarkdown(replyVal, topObj = null) {
+  if (typeof replyVal === 'string' && replyVal.trim()) {
+    return replyVal.trim();
+  }
+
+  const parts = [];
+  const obj = (replyVal && typeof replyVal === 'object') ? replyVal : (topObj || {});
+
+  if (obj.message && typeof obj.message === 'string') parts.push(obj.message);
+  if (obj.text && typeof obj.text === 'string') parts.push(obj.text);
+  if (obj.summary && typeof obj.summary === 'string') parts.push(obj.summary);
+  if (obj.suggestion && typeof obj.suggestion === 'string') parts.push(obj.suggestion);
+
+  // Check recommendations (in reply.recommendation, reply.recommendations, or top-level)
+  const rec = obj.recommendation || obj.recommendations || topObj?.recommendations || topObj?.recommendation;
+  if (rec) {
+    if (typeof rec === 'string') {
+      parts.push(rec);
+    } else if (Array.isArray(rec)) {
+      const recLines = ['### 💡 ลำดับงานที่แนะนำให้ทำก่อน-หลัง:\n'];
+      rec.forEach((item, idx) => {
+        const stepNum = item.step || idx + 1;
+        const taskName = item.task || item.name || item.title || 'งานที่ต้องทำ';
+        const reason = item.reason || item.note || item.description || '';
+        const prio = item.priority ? ` [ความสำคัญ: ${item.priority}]` : '';
+        recLines.push(`**${stepNum}. ${taskName}**${prio}${reason ? `\n   ↳ *คำแนะนำ:* ${reason}` : ''}`);
+      });
+      parts.push(recLines.join('\n'));
+    } else if (typeof rec === 'object') {
+      if (Array.isArray(rec.order)) {
+        const orderLines = ['### 💡 ลำดับงานที่แนะนำให้ทำก่อน-หลัง:\n'];
+        rec.order.forEach((item, idx) => {
+          const stepNum = item.step || idx + 1;
+          const taskName = Array.isArray(item.task) ? item.task.join(', ') : (item.task || item.name || 'งานที่ต้องทำ');
+          const note = item.note || item.reason || item.description || '';
+          orderLines.push(`**${stepNum}. ${taskName}**${note ? `\n   ↳ *คำแนะนำ:* ${note}` : ''}`);
+        });
+        parts.push(orderLines.join('\n'));
+      }
+      if (rec.additional_tips) {
+        const tips = rec.additional_tips;
+        const tipLines = ['\n#### 📌 ข้อสังเกตและคำแนะนำเพิ่มเติม:'];
+        if (typeof tips === 'string') {
+          tipLines.push(tips);
+        } else if (typeof tips === 'object') {
+          for (const [k, v] of Object.entries(tips)) {
+            const label = k === 'resource_allocation' ? 'การจัดสรรทรัพยากร' :
+                          k === 'communication' ? 'การสื่อสารและประสานงาน' :
+                          k === 'monitoring' ? 'การติดตามผล' : k;
+            tipLines.push(`• **${label}:** ${typeof v === 'object' ? JSON.stringify(v) : v}`);
+          }
+        }
+        parts.push(tipLines.join('\n'));
+      }
+    }
+  }
+
+  if (Array.isArray(obj.steps)) {
+    parts.push(obj.steps.map((s, i) => `${i + 1}. ${typeof s === 'string' ? s : JSON.stringify(s)}`).join('\n'));
+  }
+  if (obj.next_step) parts.push(`👉 **ขั้นตอนถัดไป:** ${obj.next_step}`);
+  if (obj.note) parts.push(`💡 **คำแนะนำเพิ่มเติม:** ${obj.note}`);
+
+  if (parts.length === 0 && typeof replyVal === 'object' && replyVal !== null) {
+    for (const [k, v] of Object.entries(replyVal)) {
+      if (k === 'actions') continue;
+      if (typeof v === 'string') parts.push(`• **${k}:** ${v}`);
+      else if (typeof v === 'object' && v !== null) {
+        const nested = formatReplyToMarkdown(v);
+        if (nested) parts.push(nested);
+      }
+    }
+  }
+
+  return parts.filter(Boolean).join('\n\n');
 }
 
   // Attempt LLM execution
@@ -1005,27 +1095,17 @@ function safeJsonParse(rawText) {
           }
         }
 
-        // Format rich object reply from LLM (handling message, suggestion, steps, next_step, note)
-        let replyText = '';
-        if (typeof parsed.reply === 'string') {
-          replyText = parsed.reply;
-        } else if (parsed.reply && typeof parsed.reply === 'object') {
-          const parts = [];
-          if (parsed.reply.message) parts.push(parsed.reply.message);
-          if (parsed.reply.suggestion) parts.push(parsed.reply.suggestion);
-          if (parsed.reply.text) parts.push(parsed.reply.text);
-          if (Array.isArray(parsed.reply.steps)) {
-            parts.push(parsed.reply.steps.join('\n'));
-          }
-          if (parsed.reply.next_step) parts.push(`👉 **ขั้นตอนถัดไป:** ${parsed.reply.next_step}`);
-          if (parsed.reply.note) parts.push(`💡 **คำแนะนำเพิ่มเติม:** ${parsed.reply.note}`);
-          replyText = parts.join('\n\n');
-        }
+        // Format rich reply from LLM (string or structured object)
+        let replyText = formatReplyToMarkdown(parsed.reply, parsed);
 
         if (!replyText.trim()) {
-          replyText = executedActions.some(a => a.action === 'plan_proposal')
-            ? 'ผมได้วิเคราะห์และร่างแผนงานพร้อมขั้นตอน Checklist สำหรับการดำเนินงานมาให้ตรวจสอบแล้วครับ สามารถเลือก Space/List และกดอนุมัติสร้างงานด้านล่างได้เลยครับ'
-            : 'วิเคราะห์ข้อมูลและดำเนินการตามคำสั่งเรียบร้อยแล้วครับ';
+          if (executedActions.some(a => a.action === 'plan_proposal')) {
+            replyText = 'ผมได้วิเคราะห์และร่างแผนงานพร้อมขั้นตอน Checklist สำหรับการดำเนินงานมาให้ตรวจสอบแล้วครับ สามารถเลือก Space/List และกดอนุมัติสร้างงานด้านล่างได้เลยครับ 😊';
+          } else if (executedActions.length > 0) {
+            replyText = 'ดำเนินการตามคำสั่งในระบบเรียบร้อยแล้วครับ หากมีจุดไหนต้องการให้ปรับเปลี่ยนเพิ่มเติม แจ้งได้เลยนะครับ';
+          } else {
+            replyText = 'ยินดีให้คำปรึกษาและช่วยบริหารจัดการงานครับ หากต้องการให้ผมช่วยจัดลำดับความสำคัญ วางแผน หรือติดตามงานรายการไหน บอกได้เลยนะครับ 😊';
+          }
         }
 
         // Safety Guard: if LLM returned stalling text without executing actions, substitute with live task report!
