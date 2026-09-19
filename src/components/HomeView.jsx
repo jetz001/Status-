@@ -36,6 +36,7 @@ import { isFutureRoutineTask } from '../utils/routineUtils.js';
 
 export default function HomeView({
   allTasks = [],
+  searchQuery = '',
   spaces = [],
   workspaceName = 'My Workspace',
   userName = 'User',
@@ -106,8 +107,20 @@ export default function HomeView({
   const next7DaysDate = new Date(Date.now() + 7 * 86400000);
   const next7DaysStr = next7DaysDate.toISOString().split('T')[0];
 
-  // Active pool for current calculation: exclude future-round routine tasks until their day arrives
-  const activePool = allTasks.filter(t => !isFutureRoutineTask(t, todayStr));
+  // Active pool for current calculation: exclude future-round routine tasks until their day arrives, and apply search filter if present
+  const activePool = allTasks.filter(t => {
+    if (isFutureRoutineTask(t, todayStr)) return false;
+    if (searchQuery && searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      const match = (t.name && t.name.toLowerCase().includes(q)) ||
+                    (t.description && t.description.toLowerCase().includes(q)) ||
+                    (t.assignee && t.assignee.toLowerCase().includes(q)) ||
+                    (t.space_name && t.space_name.toLowerCase().includes(q)) ||
+                    (t.list_name && t.list_name.toLowerCase().includes(q));
+      if (!match) return false;
+    }
+    return true;
+  });
 
   const overdueTasks = activePool.filter(t => t.status !== 'COMPLETED' && t.due_date && t.due_date < todayStr);
   const todayTasks = activePool.filter(t => t.status !== 'COMPLETED' && (t.due_date === todayStr || t.due_date === tomorrowStr));

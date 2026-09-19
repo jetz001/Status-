@@ -270,10 +270,17 @@ export default function App() {
     }
   }, [activeListId]);
 
-  // Global Keyboard Shortcuts (Ctrl+K)
+  // Global Keyboard Shortcuts (Ctrl+K for Search, Ctrl+J for AI)
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        const searchInput = document.getElementById('global-search-input');
+        if (searchInput) {
+          searchInput.focus();
+          searchInput.select();
+        }
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === 'j' || e.key === 'J')) {
         e.preventDefault();
         setShowAISidebar(prev => !prev);
       }
@@ -623,6 +630,8 @@ export default function App() {
           notificationCount={notifications.length}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
+          allTasks={allTasks}
+          onSelectTask={setSelectedTask}
         />
 
         {/* View Routing */}
@@ -633,6 +642,7 @@ export default function App() {
               userName={workspaceInfo.userName}
               onUpdateWorkspaceInfo={handleUpdateWorkspaceInfo}
               allTasks={allTasks}
+              searchQuery={searchQuery}
               spaces={spaces}
               onSelectTask={setSelectedTask}
               onUpdateTaskStatus={handleUpdateTaskStatus}
