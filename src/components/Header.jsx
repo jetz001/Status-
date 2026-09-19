@@ -85,15 +85,15 @@ export default function Header({
             <span className="hidden sm:inline">Wallpaper</span>
           </button>
 
-          {/* Quick Export Excel/CSV Button */}
-          <a 
-            href={`/api/export/csv${activeListId ? `?listId=${activeListId}` : ''}`}
-            title="ส่งออกตารางงานเป็น Excel CSV ทันที"
-            className="flex items-center space-x-1 px-2.5 py-1.5 rounded hover:bg-[#2a2b2d] text-gray-300 hover:text-emerald-400 text-xs font-medium transition"
+          {/* Export / Backup Modal Button */}
+          <button 
+            onClick={onOpenBackupDataModal}
+            title="ส่งออกและสำรองข้อมูล (Export / Backup)"
+            className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded hover:bg-[#2a2b2d] text-gray-300 hover:text-emerald-400 text-xs font-medium transition cursor-pointer"
           >
             <Download size={15} className="text-emerald-400" />
-            <span className="hidden sm:inline">Export</span>
-          </a>
+            <span className="hidden sm:inline">Export / Backup</span>
+          </button>
 
           {/* Notification Bell */}
           <button 

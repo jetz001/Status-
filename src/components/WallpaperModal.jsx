@@ -16,6 +16,32 @@ import {
 } from 'lucide-react';
 import { formatToDMY } from './ThaiDatePicker.jsx';
 
+const THAI_MONTHS_FULL = [
+  'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+  'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'
+];
+
+function getTaskMonthKey(dateStr) {
+  if (!dateStr) return 'no-date';
+  const parts = dateStr.split('-');
+  if (parts.length >= 2) {
+    return `${parts[0]}-${parts[1]}`;
+  }
+  return 'no-date';
+}
+
+function formatMonthBadge(monthKey) {
+  if (!monthKey || monthKey === 'no-date') return 'ไม่มีกำหนดส่ง';
+  const parts = monthKey.split('-');
+  if (parts.length >= 2) {
+    const year = parts[0];
+    const month = parseInt(parts[1], 10);
+    const mName = THAI_MONTHS_FULL[month - 1] || month;
+    return `${mName} ${year}`;
+  }
+  return monthKey;
+}
+
 const CATEGORIES = [
   'All', 
   'Dark Minimalist', 
@@ -71,6 +97,7 @@ export default function WallpaperModal({
   const [taskSource, setTaskSource] = useState('all'); // 'all' | 'current'
   const [allTasks, setAllTasks] = useState([]);
   const [onlyPending, setOnlyPending] = useState(true);
+  const [groupByMonth, setGroupByMonth] = useState(true); // มีขีดคั่น เว้นเดือน
   const [scalePercent, setScalePercent] = useState(125); // 75% - 200%
   const [maxTasksCount, setMaxTasksCount] = useState(8); // 6, 8, 10, 12
 
@@ -119,6 +146,7 @@ export default function WallpaperModal({
     allTasks, 
     taskSource, 
     onlyPending, 
+    groupByMonth,
     scalePercent, 
     maxTasksCount, 
     stocks
@@ -190,14 +218,21 @@ export default function WallpaperModal({
   };
 
   const drawWidget = (ctx, width, height, currentStock) => {
-    // 1. Source Tasks Filtering
+    // 1. Source Tasks Filtering & Chronological Sorting
     const sourcePool = taskSource === 'all' ? (allTasks.length > 0 ? allTasks : tasks) : tasks;
     const filteredTasks = sourcePool.filter(t => {
       if (onlyPending) return t.status !== 'COMPLETED';
       return true;
     });
 
-    const displayTasks = filteredTasks.slice(0, maxTasksCount);
+    const sortedTasks = [...filteredTasks].sort((a, b) => {
+      if (!a.due_date && !b.due_date) return 0;
+      if (!a.due_date) return 1;
+      if (!b.due_date) return -1;
+      return a.due_date.localeCompare(b.due_date);
+    });
+
+    const displayTasks = sortedTasks.slice(0, maxTasksCount);
 
     // 2. Scaling calculation
     // Base reference is Full HD 1920x1080
@@ -211,7 +246,25 @@ export default function WallpaperModal({
     const itemHeight = Math.round(48 * totalScale);
     const headerHeight = Math.round(180 * totalScale);
     const bottomPadding = Math.round(25 * totalScale);
-    const wHeight = headerHeight + (Math.max(1, displayTasks.length) * itemHeight) + bottomPadding;
+    const dividerExtra = Math.round(36 * totalScale);
+
+    // Calculate how many month transitions occur in displayTasks
+    let monthDividerCount = 0;
+    if (groupByMonth && displayTasks.length > 0) {
+      let prevM = null;
+      displayTasks.forEach((t, i) => {
+        const currM = getTaskMonthKey(t.due_date);
+        if (i > 0 && currM !== prevM) {
+          monthDividerCount++;
+        }
+        prevM = currM;
+      });
+    }
+
+    const wHeight = headerHeight + 
+      (Math.max(1, displayTasks.length) * itemHeight) + 
+      (monthDividerCount * dividerExtra) + 
+      bottomPadding;
 
     const marginX = Math.round(60 * resFactor);
     const marginY = Math.round(60 * resFactor);
@@ -332,7 +385,61 @@ export default function WallpaperModal({
       ctx.font = `italic ${Math.round(14 * totalScale)}px "Segoe UI", sans-serif`;
       ctx.fillText('✨ ไม่มีงานค้างในรายการที่เลือก ยอดเยี่ยมมาก!', wx + padX, itemY + Math.round(10 * totalScale));
     } else {
-      displayTasks.forEach((task) => {
+      let prevMonth = null;
+      displayTasks.forEach((task, idx) => {
+        const currMonth = getTaskMonthKey(task.due_date);
+
+        // Render Month Divider when transitioning to a new month
+        if (groupByMonth && idx > 0 && currMonth !== prevMonth) {
+          ctx.save();
+          // Midpoint between previous task baseline and new task baseline with dividerExtra spacing
+          const divCenterY = itemY - Math.round((itemHeight - dividerExtra) / 2);
+          const monthLabel = formatMonthBadge(currMonth);
+
+          ctx.font = `bold ${Math.round(11 * totalScale)}px "Segoe UI", sans-serif`;
+          const textMetrics = ctx.measureText(monthLabel);
+          const badgePaddingX = Math.round(10 * totalScale);
+          const badgeWidth = textMetrics.width + (badgePaddingX * 2);
+          const badgeHeight = Math.round(22 * totalScale);
+          const badgeY = divCenterY - (badgeHeight / 2);
+          const badgeX = wx + padX + Math.round(12 * totalScale);
+
+          // 1. Left line
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
+          ctx.lineWidth = Math.max(1, Math.round(1.5 * totalScale));
+          ctx.beginPath();
+          ctx.moveTo(wx + padX, divCenterY);
+          ctx.lineTo(badgeX - Math.round(8 * totalScale), divCenterY);
+          ctx.stroke();
+
+          // 2. Month Pill Badge
+          ctx.beginPath();
+          ctx.roundRect(badgeX, badgeY, badgeWidth, badgeHeight, Math.round(11 * totalScale));
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+          ctx.fill();
+          ctx.strokeStyle = currentStock?.accent ? `${currentStock.accent}77` : 'rgba(123, 104, 238, 0.4)';
+          ctx.stroke();
+
+          // 3. Month Pill Text
+          ctx.fillStyle = '#e2e8f0';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(monthLabel, badgeX + (badgeWidth / 2), divCenterY);
+
+          // 4. Right line
+          ctx.beginPath();
+          ctx.moveTo(badgeX + badgeWidth + Math.round(8 * totalScale), divCenterY);
+          ctx.lineTo(wx + wWidth - padX, divCenterY);
+          ctx.stroke();
+
+          ctx.restore();
+
+          // Advance itemY for the next task
+          itemY += dividerExtra;
+        }
+
+        prevMonth = currMonth;
+
         // Status dot
         let dotColor = '#ef4444'; // Red for not started
         if (task.status === 'COMPLETED') dotColor = '#26b26d';
@@ -744,6 +851,20 @@ export default function WallpaperModal({
                   className="rounded accent-purple-500 cursor-pointer w-3.5 h-3.5"
                 />
                 <span>ซ่อนงานที่เสร็จแล้ว (แสดงเฉพาะงานค้าง)</span>
+              </label>
+
+              {/* Group / Divider by Month */}
+              <label className="flex items-center space-x-2 text-xs text-gray-300 cursor-pointer select-none">
+                <input 
+                  type="checkbox"
+                  checked={groupByMonth}
+                  onChange={(e) => setGroupByMonth(e.target.checked)}
+                  className="rounded accent-purple-500 cursor-pointer w-3.5 h-3.5"
+                />
+                <span className="flex items-center space-x-1.5">
+                  <span>ขีดคั่นและเว้นระยะแยกตามเดือน</span>
+                  <span className="text-[10px] text-purple-400 font-semibold">(มีขีดคั่น เว้นเดือน)</span>
+                </span>
               </label>
             </div>
 

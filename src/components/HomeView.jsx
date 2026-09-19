@@ -377,17 +377,6 @@ export default function HomeView({
               </p>
             </div>
           </div>
-
-          {/* Quick Action Buttons */}
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={onOpenBackupModal}
-              className="flex items-center space-x-1.5 px-3 py-2 bg-[#2a2b2f] hover:bg-[#34363b] border border-[#383a3e] text-gray-300 hover:text-white rounded-lg text-xs font-medium transition cursor-pointer"
-            >
-              <Download size={14} className="text-green-400" />
-              <span>Export / Backup</span>
-            </button>
-          </div>
         </div>
 
         {/* Quick Stat Counter Cards */}

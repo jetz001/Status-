@@ -3,6 +3,14 @@ const path = require('path');
 const http = require('http');
 const fs = require('fs');
 
+// Enforce single instance: if another instance is already running, focus it and quit this one
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+  app.quit();
+  process.exit(0);
+}
+
 // In production, store user data (SQLite DB, uploads) safely in userData directory
 if (app.isPackaged) {
   process.env.STATUS_USER_DATA = app.getPath('userData');
@@ -30,6 +38,16 @@ try {
 
 let mainWindow;
 let splashWindow;
+
+// When user tries to open a second instance, focus the existing main window
+app.on('second-instance', (event, commandLine, workingDirectory) => {
+  debugLog('second-instance event received. Focusing existing mainWindow.');
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    if (!mainWindow.isVisible()) mainWindow.show();
+    mainWindow.focus();
+  }
+});
 
 function createWindow() {
   Menu.setApplicationMenu(null);
