@@ -326,15 +326,15 @@ export default function MatrixView({
       <div className="flex-1 flex flex-col p-3 overflow-hidden relative">
         {/* Top & Bottom Horizontal Axis Guides */}
         <div className="flex items-center justify-between px-4 pb-1.5 text-[11px] font-bold tracking-wide">
-          <div className="flex items-center space-x-1 text-rose-400">
+          <div className="flex items-center space-x-1 text-blue-400">
             <ArrowLeft size={13} />
-            <span>◄ เร่งด่วน (Urgent)</span>
+            <span>◄ ไม่เร่งด่วน (Not Urgent)</span>
           </div>
           <div className="flex items-center space-x-2 text-gray-400 bg-[#1e1f21] px-3 py-0.5 rounded-full border border-[#333538] text-[10px]">
             <span>แกนนอน: ความเร่งด่วน (Urgency)</span>
           </div>
-          <div className="flex items-center space-x-1 text-blue-400">
-            <span>ไม่เร่งด่วน (Not Urgent) ►</span>
+          <div className="flex items-center space-x-1 text-rose-400">
+            <span>เร่งด่วน (Urgent) ►</span>
             <ArrowRight size={13} />
           </div>
         </div>
@@ -353,8 +353,8 @@ export default function MatrixView({
             <span>MATRIX</span>
           </div>
 
-          {/* Render the 4 Quadrants: Q1, Q2, Q3, Q4 */}
-          {['q1', 'q2', 'q3', 'q4'].map((quadId) => {
+          {/* Render the 4 Quadrants: Q2 (Top-Left), Q1 (Top-Right), Q4 (Bottom-Left), Q3 (Bottom-Right) */}
+          {['q2', 'q1', 'q4', 'q3'].map((quadId) => {
             const quad = QUADRANTS[quadId];
             const tasksList = quadrantTasks[quadId] || [];
             const isDragOver = dragOverQuadrant === quadId;
@@ -489,15 +489,15 @@ export default function MatrixView({
 
         {/* Bottom Horizontal Axis Guides */}
         <div className="flex items-center justify-between px-4 pt-1.5 text-[11px] font-bold tracking-wide">
-          <div className="flex items-center space-x-1 text-amber-400">
+          <div className="flex items-center space-x-1 text-gray-400">
             <ArrowLeft size={13} />
-            <span>◄ ด่วน (Urgent)</span>
+            <span>◄ ไม่ด่วน (Not Urgent)</span>
           </div>
           <div className="flex items-center space-x-2 text-gray-400 bg-[#1e1f21] px-3 py-0.5 rounded-full border border-[#333538] text-[10px]">
             <span>แกนตั้ง: ความสำคัญ (Importance) ▲ สำคัญมาก / ▼ สำคัญน้อย</span>
           </div>
-          <div className="flex items-center space-x-1 text-gray-400">
-            <span>ไม่ด่วน (Not Urgent) ►</span>
+          <div className="flex items-center space-x-1 text-amber-400">
+            <span>ด่วน (Urgent) ►</span>
             <ArrowRight size={13} />
           </div>
         </div>

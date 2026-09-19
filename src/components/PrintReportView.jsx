@@ -857,59 +857,17 @@ export default function PrintReportView({
 
             {/* Top Axis Bar */}
             <div className="flex items-center justify-between px-3 py-1 bg-gray-100 border border-gray-400 rounded text-xs font-bold text-gray-800">
-              <span className="text-rose-700">◄◄ เร่งด่วน (Urgent)</span>
+              <span className="text-blue-700">◄◄ ไม่เร่งด่วน (Not Urgent)</span>
               <span className="text-gray-500 font-semibold text-[11px]">แกนนอน: ความเร่งด่วน (Urgency)</span>
-              <span className="text-blue-700">ไม่เร่งด่วน (Not Urgent) ►►</span>
+              <span className="text-rose-700">เร่งด่วน (Urgent) ►►</span>
             </div>
 
             {/* 2x2 Matrix with Visible Crossed Axes */}
             <div className="border-2 border-gray-800 rounded-lg overflow-hidden relative">
               {/* Row 1: High Importance */}
               <div className="grid grid-cols-2 min-h-[220px]">
-                {/* Q1: Urgent & Important */}
-                <div className="p-3 border-r-2 border-b-2 border-gray-800 bg-rose-50/25 flex flex-col">
-                  <div className="flex items-center justify-between border-b border-rose-300 pb-1.5 mb-2">
-                    <div>
-                      <span className="font-extrabold text-sm text-rose-800">Q1: ทำทันที (Do First)</span>
-                      <p className="text-[10px] text-rose-600 font-medium">ด่วน & สำคัญ (Urgent & Important)</p>
-                    </div>
-                    <span className="px-2 py-0.5 rounded bg-rose-200 text-rose-900 font-bold text-xs">
-                      {matrixQ1Tasks.length} งาน
-                    </span>
-                  </div>
-
-                  <div className="space-y-1.5 flex-1">
-                    {matrixQ1Tasks.length === 0 ? (
-                      <p className="text-center text-gray-400 italic text-xs py-4">ไม่มีงานในหมวดนี้</p>
-                    ) : (
-                      matrixQ1Tasks.map((t, idx) => (
-                        <div key={t.id || idx} className="p-1.5 bg-white border border-rose-200 rounded text-xs shadow-2xs flex items-start justify-between">
-                          <div className="flex items-start space-x-1.5 min-w-0 flex-1">
-                            <span className="text-rose-600 font-bold">•</span>
-                            <div className="min-w-0 flex-1">
-                              <span className={`font-semibold block truncate ${t.status === 'COMPLETED' ? 'line-through text-gray-400' : 'text-gray-900'}`}>
-                                {t.name}
-                              </span>
-                              <div className="text-[10px] text-gray-500 flex items-center space-x-2 mt-0.5">
-                                <span>กำหนดส่ง: {t.due_date || 'ไม่ระบุ'}</span>
-                                {t.assignee && <span>ผู้รับผิดชอบ: {t.assignee}</span>}
-                              </div>
-                            </div>
-                          </div>
-                          <span className={`px-1 rounded text-[9px] font-bold uppercase flex-shrink-0 ${
-                            t.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-800' :
-                            t.status === 'IN PROGRESS' ? 'bg-blue-100 text-blue-800' : 'bg-rose-100 text-rose-800'
-                          }`}>
-                            {t.status}
-                          </span>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-
                 {/* Q2: Not Urgent & Important */}
-                <div className="p-3 border-b-2 border-gray-800 bg-blue-50/25 flex flex-col">
+                <div className="p-3 border-r-2 border-b-2 border-gray-800 bg-blue-50/25 flex flex-col">
                   <div className="flex items-center justify-between border-b border-blue-300 pb-1.5 mb-2">
                     <div>
                       <span className="font-extrabold text-sm text-blue-800">Q2: วางแผน (Schedule)</span>
@@ -949,6 +907,48 @@ export default function PrintReportView({
                     )}
                   </div>
                 </div>
+
+                {/* Q1: Urgent & Important */}
+                <div className="p-3 border-b-2 border-gray-800 bg-rose-50/25 flex flex-col">
+                  <div className="flex items-center justify-between border-b border-rose-300 pb-1.5 mb-2">
+                    <div>
+                      <span className="font-extrabold text-sm text-rose-800">Q1: ทำทันที (Do First)</span>
+                      <p className="text-[10px] text-rose-600 font-medium">ด่วน & สำคัญ (Urgent & Important)</p>
+                    </div>
+                    <span className="px-2 py-0.5 rounded bg-rose-200 text-rose-900 font-bold text-xs">
+                      {matrixQ1Tasks.length} งาน
+                    </span>
+                  </div>
+
+                  <div className="space-y-1.5 flex-1">
+                    {matrixQ1Tasks.length === 0 ? (
+                      <p className="text-center text-gray-400 italic text-xs py-4">ไม่มีงานในหมวดนี้</p>
+                    ) : (
+                      matrixQ1Tasks.map((t, idx) => (
+                        <div key={t.id || idx} className="p-1.5 bg-white border border-rose-200 rounded text-xs shadow-2xs flex items-start justify-between">
+                          <div className="flex items-start space-x-1.5 min-w-0 flex-1">
+                            <span className="text-rose-600 font-bold">•</span>
+                            <div className="min-w-0 flex-1">
+                              <span className={`font-semibold block truncate ${t.status === 'COMPLETED' ? 'line-through text-gray-400' : 'text-gray-900'}`}>
+                                {t.name}
+                              </span>
+                              <div className="text-[10px] text-gray-500 flex items-center space-x-2 mt-0.5">
+                                <span>กำหนดส่ง: {t.due_date || 'ไม่ระบุ'}</span>
+                                {t.assignee && <span>ผู้รับผิดชอบ: {t.assignee}</span>}
+                              </div>
+                            </div>
+                          </div>
+                          <span className={`px-1 rounded text-[9px] font-bold uppercase flex-shrink-0 ${
+                            t.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-800' :
+                            t.status === 'IN PROGRESS' ? 'bg-blue-100 text-blue-800' : 'bg-rose-100 text-rose-800'
+                          }`}>
+                            {t.status}
+                          </span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
               </div>
 
               {/* Center Divider Axis Bar */}
@@ -960,26 +960,26 @@ export default function PrintReportView({
 
               {/* Row 2: Low Importance */}
               <div className="grid grid-cols-2 min-h-[220px]">
-                {/* Q3: Urgent & Not Important */}
-                <div className="p-3 border-r-2 border-gray-800 bg-amber-50/25 flex flex-col">
-                  <div className="flex items-center justify-between border-b border-amber-300 pb-1.5 mb-2">
+                {/* Q4: Not Urgent & Not Important */}
+                <div className="p-3 border-r-2 border-gray-800 bg-gray-50/40 flex flex-col">
+                  <div className="flex items-center justify-between border-b border-gray-300 pb-1.5 mb-2">
                     <div>
-                      <span className="font-extrabold text-sm text-amber-800">Q3: มอบหมาย (Delegate)</span>
-                      <p className="text-[10px] text-amber-600 font-medium">ด่วน แต่ไม่สำคัญ (Urgent & Not Important)</p>
+                      <span className="font-extrabold text-sm text-gray-800">Q4: ลดละ/พักไว้ (Eliminate)</span>
+                      <p className="text-[10px] text-gray-500 font-medium">ไม่ด่วน & ไม่สำคัญ (Not Urgent & Not Important)</p>
                     </div>
-                    <span className="px-2 py-0.5 rounded bg-amber-200 text-amber-900 font-bold text-xs">
-                      {matrixQ3Tasks.length} งาน
+                    <span className="px-2 py-0.5 rounded bg-gray-200 text-gray-800 font-bold text-xs">
+                      {matrixQ4Tasks.length} งาน
                     </span>
                   </div>
 
                   <div className="space-y-1.5 flex-1">
-                    {matrixQ3Tasks.length === 0 ? (
+                    {matrixQ4Tasks.length === 0 ? (
                       <p className="text-center text-gray-400 italic text-xs py-4">ไม่มีงานในหมวดนี้</p>
                     ) : (
-                      matrixQ3Tasks.map((t, idx) => (
-                        <div key={t.id || idx} className="p-1.5 bg-white border border-amber-200 rounded text-xs shadow-2xs flex items-start justify-between">
+                      matrixQ4Tasks.map((t, idx) => (
+                        <div key={t.id || idx} className="p-1.5 bg-white border border-gray-200 rounded text-xs shadow-2xs flex items-start justify-between">
                           <div className="flex items-start space-x-1.5 min-w-0 flex-1">
-                            <span className="text-amber-600 font-bold">•</span>
+                            <span className="text-gray-400 font-bold">•</span>
                             <div className="min-w-0 flex-1">
                               <span className={`font-semibold block truncate ${t.status === 'COMPLETED' ? 'line-through text-gray-400' : 'text-gray-900'}`}>
                                 {t.name}
@@ -1002,26 +1002,26 @@ export default function PrintReportView({
                   </div>
                 </div>
 
-                {/* Q4: Not Urgent & Not Important */}
-                <div className="p-3 bg-gray-50/40 flex flex-col">
-                  <div className="flex items-center justify-between border-b border-gray-300 pb-1.5 mb-2">
+                {/* Q3: Urgent & Not Important */}
+                <div className="p-3 bg-amber-50/25 flex flex-col">
+                  <div className="flex items-center justify-between border-b border-amber-300 pb-1.5 mb-2">
                     <div>
-                      <span className="font-extrabold text-sm text-gray-800">Q4: ลดละ/พักไว้ (Eliminate)</span>
-                      <p className="text-[10px] text-gray-500 font-medium">ไม่ด่วน & ไม่สำคัญ (Not Urgent & Not Important)</p>
+                      <span className="font-extrabold text-sm text-amber-800">Q3: มอบหมาย (Delegate)</span>
+                      <p className="text-[10px] text-amber-600 font-medium">ด่วน แต่ไม่สำคัญ (Urgent & Not Important)</p>
                     </div>
-                    <span className="px-2 py-0.5 rounded bg-gray-200 text-gray-800 font-bold text-xs">
-                      {matrixQ4Tasks.length} งาน
+                    <span className="px-2 py-0.5 rounded bg-amber-200 text-amber-900 font-bold text-xs">
+                      {matrixQ3Tasks.length} งาน
                     </span>
                   </div>
 
                   <div className="space-y-1.5 flex-1">
-                    {matrixQ4Tasks.length === 0 ? (
+                    {matrixQ3Tasks.length === 0 ? (
                       <p className="text-center text-gray-400 italic text-xs py-4">ไม่มีงานในหมวดนี้</p>
                     ) : (
-                      matrixQ4Tasks.map((t, idx) => (
-                        <div key={t.id || idx} className="p-1.5 bg-white border border-gray-200 rounded text-xs shadow-2xs flex items-start justify-between">
+                      matrixQ3Tasks.map((t, idx) => (
+                        <div key={t.id || idx} className="p-1.5 bg-white border border-amber-200 rounded text-xs shadow-2xs flex items-start justify-between">
                           <div className="flex items-start space-x-1.5 min-w-0 flex-1">
-                            <span className="text-gray-400 font-bold">•</span>
+                            <span className="text-amber-600 font-bold">•</span>
                             <div className="min-w-0 flex-1">
                               <span className={`font-semibold block truncate ${t.status === 'COMPLETED' ? 'line-through text-gray-400' : 'text-gray-900'}`}>
                                 {t.name}
