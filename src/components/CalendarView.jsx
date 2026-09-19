@@ -7,7 +7,6 @@ import {
   CheckCircle2, 
   Circle, 
   Flag, 
-  Printer, 
   Search, 
   Filter, 
   Layers, 
@@ -323,17 +322,7 @@ export default function CalendarView({
             </select>
           </div>
 
-          {/* Print Calendar Button */}
-          {onOpenPrintReport && (
-            <button
-              onClick={() => onOpenPrintReport('calendar')}
-              title="สั่งพิมพ์ / บันทึก PDF ปฏิทินรายเดือน (Print Monthly Calendar)"
-              className="flex items-center space-x-1 px-3 py-1.5 bg-[#24262b] hover:bg-[#2e3035] text-gray-200 hover:text-white border border-[#383a3e] rounded-lg transition font-medium cursor-pointer shadow-xs"
-            >
-              <Printer size={13} className="text-blue-400" />
-              <span className="hidden sm:inline">พิมพ์ปฏิทิน</span>
-            </button>
-          )}
+
 
           {/* Toggle Unscheduled Sidebar */}
           <button

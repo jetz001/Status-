@@ -714,9 +714,6 @@ export default function App() {
               allTasks={allTasks}
               onSelectTask={setSelectedTask}
               onUpdateTask={handleUpdateTask}
-              onUpdateTaskStatus={handleUpdateTaskStatus}
-              onQuickAddTask={handleQuickAddTask}
-              onOpenPrintReport={(viewType) => setPrintConfig({ type: viewType || 'matrix' })}
               activeListName={activeListName}
               activeListId={activeListId}
             />

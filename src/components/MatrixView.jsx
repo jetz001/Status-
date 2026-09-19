@@ -5,10 +5,6 @@ import {
   CalendarClock, 
   Users, 
   Trash2, 
-  CheckCircle2, 
-  Circle, 
-  Plus, 
-  Printer, 
   Search, 
   Filter, 
   ArrowUp, 
@@ -128,24 +124,23 @@ export default function MatrixView({
   allTasks = [],
   onSelectTask,
   onUpdateTask,
-  onUpdateTaskStatus,
-  onQuickAddTask,
-  onOpenPrintReport,
   activeListName = 'Tasks',
   activeListId = 'all'
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [hideCompleted, setHideCompleted] = useState(false);
   const [draggedTask, setDraggedTask] = useState(null);
   const [dragOverQuadrant, setDragOverQuadrant] = useState(null);
-  const [quickAddQuadrant, setQuickAddQuadrant] = useState(null);
-  const [quickAddTitle, setQuickAddTitle] = useState('');
 
   const todayIso = new Date().toISOString().split('T')[0];
 
-  // Filter tasks by list, status, search
+  // Filter tasks by list, hideCompleted, status, search
   const displayTasks = useMemo(() => {
     let list = tasks.length > 0 ? tasks : allTasks;
+    if (hideCompleted) {
+      list = list.filter(t => t.status !== 'COMPLETED');
+    }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       list = list.filter(t => 
@@ -158,7 +153,7 @@ export default function MatrixView({
       list = list.filter(t => t.status === statusFilter);
     }
     return list;
-  }, [tasks, allTasks, searchQuery, statusFilter]);
+  }, [tasks, allTasks, hideCompleted, searchQuery, statusFilter]);
 
   // Group tasks by Quadrants
   const quadrantTasks = useMemo(() => {
@@ -238,23 +233,6 @@ export default function MatrixView({
     setDraggedTask(null);
   };
 
-  // Quick Add submit
-  const handleQuickAddSubmit = (e, quadId) => {
-    e.preventDefault();
-    if (!quickAddTitle.trim()) return;
-
-    const qConfig = QUADRANTS[quadId];
-    if (onQuickAddTask) {
-      onQuickAddTask({
-        name: quickAddTitle.trim(),
-        status: 'NOT STARTED',
-        priority: qConfig.defaultPriority,
-        eisenhower_quadrant: quadId
-      });
-    }
-    setQuickAddTitle('');
-    setQuickAddQuadrant(null);
-  };
 
   return (
     <div className="flex-1 flex flex-col h-full bg-[#141517] overflow-hidden select-none text-xs">
@@ -303,7 +281,7 @@ export default function MatrixView({
           </div>
         </div>
 
-        {/* Right: Search, Filter, Print */}
+        {/* Right: Search, Filter, Hide Completed */}
         <div className="flex items-center space-x-2">
           {/* Search Box */}
           <div className="relative">
@@ -331,17 +309,16 @@ export default function MatrixView({
             <option value="COMPLETED">Completed</option>
           </select>
 
-          {/* Print Button */}
-          {onOpenPrintReport && (
-            <button
-              onClick={() => onOpenPrintReport('matrix')}
-              title="พิมพ์ผัง Eisenhower Matrix แนวนอน (Print Matrix Chart)"
-              className="flex items-center space-x-1 px-3 py-1.5 bg-[#24262b] hover:bg-[#2e3035] text-gray-200 hover:text-white border border-[#383a3e] rounded-lg transition font-medium cursor-pointer shadow-xs"
-            >
-              <Printer size={13} className="text-blue-400" />
-              <span className="hidden sm:inline">พิมพ์ Matrix</span>
-            </button>
-          )}
+          {/* Hide Completed Tasks Checkbox */}
+          <label className="flex items-center space-x-1.5 px-2.5 py-1.5 bg-[#141517] hover:bg-[#1c1d20] border border-[#383a3e] hover:border-[#4f5157] rounded-lg text-xs text-gray-300 hover:text-white cursor-pointer transition select-none">
+            <input
+              type="checkbox"
+              checked={hideCompleted}
+              onChange={(e) => setHideCompleted(e.target.checked)}
+              className="w-3.5 h-3.5 rounded text-purple-600 bg-[#24262b] border-[#383a3e] focus:ring-purple-500 cursor-pointer accent-purple-600"
+            />
+            <span className="font-medium whitespace-nowrap">ซ่อนงานเสร็จแล้ว</span>
+          </label>
         </div>
       </div>
 
@@ -411,57 +388,14 @@ export default function MatrixView({
                       <p className="text-[10px] opacity-80">{quad.subtitle}</p>
                     </div>
                   </div>
-
-                  {/* Add Task Button for this Quadrant */}
-                  <button
-                    onClick={() => {
-                      setQuickAddQuadrant(quickAddQuadrant === quadId ? null : quadId);
-                      setQuickAddTitle('');
-                    }}
-                    title={`สร้างงานในช่อง ${quad.code}`}
-                    className="p-1.5 rounded-lg hover:bg-black/30 text-white/80 hover:text-white transition cursor-pointer"
-                  >
-                    <Plus size={15} />
-                  </button>
                 </div>
-
-                {/* Inline Quick Add Form */}
-                {quickAddQuadrant === quadId && (
-                  <form 
-                    onSubmit={(e) => handleQuickAddSubmit(e, quadId)}
-                    className="p-2 bg-[#1b1c1e] border-b border-[#333538] flex items-center space-x-2 animate-in fade-in duration-150"
-                  >
-                    <input
-                      type="text"
-                      autoFocus
-                      placeholder={`พิมพ์ชื่องานใน ${quad.code}... แล้วกด Enter`}
-                      value={quickAddTitle}
-                      onChange={(e) => setQuickAddTitle(e.target.value)}
-                      className="flex-1 px-2.5 py-1.5 bg-[#141517] border border-[#383a3e] rounded text-xs text-white placeholder-gray-500 outline-none focus:border-[#7b68ee]"
-                    />
-                    <button
-                      type="submit"
-                      disabled={!quickAddTitle.trim()}
-                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded font-medium text-xs transition cursor-pointer"
-                    >
-                      เพิ่ม
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setQuickAddQuadrant(null)}
-                      className="px-2 py-1.5 text-gray-400 hover:text-white transition cursor-pointer"
-                    >
-                      ยกเลิก
-                    </button>
-                  </form>
-                )}
 
                 {/* Task Cards List (Scrollable) */}
                 <div className="flex-1 p-2 space-y-2 overflow-y-auto custom-scrollbar">
                   {tasksList.length === 0 ? (
                     <div className="h-full min-h-[90px] flex flex-col items-center justify-center text-center p-4 border border-dashed border-[#333538]/60 rounded-lg">
                       <p className="text-gray-500 font-medium text-[11px]">{quad.description}</p>
-                      <p className="text-[10px] text-gray-600 mt-1">ลากงานมาวางในช่องนี้ หรือกดปุ่ม + ด้านบน</p>
+                      <p className="text-[10px] text-gray-600 mt-1">ลากงานมาวางในช่องนี้เพื่อจัดหมวดหมู่</p>
                     </div>
                   ) : (
                     tasksList.map((task) => {
@@ -498,38 +432,18 @@ export default function MatrixView({
                           }`}
                         >
                           <div className="flex items-start justify-between gap-2">
-                            {/* Checkbox & Name */}
-                            <div className="flex items-start space-x-2 min-w-0 flex-1">
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (onUpdateTaskStatus) {
-                                    onUpdateTaskStatus(task.id, isCompleted ? 'NOT STARTED' : 'COMPLETED');
-                                  }
-                                }}
-                                className="mt-0.5 text-gray-400 hover:text-emerald-400 transition cursor-pointer flex-shrink-0"
-                              >
-                                {isCompleted ? (
-                                  <CheckCircle2 size={15} className="text-emerald-400" />
-                                ) : (
-                                  <Circle size={15} />
-                                )}
-                              </button>
+                            <div className="min-w-0 flex-1">
+                              <h4 className={`text-xs font-semibold leading-snug truncate ${
+                                isCompleted ? 'line-through text-gray-500' : 'text-gray-100 group-hover:text-white'
+                              }`} title={task.name}>
+                                {task.name}
+                              </h4>
 
-                              <div className="min-w-0 flex-1">
-                                <h4 className={`text-xs font-semibold leading-snug truncate ${
-                                  isCompleted ? 'line-through text-gray-500' : 'text-gray-100 group-hover:text-white'
-                                }`} title={task.name}>
-                                  {task.name}
-                                </h4>
-
-                                {task.description && (
-                                  <p className="text-[11px] text-gray-400 truncate mt-0.5">
-                                    {task.description}
-                                  </p>
-                                )}
-                              </div>
+                              {task.description && (
+                                <p className="text-[11px] text-gray-400 truncate mt-0.5">
+                                  {task.description}
+                                </p>
+                              )}
                             </div>
 
                             {/* Drag Indicator */}
