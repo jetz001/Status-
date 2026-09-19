@@ -1,5 +1,6 @@
 ; Custom NSIS script for Status+
 ; Provides Repair / Reinstall confirmation when already installed
+; Provides dedicated Components Page during uninstall to choose deleting user AppData
 
 !macro customInit
   ; Check if Status+ is already installed in either HKLM or HKCU
@@ -24,21 +25,16 @@
   ${EndIf}
 !macroend
 
-!macro customUnInstall
-  MessageBox MB_YESNO|MB_ICONQUESTION "คุณต้องการลบข้อมูลโปรเจกต์ ฐานข้อมูล SQLite และการตั้งค่าทั้งหมดของ Status+ ออกจากเครื่องด้วยหรือไม่?$\r$\n$\r$\n(หากเลือก 'Yes' จะลบข้อมูลใน AppData ทั้งหมด เพื่อเริ่มระบบใหม่แบบว่างเปล่า)$\r$\n(หากเลือก 'No' จะเก็บข้อมูลงานและประวัติทั้งหมดไว้ เผื่อติดตั้งใหม่ในภายหลัง)" /SD IDNO IDNO keep_data IDYES delete_data
-
-  delete_data:
-    ; Delete AppData for all users via cmd & PowerShell (elevated Admin privileges)
-    nsExec::Exec 'cmd.exe /c for /d %u in (C:\Users\*) do (rd /s /q "%u\AppData\Roaming\status-plus" 2>nul & rd /s /q "%u\AppData\Local\status-plus" 2>nul & rd /s /q "%u\AppData\Roaming\Status+" 2>nul)'
-    nsExec::Exec 'powershell -NoProfile -Command "Get-ChildItem ''C:\Users'' -Directory -ErrorAction SilentlyContinue | ForEach-Object { Remove-Item -Path (Join-Path $$_.FullName ''AppData\Roaming\status-plus'') -Recurse -Force -ErrorAction SilentlyContinue; Remove-Item -Path (Join-Path $$_.FullName ''AppData\Local\status-plus'') -Recurse -Force -ErrorAction SilentlyContinue; Remove-Item -Path (Join-Path $$_.FullName ''AppData\Roaming\Status+'') -Recurse -Force -ErrorAction SilentlyContinue }"'
+!macro customUnInstallSection
+  Section /o "ลบข้อมูลโปรเจกต์ ฐานข้อมูล SQLite และการตั้งค่าใน AppData (Clean Uninstall)" SecDeleteData
+    ; Force stop any running Status process
+    nsExec::Exec 'powershell -NoProfile -Command "Stop-Process -Name ''Status*'' -Force -ErrorAction SilentlyContinue"'
+    ; Delete AppData directories
     RMDir /r "$APPDATA\status-plus"
     RMDir /r "$LOCALAPPDATA\status-plus"
     RMDir /r "$APPDATA\Status+"
     RMDir /r "$LOCALAPPDATA\Status+"
-    Goto done
-
-  keep_data:
-    Goto done
-
-  done:
+    nsExec::Exec 'cmd.exe /c for /d %u in (C:\Users\*) do (rd /s /q "%u\AppData\Roaming\status-plus" 2>nul & rd /s /q "%u\AppData\Local\status-plus" 2>nul & rd /s /q "%u\AppData\Roaming\Status+" 2>nul)'
+    nsExec::Exec 'powershell -NoProfile -Command "Get-ChildItem ''C:\Users'' -Directory -ErrorAction SilentlyContinue | ForEach-Object { Remove-Item -Path (Join-Path $$_.FullName ''AppData\Roaming\status-plus'') -Recurse -Force -ErrorAction SilentlyContinue; Remove-Item -Path (Join-Path $$_.FullName ''AppData\Local\status-plus'') -Recurse -Force -ErrorAction SilentlyContinue; Remove-Item -Path (Join-Path $$_.FullName ''AppData\Roaming\Status+'') -Recurse -Force -ErrorAction SilentlyContinue }"'
+  SectionEnd
 !macroend

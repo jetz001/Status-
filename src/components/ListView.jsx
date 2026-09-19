@@ -390,21 +390,21 @@ export default function ListView({
 
             {/* Table */}
             <div className="bg-[#1e1f21] border border-[#2a2b2d] rounded-md overflow-visible">
-              <table className="w-full text-left border-collapse">
+              <table className="w-full text-left border-collapse table-fixed min-w-[850px]">
                 <thead>
                   <tr className="border-b border-[#2a2b2d] text-gray-400 text-[11px] bg-[#1a1b1d]">
-                    <th className="py-2 px-3 font-medium min-w-[280px]">Name (ชื่องาน)</th>
+                    <th className="py-2 px-3 font-medium min-w-[220px]">Name (ชื่องาน)</th>
                     <th className="py-2 px-2 font-medium w-28">Assignee (ผู้รับผิดชอบ)</th>
-                    <th className="py-2 px-2 font-medium w-32">Due Date (กำหนดส่ง)</th>
-                    <th className="py-2 px-2 font-medium w-28">Priority (ความสำคัญ)</th>
-                    <th className="py-2 px-2 font-medium w-28">Subtasks (งานย่อย)</th>
-                    <th className="py-2 px-2 font-medium w-32">Status (สถานะ)</th>
+                    <th className="py-2 px-2 font-medium w-36">Due Date (กำหนดส่ง)</th>
+                    <th className="py-2 px-2 font-medium w-24">Priority (ความสำคัญ)</th>
+                    <th className="py-2 px-2 font-medium w-24">Subtasks (งานย่อย)</th>
+                    <th className="py-2 px-2 font-medium w-28">Status (สถานะ)</th>
                     {fields.map(f => (
-                      <th key={f.id} className="py-2 px-2 font-medium min-w-[120px]">
+                      <th key={f.id} className="py-2 px-2 font-medium w-28">
                         {f.name}
                       </th>
                     ))}
-                    <th className="py-2 px-3 font-medium w-24 text-right">Actions</th>
+                    <th className="py-2 px-3 font-medium w-20 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#26272a]">
@@ -424,15 +424,15 @@ export default function ListView({
                         title="คลิกขวาเพื่อเปิดเมนูลัด"
                       >
                         {/* 1. Name Column with inline rename & status toggle */}
-                        <td className="py-2.5 px-3">
-                          <div className="flex items-center space-x-2">
+                        <td className="py-2.5 px-3 max-w-0 overflow-hidden">
+                          <div className="flex items-center space-x-2 min-w-0">
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 const nextStatus = task.status === 'COMPLETED' ? 'NOT STARTED' : 'COMPLETED';
                                 onUpdateTaskStatus(task.id, nextStatus);
                               }}
-                              className="text-gray-500 hover:text-emerald-400 transition"
+                              className="text-gray-500 hover:text-emerald-400 transition flex-shrink-0"
                               title="คลิกเพื่อเปลี่ยนสถานะเสร็จสิ้น"
                             >
                               {task.status === 'COMPLETED' ? (
@@ -458,12 +458,15 @@ export default function ListView({
                               />
                             ) : (
                               <div 
-                                className="flex items-center space-x-1.5 truncate group/name flex-1"
+                                className="flex items-center space-x-1.5 min-w-0 flex-1 group/name"
                                 onDoubleClick={(e) => startInlineEdit(e, task)}
                               >
-                                <span className={`font-medium truncate ${
-                                  task.status === 'COMPLETED' ? 'line-through text-gray-500' : 'text-gray-100'
-                                }`}>
+                                <span 
+                                  title={task.name}
+                                  className={`font-medium truncate block ${
+                                    task.status === 'COMPLETED' ? 'line-through text-gray-500' : 'text-gray-100'
+                                  }`}
+                                >
                                   {task.name}
                                 </span>
 
@@ -477,14 +480,14 @@ export default function ListView({
                                       className="w-1.5 h-1.5 rounded-full inline-block" 
                                       style={{ backgroundColor: task.list_color || '#7b68ee' }} 
                                     />
-                                    <span>{task.list_name}</span>
+                                    <span className="truncate max-w-[80px]">{task.list_name}</span>
                                   </span>
                                 )}
 
                                 <button
                                   type="button"
                                   onClick={(e) => startInlineEdit(e, task)}
-                                  className="opacity-0 group-hover/name:opacity-100 text-gray-500 hover:text-gray-300 p-0.5 rounded"
+                                  className="opacity-0 group-hover/name:opacity-100 text-gray-500 hover:text-gray-300 p-0.5 rounded flex-shrink-0"
                                   title="ดับเบิ้ลคลิกหรือกดเพื่อเปลี่ยนชื่อทันที"
                                 >
                                   <Edit3 size={11} />
@@ -493,24 +496,24 @@ export default function ListView({
                             )}
 
                             {hasAttachments && (
-                              <span title={`${task.attachments.length} รูปภาพแนบ`}>
-                                <ImageIcon size={13} className="text-purple-400 flex-shrink-0" />
+                              <span title={`${task.attachments.length} รูปภาพแนบ`} className="flex-shrink-0">
+                                <ImageIcon size={13} className="text-purple-400" />
                               </span>
                             )}
                           </div>
                         </td>
 
                         {/* 2. Interactive Assignee Column */}
-                        <td className="py-2.5 px-2 relative">
+                        <td className="py-2.5 px-2 relative truncate">
                           <div 
                             onClick={(e) => handleTogglePopover(e, task.id, 'assignee')}
-                            className="inline-flex items-center space-x-1.5 px-2 py-1 rounded bg-[#24262b] hover:bg-[#2c2f35] border border-[#383a3f] cursor-pointer transition shadow-sm"
+                            className="inline-flex items-center space-x-1.5 px-2 py-1 rounded bg-[#24262b] hover:bg-[#2c2f35] border border-[#383a3f] cursor-pointer transition shadow-sm max-w-full truncate"
                             title="คลิกเพื่อเลือกผู้รับผิดชอบงาน"
                           >
-                            <div className="w-5 h-5 rounded-full bg-[#7b68ee]/30 border border-[#7b68ee]/60 flex items-center justify-center text-[9px] font-bold text-purple-200">
+                            <div className="w-5 h-5 rounded-full bg-[#7b68ee]/30 border border-[#7b68ee]/60 flex items-center justify-center text-[9px] font-bold text-purple-200 flex-shrink-0">
                               {task.assignee ? task.assignee.slice(0, 2).toUpperCase() : '?'}
                             </div>
-                            <span className="text-[11px] text-gray-300 font-medium">
+                            <span className="text-[11px] text-gray-300 font-medium truncate max-w-[65px]">
                               {task.assignee || 'ยังไม่ระบุ'}
                             </span>
                           </div>

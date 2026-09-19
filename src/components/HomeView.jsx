@@ -528,7 +528,7 @@ export default function HomeView({
                       title="คลิกขวาเพื่อเปิดเมนูลัด"
                     >
                       {/* Left: Checkbox + Name */}
-                      <div className="flex items-center space-x-3 truncate flex-1 mr-3">
+                      <div className="flex items-center space-x-3 min-w-0 flex-1 mr-3">
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -543,8 +543,11 @@ export default function HomeView({
                           )}
                         </button>
 
-                        <div className="truncate">
-                          <div className={`text-xs font-medium truncate ${isDone ? 'line-through text-gray-500' : 'text-gray-200 group-hover:text-white'}`}>
+                        <div className="min-w-0 flex-1">
+                          <div 
+                            title={task.name}
+                            className={`text-xs font-medium truncate ${isDone ? 'line-through text-gray-500' : 'text-gray-200 group-hover:text-white'}`}
+                          >
                             {task.name}
                           </div>
                           <div className="flex items-center space-x-2 text-[10px] text-gray-400 mt-0.5">
