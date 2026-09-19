@@ -52,13 +52,57 @@ export default function PrintReportView({
 
   const thaiDayInitials = ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'];
 
+  // Monthly Calendar Calculations (for type === 'calendar')
+  const calDate = todayDate;
+  const calYear = calDate.getFullYear();
+  const calMonth = calDate.getMonth();
+  const monthPrefix = `${calYear}-${String(calMonth + 1).padStart(2, '0')}`;
+
+  const THAI_MONTHS_CAL = [
+    'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+    'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'
+  ];
+
+  const firstDayIndex = new Date(calYear, calMonth, 1).getDay();
+  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+  const daysInPrevMonth = new Date(calYear, calMonth, 0).getDate();
+
+  const printCalendarCells = [];
+  // Prev month leading
+  for (let i = firstDayIndex - 1; i >= 0; i--) {
+    const day = daysInPrevMonth - i;
+    const prevM = calMonth === 0 ? 12 : calMonth;
+    const prevY = calMonth === 0 ? calYear - 1 : calYear;
+    const iso = `${prevY}-${String(prevM).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    printCalendarCells.push({ day, iso, isCurrentMonth: false, isToday: iso === todayDateStr });
+  }
+  // Current month
+  for (let day = 1; day <= daysInMonth; day++) {
+    const iso = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    printCalendarCells.push({ day, iso, isCurrentMonth: true, isToday: iso === todayDateStr });
+  }
+  // Next month trailing to complete full weeks
+  const remainingCells = (7 - (printCalendarCells.length % 7)) % 7;
+  for (let day = 1; day <= remainingCells; day++) {
+    const nextM = calMonth === 11 ? 1 : calMonth + 2;
+    const nextY = calMonth === 11 ? calYear + 1 : calYear;
+    const iso = `${nextY}-${String(nextM).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    printCalendarCells.push({ day, iso, isCurrentMonth: false, isToday: iso === todayDateStr });
+  }
+
+  // Month stats for calendar
+  const calTasksInMonth = tasks.filter(t => t.due_date && t.due_date.startsWith(monthPrefix));
+  const calCompletedInMonth = calTasksInMonth.filter(t => t.status === 'COMPLETED').length;
+  const calOverdueInMonth = calTasksInMonth.filter(t => t.status !== 'COMPLETED' && t.due_date < todayDateStr).length;
+  const unscheduledTasksInList = tasks.filter(t => !t.due_date);
+
   return (
     <div className="fixed inset-0 bg-white text-black z-50 overflow-y-auto print:p-0 print:m-0">
       {/* Print Page Orientation & Color Adjustment Styles */}
       <style>{`
         @media print {
           @page {
-            size: ${type === 'timeline' ? 'landscape' : 'portrait'};
+            size: ${type === 'timeline' || type === 'calendar' ? 'landscape' : 'portrait'};
             margin: 6mm;
           }
           body {
@@ -86,6 +130,7 @@ export default function PrintReportView({
             {type === 'list' && 'พรีวิวเอกสารตารางรายการงาน (Print List View)'}
             {type === 'board' && 'พรีวิวเอกสารกระดานงาน (Print Kanban Board)'}
             {type === 'timeline' && 'พรีวิวเอกสารผังกำหนดการ Gantt Chart แนวนอน (Print Gantt Chart Landscape)'}
+            {type === 'calendar' && 'พรีวิวเอกสารปฏิทินงานประจำเดือน แนวนอน (Print Monthly Calendar Landscape)'}
             {type === 'home' && 'พรีวิวเอกสารสรุปภาพรวมพื้นที่ทำงาน (Print Executive Summary)'}
             {type === 'task' && 'พรีวิวเอกสารคำสั่งงาน (Print Task Sheet)'}
           </span>
@@ -533,6 +578,183 @@ export default function PrintReportView({
                 </tbody>
               </table>
             </div>
+          </div>
+        )}
+
+        {/* ============================================================ */}
+        {/* VIEW: MONTHLY CALENDAR REPORT (LANDSCAPE) */}
+        {/* ============================================================ */}
+        {type === 'calendar' && (
+          <div className="space-y-4 print-landscape-sheet">
+            {/* Header */}
+            <div className="border-b-2 border-gray-800 pb-3 flex items-start justify-between">
+              <div>
+                <div className="flex items-center space-x-2">
+                  <span className="px-2 py-0.5 rounded bg-purple-100 text-purple-800 text-[11px] font-bold">
+                    ปฏิทินงานประจำเดือน (Monthly Task Calendar)
+                  </span>
+                  <span className="text-xs text-gray-500 font-medium">
+                    {spaceName} / {listName}
+                  </span>
+                </div>
+                <h1 className="text-2xl font-black text-gray-900 tracking-tight mt-1">
+                  {THAI_MONTHS_CAL[calMonth]} {calYear + 543} ({calYear})
+                </h1>
+                <p className="text-xs text-gray-600">
+                  เวิร์กสเปซ: <span className="font-semibold text-gray-800">{workspaceName}</span> | ผู้จัดทำ: <span className="font-semibold text-gray-800">{userName}</span>
+                </p>
+              </div>
+
+              <div className="text-right text-xs text-gray-500 space-y-0.5">
+                <p>วันที่พิมพ์: <span className="font-medium text-gray-800">{currentDate}</span></p>
+                <p>งานในเดือนนี้: <span className="font-bold text-gray-800">{calTasksInMonth.length} งาน</span></p>
+              </div>
+            </div>
+
+            {/* Monthly KPI Stats Bar */}
+            <div className="grid grid-cols-5 gap-2 text-xs">
+              <div className="border border-gray-300 rounded p-2 bg-gray-50 text-center">
+                <span className="text-gray-500 block text-[10px]">งานในเดือนนี้ทั้งหมด</span>
+                <span className="text-lg font-black text-gray-900">{calTasksInMonth.length}</span>
+              </div>
+              <div className="border border-emerald-300 rounded p-2 bg-emerald-50 text-center">
+                <span className="text-emerald-700 block text-[10px]">เสร็จสมบูรณ์แล้ว</span>
+                <span className="text-lg font-black text-emerald-700">
+                  {calCompletedInMonth}
+                  <span className="text-xs font-normal ml-1">
+                    ({calTasksInMonth.length > 0 ? Math.round((calCompletedInMonth / calTasksInMonth.length) * 100) : 0}%)
+                  </span>
+                </span>
+              </div>
+              <div className="border border-blue-300 rounded p-2 bg-blue-50 text-center">
+                <span className="text-blue-700 block text-[10px]">กำลังดำเนินการ</span>
+                <span className="text-lg font-black text-blue-700">
+                  {calTasksInMonth.filter(t => t.status === 'IN PROGRESS').length}
+                </span>
+              </div>
+              <div className="border border-rose-300 rounded p-2 bg-rose-50 text-center">
+                <span className="text-rose-700 block text-[10px]">ค้างส่ง (Overdue)</span>
+                <span className="text-lg font-black text-rose-700">{calOverdueInMonth}</span>
+              </div>
+              <div className="border border-purple-300 rounded p-2 bg-purple-50 text-center">
+                <span className="text-purple-700 block text-[10px]">งานรอระบุวันส่ง</span>
+                <span className="text-lg font-black text-purple-700">{unscheduledTasksInList.length}</span>
+              </div>
+            </div>
+
+            {/* 7-Column Calendar Grid Table */}
+            <table className="w-full border-collapse border border-gray-400 table-fixed text-xs">
+              <thead>
+                <tr className="bg-gray-100 border-b border-gray-400">
+                  {['อาทิตย์ (Sun)', 'จันทร์ (Mon)', 'อังคาร (Tue)', 'พุธ (Wed)', 'พฤหัสบดี (Thu)', 'ศุกร์ (Fri)', 'เสาร์ (Sat)'].map((dayTitle, di) => (
+                    <th key={di} className={`p-1.5 border-r border-gray-400 text-center font-bold text-[11px] ${di === 0 || di === 6 ? 'text-red-700 bg-red-50/50' : 'text-gray-800'}`}>
+                      {dayTitle}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {Array.from({ length: Math.ceil(printCalendarCells.length / 7) }).map((_, weekIdx) => {
+                  const weekCells = printCalendarCells.slice(weekIdx * 7, (weekIdx + 1) * 7);
+                  return (
+                    <tr key={weekIdx} className="border-b border-gray-400 align-top">
+                      {weekCells.map((cell, cIdx) => {
+                        const cellTasks = tasks.filter(t => t.due_date === cell.iso);
+                        const isWeekend = cIdx === 0 || cIdx === 6;
+
+                        return (
+                          <td 
+                            key={cIdx} 
+                            className={`p-1.5 border-r border-gray-400 min-h-[90px] h-24 align-top ${
+                              !cell.isCurrentMonth ? 'bg-gray-100/70 text-gray-400' :
+                              cell.isToday ? 'bg-purple-50/60' :
+                              isWeekend ? 'bg-amber-50/20' : 'bg-white'
+                            }`}
+                          >
+                            {/* Date Number */}
+                            <div className="flex items-center justify-between mb-1">
+                              <span className={`inline-block text-[11px] font-bold px-1.5 py-0.2 rounded ${
+                                cell.isToday 
+                                  ? 'bg-purple-600 text-white font-extrabold' 
+                                  : !cell.isCurrentMonth 
+                                  ? 'text-gray-400' 
+                                  : isWeekend ? 'text-rose-600' : 'text-gray-800'
+                              }`}>
+                                {cell.day}
+                              </span>
+                              {cellTasks.length > 0 && (
+                                <span className="text-[9px] font-semibold text-gray-500">
+                                  {cellTasks.length} งาน
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Tasks scheduled on this day */}
+                            <div className="space-y-1 overflow-hidden">
+                              {cellTasks.map((t) => {
+                                const isDone = t.status === 'COMPLETED';
+                                const isInProg = t.status === 'IN PROGRESS';
+                                return (
+                                  <div 
+                                    key={t.id}
+                                    className={`p-1 rounded border text-[10px] leading-tight ${
+                                      isDone ? 'bg-emerald-50 border-emerald-300 text-emerald-900' :
+                                      isInProg ? 'bg-blue-50 border-blue-300 text-blue-900' :
+                                      'bg-gray-50 border-gray-300 text-gray-900'
+                                    }`}
+                                  >
+                                    <div className="font-semibold truncate">
+                                      {isDone ? '✓ ' : '• '}{t.name}
+                                    </div>
+                                    <div className="flex items-center justify-between text-[9px] text-gray-500 mt-0.5">
+                                      <span className={`px-1 rounded text-[8px] font-bold ${
+                                        isDone ? 'bg-emerald-200 text-emerald-800' :
+                                        isInProg ? 'bg-blue-200 text-blue-800' : 'bg-gray-200 text-gray-700'
+                                      }`}>
+                                        {t.status}
+                                      </span>
+                                      {t.assignee && (
+                                        <span className="truncate max-w-[50px] text-gray-600">
+                                          {t.assignee}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+
+            {/* Unscheduled Tasks Section if any */}
+            {unscheduledTasksInList.length > 0 && (
+              <div className="mt-4 pt-2 border-t border-gray-300 no-break">
+                <h3 className="font-bold text-xs text-gray-800 mb-1.5 flex items-center justify-between">
+                  <span>รายการงานที่ยังไม่ได้ระบุวันกำหนดส่ง (Unscheduled Tasks): {unscheduledTasksInList.length} งาน</span>
+                </h3>
+                <div className="grid grid-cols-3 gap-2">
+                  {unscheduledTasksInList.slice(0, 12).map(t => (
+                    <div key={t.id} className="p-1.5 bg-gray-50 border border-gray-300 rounded text-[10px] flex items-center justify-between">
+                      <span className="font-medium truncate mr-1">• {t.name}</span>
+                      <span className="text-[9px] px-1 bg-gray-200 text-gray-700 rounded flex-shrink-0">
+                        {t.status}
+                      </span>
+                    </div>
+                  ))}
+                  {unscheduledTasksInList.length > 12 && (
+                    <div className="p-1.5 text-center text-gray-500 italic text-[10px]">
+                      ...และอีก {unscheduledTasksInList.length - 12} งานที่ยังไม่กำหนดวันส่ง
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
 

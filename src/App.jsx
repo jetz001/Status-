@@ -3,6 +3,7 @@ import Sidebar from './components/Sidebar.jsx';
 import Header from './components/Header.jsx';
 import ListView from './components/ListView.jsx';
 import BoardView from './components/BoardView.jsx';
+import CalendarView from './components/CalendarView.jsx';
 import TimelineView from './components/TimelineView.jsx';
 import TaskDrawer from './components/TaskDrawer.jsx';
 import AISidebarRAG from './components/AISidebarRAG.jsx';
@@ -377,9 +378,14 @@ export default function App() {
   };
 
   // Task Mutations
-  const handleQuickAddTask = async (taskData) => {
+  const handleQuickAddTask = async (taskData, defaultStatus = 'NOT STARTED', defaultDueDate = null) => {
     try {
-      const data = typeof taskData === 'string' ? { name: taskData } : taskData;
+      let data = {};
+      if (typeof taskData === 'string') {
+        data = { name: taskData, status: defaultStatus, due_date: defaultDueDate };
+      } else {
+        data = taskData || {};
+      }
       let targetList = data.list_id || activeListId;
       if (!targetList || targetList === 'all') {
         targetList = spaces[0]?.lists?.[0]?.id || '';
@@ -391,8 +397,9 @@ export default function App() {
           list_id: targetList,
           name: data.name,
           description: data.description || '',
-          status: data.status || 'NOT STARTED',
-          priority: data.priority || 'Normal'
+          status: data.status || defaultStatus || 'NOT STARTED',
+          priority: data.priority || 'Normal',
+          due_date: data.due_date || defaultDueDate || null
         })
       });
       loadTasks();
@@ -683,6 +690,20 @@ export default function App() {
                 setTaskForMoveCopy(task);
                 setShowMoveCopyModal(true);
               }}
+            />
+          )}
+
+          {activeView === 'calendar' && (
+            <CalendarView 
+              tasks={filteredTasks}
+              allTasks={allTasks}
+              onSelectTask={setSelectedTask}
+              onUpdateTask={handleUpdateTask}
+              onUpdateTaskStatus={handleUpdateTaskStatus}
+              onQuickAddTask={handleQuickAddTask}
+              onOpenPrintReport={(viewType) => setPrintConfig({ type: viewType || 'calendar' })}
+              activeListName={activeListName}
+              activeListId={activeListId}
             />
           )}
 
