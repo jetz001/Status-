@@ -160,6 +160,57 @@ function FormattedAiMessage({ content, onSelectTaskById }) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
 
+    // 0. TABLE: Markdown pipe table  | col1 | col2 | col3 |
+    if (line.startsWith('|') && line.endsWith('|') && line.length > 2) {
+      flushTaskGroup();
+      const tableLines = [];
+      while (i < lines.length) {
+        const tl = lines[i].trim();
+        if (tl.startsWith('|') && tl.endsWith('|') && tl.length > 2) {
+          tableLines.push(tl);
+          i++;
+        } else {
+          break;
+        }
+      }
+      // Parse header row
+      const parseRow = (rowStr) =>
+        rowStr.replace(/^\|\s*/, '').replace(/\s*\|$/, '').split('|').map(c => c.trim());
+      const headers = parseRow(tableLines[0]);
+      // Detect separator row (e.g. |---|:---|:---:|)
+      const isSep = (r) => /^\|[\s\-:|]+\|$/.test(r);
+      const dataStart = tableLines.length > 1 && isSep(tableLines[1]) ? 2 : 1;
+      const rows = tableLines.slice(dataStart).map(parseRow);
+      renderedBlocks.push(
+        <div key={`table-${i}`} className="my-2.5 overflow-x-auto rounded-lg border border-[#2d3035]">
+          <table className="w-full text-[11px] border-collapse" style={{ minWidth: `${headers.length * 90}px` }}>
+            <thead>
+              <tr className="bg-[#1d1f24] border-b border-[#2d3035]">
+                {headers.map((h, hIdx) => (
+                  <th key={hIdx} className="px-3 py-2 text-left text-gray-300 font-semibold whitespace-nowrap">
+                    {formatInlineMarkup(h)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, rIdx) => (
+                <tr key={rIdx} className={`border-b border-[#252730] ${rIdx % 2 === 0 ? 'bg-[#17181c]' : 'bg-[#151619]'} hover:bg-[#1e2027] transition-colors`}>
+                  {row.map((cell, cIdx) => (
+                    <td key={cIdx} className="px-3 py-1.5 text-gray-300 align-top">
+                      {cell ? formatInlineMarkup(cell) : <span className="text-gray-600">—</span>}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+      i--; // compensate for outer i++
+      continue;
+    }
+
     // 1. STATS BANNER: [STATS: total=4, completed=2, inProgress=1, notStarted=1, percent=50]
     const statsMatch = line.match(/\[STATS:\s*total=(\d+),\s*completed=(\d+),\s*inProgress=(\d+),\s*notStarted=(\d+),\s*percent=(\d+)\]/i);
     if (statsMatch) {
