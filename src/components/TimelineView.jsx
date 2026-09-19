@@ -392,10 +392,12 @@ export default function TimelineView({ tasks = [], onSelectTask, activeListName 
                     startDayNum = Math.max(1, Math.min(daysInMonth, startDayNum));
                     dueDayNum = Math.max(startDayNum, Math.min(daysInMonth, dueDayNum));
 
-                    const colIndex = startDayNum - 1;
-                    const spanDays = dueDayNum - startDayNum + 1;
-                    const leftPct = (colIndex / daysInMonth) * 100;
-                    const widthPct = Math.max((spanDays / daysInMonth) * 100, (1 / daysInMonth) * 100);
+                    const colIndex = startDayNum - 1;  // 0-indexed: day 21 → col 20
+                    const spanDays = Math.max(1, dueDayNum - startDayNum + 1);
+                    // Use fixed pixel width per column (must match minWidth = daysInMonth*34 formula)
+                    const COL_W = 34; // px per day column
+                    const barLeft = colIndex * COL_W;
+                    const barWidth = spanDays * COL_W;
 
                     return (
                       <div 
@@ -447,8 +449,8 @@ export default function TimelineView({ tasks = [], onSelectTask, activeListName 
                                 : 'bg-rose-600/90 border border-rose-400/40'
                             }`}
                             style={{
-                              left: `${leftPct}%`,
-                              width: `${widthPct}%`
+                              left: `${barLeft}px`,
+                              width: `${barWidth}px`
                             }}
                             title={`${task.name} (กำหนดส่ง: ${task.due_date || 'ไม่ระบุ'})`}
                           >
