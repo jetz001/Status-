@@ -96,13 +96,39 @@ export default function PrintReportView({
   const calOverdueInMonth = calTasksInMonth.filter(t => t.status !== 'COMPLETED' && t.due_date < todayDateStr).length;
   const unscheduledTasksInList = tasks.filter(t => !t.due_date);
 
+  // Eisenhower Matrix Categorization (for type === 'matrix')
+  const matrixQ1Tasks = [];
+  const matrixQ2Tasks = [];
+  const matrixQ3Tasks = [];
+  const matrixQ4Tasks = [];
+
+  const next3DaysStr = new Date(todayDate.getTime() + 3 * 86400000).toISOString().split('T')[0];
+
+  tasks.forEach(t => {
+    let q = t.eisenhower_quadrant;
+    if (!q || !['q1', 'q2', 'q3', 'q4'].includes(q)) {
+      const pUpper = (t.priority || 'NORMAL').toUpperCase();
+      const isImportant = pUpper === 'URGENT' || pUpper === 'HIGH';
+      const isDueSoon = t.due_date && t.due_date <= next3DaysStr;
+      const isUrgent = pUpper === 'URGENT' || isDueSoon;
+      if (isUrgent && isImportant) q = 'q1';
+      else if (!isUrgent && isImportant) q = 'q2';
+      else if (isUrgent && !isImportant) q = 'q3';
+      else q = 'q4';
+    }
+    if (q === 'q1') matrixQ1Tasks.push(t);
+    else if (q === 'q2') matrixQ2Tasks.push(t);
+    else if (q === 'q3') matrixQ3Tasks.push(t);
+    else matrixQ4Tasks.push(t);
+  });
+
   return (
     <div className="fixed inset-0 bg-white text-black z-50 overflow-y-auto print:p-0 print:m-0">
       {/* Print Page Orientation & Color Adjustment Styles */}
       <style>{`
         @media print {
           @page {
-            size: ${type === 'timeline' || type === 'calendar' ? 'landscape' : 'portrait'};
+            size: ${type === 'timeline' || type === 'calendar' || type === 'matrix' ? 'landscape' : 'portrait'};
             margin: 6mm;
           }
           body {
@@ -131,6 +157,7 @@ export default function PrintReportView({
             {type === 'board' && 'พรีวิวเอกสารกระดานงาน (Print Kanban Board)'}
             {type === 'timeline' && 'พรีวิวเอกสารผังกำหนดการ Gantt Chart แนวนอน (Print Gantt Chart Landscape)'}
             {type === 'calendar' && 'พรีวิวเอกสารปฏิทินงานประจำเดือน แนวนอน (Print Monthly Calendar Landscape)'}
+            {type === 'matrix' && 'พรีวิวเอกสารผังวิเคราะห์งาน Eisenhower Matrix แนวนอน (Print Matrix Chart Landscape)'}
             {type === 'home' && 'พรีวิวเอกสารสรุปภาพรวมพื้นที่ทำงาน (Print Executive Summary)'}
             {type === 'task' && 'พรีวิวเอกสารคำสั่งงาน (Print Task Sheet)'}
           </span>
@@ -755,6 +782,269 @@ export default function PrintReportView({
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ============================================================ */}
+        {/* VIEW: EISENHOWER MATRIX REPORT (LANDSCAPE WITH AXES) */}
+        {/* ============================================================ */}
+        {type === 'matrix' && (
+          <div className="space-y-3 print-landscape-sheet">
+            {/* Header */}
+            <div className="border-b-2 border-gray-800 pb-2.5 flex items-start justify-between">
+              <div>
+                <div className="flex items-center space-x-2">
+                  <span className="px-2 py-0.5 rounded bg-purple-100 text-purple-800 text-[11px] font-bold">
+                    ผังวิเคราะห์งาน Eisenhower Matrix (Urgent vs Important)
+                  </span>
+                  <span className="text-xs text-gray-500 font-medium">
+                    {spaceName} / {listName}
+                  </span>
+                </div>
+                <h1 className="text-xl font-black text-gray-900 tracking-tight mt-1">
+                  ผังจัดลำดับความสำคัญและความเร่งด่วนของภาระงาน (2x2 Matrix)
+                </h1>
+                <p className="text-xs text-gray-600">
+                  เวิร์กสเปซ: <span className="font-semibold text-gray-800">{workspaceName}</span> | ผู้จัดทำ: <span className="font-semibold text-gray-800">{userName}</span>
+                </p>
+              </div>
+
+              <div className="text-right text-xs text-gray-500 space-y-0.5">
+                <p>วันที่พิมพ์: <span className="font-medium text-gray-800">{currentDate}</span></p>
+                <p>รวมทั้งระบบ: <span className="font-bold text-gray-800">{tasks.length} งาน</span></p>
+              </div>
+            </div>
+
+            {/* KPI Stats Bar */}
+            <div className="grid grid-cols-4 gap-2 text-xs">
+              <div className="border border-rose-300 rounded p-2 bg-rose-50 text-center">
+                <span className="text-rose-700 block text-[10px] font-bold">Q1: ทำทันที (Do First - ด่วน & สำคัญ)</span>
+                <span className="text-xl font-black text-rose-700">
+                  {matrixQ1Tasks.length}
+                  <span className="text-xs font-normal ml-1">
+                    ({tasks.length > 0 ? Math.round((matrixQ1Tasks.length / tasks.length) * 100) : 0}%)
+                  </span>
+                </span>
+              </div>
+              <div className="border border-blue-300 rounded p-2 bg-blue-50 text-center">
+                <span className="text-blue-700 block text-[10px] font-bold">Q2: วางแผน (Schedule - ไม่ด่วน แต่สำคัญ)</span>
+                <span className="text-xl font-black text-blue-700">
+                  {matrixQ2Tasks.length}
+                  <span className="text-xs font-normal ml-1">
+                    ({tasks.length > 0 ? Math.round((matrixQ2Tasks.length / tasks.length) * 100) : 0}%)
+                  </span>
+                </span>
+              </div>
+              <div className="border border-amber-300 rounded p-2 bg-amber-50 text-center">
+                <span className="text-amber-700 block text-[10px] font-bold">Q3: มอบหมาย (Delegate - ด่วน แต่ไม่สำคัญ)</span>
+                <span className="text-xl font-black text-amber-700">
+                  {matrixQ3Tasks.length}
+                  <span className="text-xs font-normal ml-1">
+                    ({tasks.length > 0 ? Math.round((matrixQ3Tasks.length / tasks.length) * 100) : 0}%)
+                  </span>
+                </span>
+              </div>
+              <div className="border border-gray-300 rounded p-2 bg-gray-50 text-center">
+                <span className="text-gray-700 block text-[10px] font-bold">Q4: พักไว้ (Eliminate - ไม่ด่วน & ไม่สำคัญ)</span>
+                <span className="text-xl font-black text-gray-700">
+                  {matrixQ4Tasks.length}
+                  <span className="text-xs font-normal ml-1">
+                    ({tasks.length > 0 ? Math.round((matrixQ4Tasks.length / tasks.length) * 100) : 0}%)
+                  </span>
+                </span>
+              </div>
+            </div>
+
+            {/* Top Axis Bar */}
+            <div className="flex items-center justify-between px-3 py-1 bg-gray-100 border border-gray-400 rounded text-xs font-bold text-gray-800">
+              <span className="text-rose-700">◄◄ เร่งด่วน (Urgent)</span>
+              <span className="text-gray-500 font-semibold text-[11px]">แกนนอน: ความเร่งด่วน (Urgency)</span>
+              <span className="text-blue-700">ไม่เร่งด่วน (Not Urgent) ►►</span>
+            </div>
+
+            {/* 2x2 Matrix with Visible Crossed Axes */}
+            <div className="border-2 border-gray-800 rounded-lg overflow-hidden relative">
+              {/* Row 1: High Importance */}
+              <div className="grid grid-cols-2 min-h-[220px]">
+                {/* Q1: Urgent & Important */}
+                <div className="p-3 border-r-2 border-b-2 border-gray-800 bg-rose-50/25 flex flex-col">
+                  <div className="flex items-center justify-between border-b border-rose-300 pb-1.5 mb-2">
+                    <div>
+                      <span className="font-extrabold text-sm text-rose-800">Q1: ทำทันที (Do First)</span>
+                      <p className="text-[10px] text-rose-600 font-medium">ด่วน & สำคัญ (Urgent & Important)</p>
+                    </div>
+                    <span className="px-2 py-0.5 rounded bg-rose-200 text-rose-900 font-bold text-xs">
+                      {matrixQ1Tasks.length} งาน
+                    </span>
+                  </div>
+
+                  <div className="space-y-1.5 flex-1">
+                    {matrixQ1Tasks.length === 0 ? (
+                      <p className="text-center text-gray-400 italic text-xs py-4">ไม่มีงานในหมวดนี้</p>
+                    ) : (
+                      matrixQ1Tasks.map((t, idx) => (
+                        <div key={t.id || idx} className="p-1.5 bg-white border border-rose-200 rounded text-xs shadow-2xs flex items-start justify-between">
+                          <div className="flex items-start space-x-1.5 min-w-0 flex-1">
+                            <span className="text-rose-600 font-bold">•</span>
+                            <div className="min-w-0 flex-1">
+                              <span className={`font-semibold block truncate ${t.status === 'COMPLETED' ? 'line-through text-gray-400' : 'text-gray-900'}`}>
+                                {t.name}
+                              </span>
+                              <div className="text-[10px] text-gray-500 flex items-center space-x-2 mt-0.5">
+                                <span>กำหนดส่ง: {t.due_date || 'ไม่ระบุ'}</span>
+                                {t.assignee && <span>ผู้รับผิดชอบ: {t.assignee}</span>}
+                              </div>
+                            </div>
+                          </div>
+                          <span className={`px-1 rounded text-[9px] font-bold uppercase flex-shrink-0 ${
+                            t.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-800' :
+                            t.status === 'IN PROGRESS' ? 'bg-blue-100 text-blue-800' : 'bg-rose-100 text-rose-800'
+                          }`}>
+                            {t.status}
+                          </span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {/* Q2: Not Urgent & Important */}
+                <div className="p-3 border-b-2 border-gray-800 bg-blue-50/25 flex flex-col">
+                  <div className="flex items-center justify-between border-b border-blue-300 pb-1.5 mb-2">
+                    <div>
+                      <span className="font-extrabold text-sm text-blue-800">Q2: วางแผน (Schedule)</span>
+                      <p className="text-[10px] text-blue-600 font-medium">ไม่ด่วน แต่สำคัญ (Not Urgent & Important)</p>
+                    </div>
+                    <span className="px-2 py-0.5 rounded bg-blue-200 text-blue-900 font-bold text-xs">
+                      {matrixQ2Tasks.length} งาน
+                    </span>
+                  </div>
+
+                  <div className="space-y-1.5 flex-1">
+                    {matrixQ2Tasks.length === 0 ? (
+                      <p className="text-center text-gray-400 italic text-xs py-4">ไม่มีงานในหมวดนี้</p>
+                    ) : (
+                      matrixQ2Tasks.map((t, idx) => (
+                        <div key={t.id || idx} className="p-1.5 bg-white border border-blue-200 rounded text-xs shadow-2xs flex items-start justify-between">
+                          <div className="flex items-start space-x-1.5 min-w-0 flex-1">
+                            <span className="text-blue-600 font-bold">•</span>
+                            <div className="min-w-0 flex-1">
+                              <span className={`font-semibold block truncate ${t.status === 'COMPLETED' ? 'line-through text-gray-400' : 'text-gray-900'}`}>
+                                {t.name}
+                              </span>
+                              <div className="text-[10px] text-gray-500 flex items-center space-x-2 mt-0.5">
+                                <span>กำหนดส่ง: {t.due_date || 'ไม่ระบุ'}</span>
+                                {t.assignee && <span>ผู้รับผิดชอบ: {t.assignee}</span>}
+                              </div>
+                            </div>
+                          </div>
+                          <span className={`px-1 rounded text-[9px] font-bold uppercase flex-shrink-0 ${
+                            t.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-800' :
+                            t.status === 'IN PROGRESS' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'
+                          }`}>
+                            {t.status}
+                          </span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Center Divider Axis Bar */}
+              <div className="bg-gray-800 text-white text-[10px] font-extrabold py-1 px-4 flex items-center justify-between tracking-wide">
+                <span>▲ สำคัญมาก (High Importance)</span>
+                <span className="text-purple-300">═══ แกนความสำคัญ (Importance Axis) ═══</span>
+                <span>▼ สำคัญน้อย (Low Importance)</span>
+              </div>
+
+              {/* Row 2: Low Importance */}
+              <div className="grid grid-cols-2 min-h-[220px]">
+                {/* Q3: Urgent & Not Important */}
+                <div className="p-3 border-r-2 border-gray-800 bg-amber-50/25 flex flex-col">
+                  <div className="flex items-center justify-between border-b border-amber-300 pb-1.5 mb-2">
+                    <div>
+                      <span className="font-extrabold text-sm text-amber-800">Q3: มอบหมาย (Delegate)</span>
+                      <p className="text-[10px] text-amber-600 font-medium">ด่วน แต่ไม่สำคัญ (Urgent & Not Important)</p>
+                    </div>
+                    <span className="px-2 py-0.5 rounded bg-amber-200 text-amber-900 font-bold text-xs">
+                      {matrixQ3Tasks.length} งาน
+                    </span>
+                  </div>
+
+                  <div className="space-y-1.5 flex-1">
+                    {matrixQ3Tasks.length === 0 ? (
+                      <p className="text-center text-gray-400 italic text-xs py-4">ไม่มีงานในหมวดนี้</p>
+                    ) : (
+                      matrixQ3Tasks.map((t, idx) => (
+                        <div key={t.id || idx} className="p-1.5 bg-white border border-amber-200 rounded text-xs shadow-2xs flex items-start justify-between">
+                          <div className="flex items-start space-x-1.5 min-w-0 flex-1">
+                            <span className="text-amber-600 font-bold">•</span>
+                            <div className="min-w-0 flex-1">
+                              <span className={`font-semibold block truncate ${t.status === 'COMPLETED' ? 'line-through text-gray-400' : 'text-gray-900'}`}>
+                                {t.name}
+                              </span>
+                              <div className="text-[10px] text-gray-500 flex items-center space-x-2 mt-0.5">
+                                <span>กำหนดส่ง: {t.due_date || 'ไม่ระบุ'}</span>
+                                {t.assignee && <span>ผู้รับผิดชอบ: {t.assignee}</span>}
+                              </div>
+                            </div>
+                          </div>
+                          <span className={`px-1 rounded text-[9px] font-bold uppercase flex-shrink-0 ${
+                            t.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-800' :
+                            t.status === 'IN PROGRESS' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'
+                          }`}>
+                            {t.status}
+                          </span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {/* Q4: Not Urgent & Not Important */}
+                <div className="p-3 bg-gray-50/40 flex flex-col">
+                  <div className="flex items-center justify-between border-b border-gray-300 pb-1.5 mb-2">
+                    <div>
+                      <span className="font-extrabold text-sm text-gray-800">Q4: ลดละ/พักไว้ (Eliminate)</span>
+                      <p className="text-[10px] text-gray-500 font-medium">ไม่ด่วน & ไม่สำคัญ (Not Urgent & Not Important)</p>
+                    </div>
+                    <span className="px-2 py-0.5 rounded bg-gray-200 text-gray-800 font-bold text-xs">
+                      {matrixQ4Tasks.length} งาน
+                    </span>
+                  </div>
+
+                  <div className="space-y-1.5 flex-1">
+                    {matrixQ4Tasks.length === 0 ? (
+                      <p className="text-center text-gray-400 italic text-xs py-4">ไม่มีงานในหมวดนี้</p>
+                    ) : (
+                      matrixQ4Tasks.map((t, idx) => (
+                        <div key={t.id || idx} className="p-1.5 bg-white border border-gray-200 rounded text-xs shadow-2xs flex items-start justify-between">
+                          <div className="flex items-start space-x-1.5 min-w-0 flex-1">
+                            <span className="text-gray-400 font-bold">•</span>
+                            <div className="min-w-0 flex-1">
+                              <span className={`font-semibold block truncate ${t.status === 'COMPLETED' ? 'line-through text-gray-400' : 'text-gray-900'}`}>
+                                {t.name}
+                              </span>
+                              <div className="text-[10px] text-gray-500 flex items-center space-x-2 mt-0.5">
+                                <span>กำหนดส่ง: {t.due_date || 'ไม่ระบุ'}</span>
+                                {t.assignee && <span>ผู้รับผิดชอบ: {t.assignee}</span>}
+                              </div>
+                            </div>
+                          </div>
+                          <span className={`px-1 rounded text-[9px] font-bold uppercase flex-shrink-0 ${
+                            t.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-800' :
+                            t.status === 'IN PROGRESS' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'
+                          }`}>
+                            {t.status}
+                          </span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 

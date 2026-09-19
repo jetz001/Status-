@@ -407,7 +407,8 @@ app.post('/api/tasks', (req, res) => {
       assignee = '',
       fieldValues = {},
       subtasks = [],
-      recurring_rule = null
+      recurring_rule = null,
+      eisenhower_quadrant = null
     } = req.body;
 
     let targetListId = list_id;
@@ -422,9 +423,9 @@ app.post('/api/tasks', (req, res) => {
     const ruleStr = recurring_rule ? (typeof recurring_rule === 'object' ? JSON.stringify(recurring_rule) : String(recurring_rule)) : null;
 
     db.prepare(`
-      INSERT INTO tasks (id, list_id, name, description, status, priority, due_date, start_date, assignee, position, recurring_rule)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, targetListId, name, description, status, priority, due_date, start_date, assignee, maxPos + 1, ruleStr);
+      INSERT INTO tasks (id, list_id, name, description, status, priority, due_date, start_date, assignee, position, recurring_rule, eisenhower_quadrant)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, targetListId, name, description, status, priority, due_date, start_date, assignee, maxPos + 1, ruleStr, eisenhower_quadrant || null);
 
     // Insert field values
     const insertVal = db.prepare('INSERT INTO task_field_values (id, task_id, field_id, value) VALUES (?, ?, ?, ?)');
@@ -459,7 +460,8 @@ app.put('/api/tasks/:id', (req, res) => {
       start_date,
       assignee,
       fieldValues,
-      recurring_rule
+      recurring_rule,
+      eisenhower_quadrant
     } = req.body;
 
     const currentTask = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
@@ -468,6 +470,8 @@ app.put('/api/tasks/:id', (req, res) => {
     const newRuleStr = recurring_rule !== undefined
       ? (recurring_rule ? (typeof recurring_rule === 'object' ? JSON.stringify(recurring_rule) : String(recurring_rule)) : null)
       : currentTask.recurring_rule;
+
+    const newQuadrant = eisenhower_quadrant !== undefined ? eisenhower_quadrant : currentTask.eisenhower_quadrant;
 
     db.prepare(`
       UPDATE tasks 
@@ -479,6 +483,7 @@ app.put('/api/tasks/:id', (req, res) => {
           start_date = ?,
           assignee = COALESCE(?, assignee),
           recurring_rule = ?,
+          eisenhower_quadrant = ?,
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(
@@ -490,6 +495,7 @@ app.put('/api/tasks/:id', (req, res) => {
       start_date !== undefined ? start_date : currentTask.start_date,
       assignee !== undefined ? assignee : null,
       newRuleStr,
+      newQuadrant,
       id
     );
 

@@ -4,6 +4,7 @@ import Header from './components/Header.jsx';
 import ListView from './components/ListView.jsx';
 import BoardView from './components/BoardView.jsx';
 import CalendarView from './components/CalendarView.jsx';
+import MatrixView from './components/MatrixView.jsx';
 import TimelineView from './components/TimelineView.jsx';
 import TaskDrawer from './components/TaskDrawer.jsx';
 import AISidebarRAG from './components/AISidebarRAG.jsx';
@@ -702,6 +703,20 @@ export default function App() {
               onUpdateTaskStatus={handleUpdateTaskStatus}
               onQuickAddTask={handleQuickAddTask}
               onOpenPrintReport={(viewType) => setPrintConfig({ type: viewType || 'calendar' })}
+              activeListName={activeListName}
+              activeListId={activeListId}
+            />
+          )}
+
+          {activeView === 'matrix' && (
+            <MatrixView 
+              tasks={filteredTasks}
+              allTasks={allTasks}
+              onSelectTask={setSelectedTask}
+              onUpdateTask={handleUpdateTask}
+              onUpdateTaskStatus={handleUpdateTaskStatus}
+              onQuickAddTask={handleQuickAddTask}
+              onOpenPrintReport={(viewType) => setPrintConfig({ type: viewType || 'matrix' })}
               activeListName={activeListName}
               activeListId={activeListId}
             />

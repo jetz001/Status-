@@ -53,6 +53,7 @@ function initSchema() {
       assignee TEXT DEFAULT '',
       position INTEGER DEFAULT 0,
       recurring_rule TEXT DEFAULT NULL,
+      eisenhower_quadrant TEXT DEFAULT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
@@ -157,6 +158,11 @@ function initSchema() {
   // Safe migration for recurring_rule
   try {
     db.prepare('ALTER TABLE tasks ADD COLUMN recurring_rule TEXT DEFAULT NULL').run();
+  } catch (e) {}
+
+  // Safe migration for eisenhower_quadrant
+  try {
+    db.prepare('ALTER TABLE tasks ADD COLUMN eisenhower_quadrant TEXT DEFAULT NULL').run();
   } catch (e) {}
 
   // Clean up legacy mock test case columns if present

@@ -8,6 +8,7 @@ import {
   List, 
   Kanban, 
   Calendar,
+  Grid2X2,
   CalendarRange, 
   Share2,
   ChevronDown,
@@ -164,6 +165,18 @@ export default function Header({
           </button>
 
           <button 
+            onClick={() => onSelectView('matrix')}
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded font-medium transition ${
+              activeView === 'matrix' 
+                ? 'bg-[#2a2b2d] text-white border-b-2 border-[#7b68ee]' 
+                : 'text-gray-400 hover:text-gray-200 hover:bg-[#222427]'
+            }`}
+          >
+            <Grid2X2 size={14} />
+            <span>Matrix View</span>
+          </button>
+
+          <button 
             onClick={() => onSelectView('timeline')}
             className={`flex items-center space-x-1.5 px-3 py-1.5 rounded font-medium transition ${
               activeView === 'timeline' 
@@ -210,6 +223,17 @@ export default function Header({
             >
               <Printer size={13} className="text-blue-400" />
               <span>พิมพ์ปฏิทิน</span>
+            </button>
+          )}
+
+          {activeView === 'matrix' && (
+            <button 
+              onClick={() => onOpenPrintReport('matrix')}
+              title="พิมพ์ผัง Eisenhower Matrix แนวนอน (Print Matrix Chart)"
+              className="flex items-center space-x-1 px-2.5 py-1 rounded hover:bg-[#2a2b2d] text-gray-300 hover:text-white transition cursor-pointer border border-[#3a3b3d]/50"
+            >
+              <Printer size={13} className="text-blue-400" />
+              <span>พิมพ์ Matrix</span>
             </button>
           )}
 
