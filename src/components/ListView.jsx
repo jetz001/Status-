@@ -18,6 +18,8 @@ import {
   ListTodo,
   User,
   Check,
+  ChevronDown,
+  ChevronRight,
   X
 } from 'lucide-react';
 import ContextMenu from './ContextMenu.jsx';
@@ -75,6 +77,26 @@ export default function ListView({
   const [quickAddStatus, setQuickAddStatus] = useState(null);
   const [taskToDelete, setTaskToDelete] = useState(null);
   const [contextMenu, setContextMenu] = useState({ isOpen: false, position: { x: 0, y: 0 }, items: [] });
+
+  // Collapsible status groups with persistence (COMPLETED collapsed by default)
+  const [collapsedStatuses, setCollapsedStatuses] = useState(() => {
+    try {
+      const saved = localStorage.getItem('status_collapsed_groups');
+      return saved ? JSON.parse(saved) : { 'COMPLETED': true };
+    } catch {
+      return { 'COMPLETED': true };
+    }
+  });
+
+  const toggleCollapse = (status) => {
+    setCollapsedStatuses(prev => {
+      const next = { ...prev, [status]: !prev[status] };
+      try {
+        localStorage.setItem('status_collapsed_groups', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
 
   // Dynamic team members from database
   const [teamMembers, setTeamMembers] = useState([]);
@@ -392,24 +414,41 @@ export default function ListView({
       {statuses.map(status => {
         const config = STATUS_CONFIG[status];
         const groupTasks = groupedTasks[status] || [];
+        const isCollapsed = Boolean(collapsedStatuses[status]);
 
         return (
           <div key={status} className="space-y-1">
-            {/* Status Group Header */}
-            <div className="flex items-center space-x-2 py-1.5 px-2 bg-[#222427]/80 rounded border-b border-[#333538]">
-              <span 
-                className="px-2 py-0.5 rounded font-bold text-[11px] tracking-wide"
-                style={{ backgroundColor: config.color, color: '#fff' }}
-              >
-                {status}
-              </span>
-              <span className="text-gray-400 font-medium text-xs">
-                {groupTasks.length}
-              </span>
+            {/* Status Group Header (Collapsible) */}
+            <div 
+              onClick={() => toggleCollapse(status)}
+              className="flex items-center justify-between py-1.5 px-2.5 bg-[#222427]/80 hover:bg-[#282a2e] rounded border-b border-[#333538] cursor-pointer transition select-none group/header"
+              title={isCollapsed ? `คลิกเพื่อขยายกลุ่ม ${status}` : `คลิกเพื่อย่อกลุ่ม ${status}`}
+            >
+              <div className="flex items-center space-x-2">
+                <span className="text-gray-400 group-hover/header:text-gray-200 transition flex items-center justify-center w-4 h-4">
+                  {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                </span>
+                <span 
+                  className="px-2 py-0.5 rounded font-bold text-[11px] tracking-wide"
+                  style={{ backgroundColor: config.color, color: '#fff' }}
+                >
+                  {status}
+                </span>
+                <span className="text-gray-400 font-medium text-xs">
+                  {groupTasks.length}
+                </span>
+              </div>
+
+              {isCollapsed && groupTasks.length > 0 && (
+                <span className="text-[10px] text-gray-500 group-hover/header:text-gray-400 transition font-normal pr-1">
+                  คลิกเพื่อขยายดู {groupTasks.length} งาน
+                </span>
+              )}
             </div>
 
             {/* Table */}
-            <div className="bg-[#1e1f21] border border-[#2a2b2d] rounded-md overflow-visible">
+            {!isCollapsed && (
+              <div className="bg-[#1e1f21] border border-[#2a2b2d] rounded-md overflow-visible">
               <table className="w-full text-left border-collapse table-fixed min-w-[850px]">
                 <thead>
                   <tr className="border-b border-[#2a2b2d] text-gray-400 text-[11px] bg-[#1a1b1d] whitespace-nowrap select-none">
@@ -1060,6 +1099,7 @@ export default function ListView({
                 </tbody>
               </table>
             </div>
+            )}
           </div>
         );
       })}
