@@ -38,7 +38,7 @@ export default function TimelineView({ tasks = [], onSelectTask, activeListName 
   const [hideRoutine, setHideRoutine] = useState(false);
   const [showUnscheduled, setShowUnscheduled] = useState(false);
 
-  const todayIso = today.toISOString().split('T')[0];
+  const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   const monthPrefix = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
   const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
   const monthStartIso = `${monthPrefix}-01`;
@@ -294,7 +294,7 @@ export default function TimelineView({ tasks = [], onSelectTask, activeListName 
         {/* Main Gantt Grid Table */}
         <div className="flex-1 flex flex-col border border-[#333538] rounded-xl bg-[#18191b] overflow-hidden shadow-xs">
           <div className="flex-1 overflow-x-auto overflow-y-auto custom-scrollbar">
-            <div style={{ minWidth: `${Math.max(980, daysInMonth * 34)}px` }}>
+            <div style={{ minWidth: `${Math.max(1020, 288 + daysInMonth * 34)}px` }}>
               {/* Header Days Row */}
               <div className="flex border-b border-[#333538] sticky top-0 bg-[#1e1f21] z-20 shadow-xs">
                 {/* Left Task Column Header */}
@@ -304,11 +304,14 @@ export default function TimelineView({ tasks = [], onSelectTask, activeListName 
                 </div>
 
                 {/* Days of Month Header Columns */}
-                <div className="flex-1 flex">
+                <div 
+                  className="flex-1 grid"
+                  style={{ gridTemplateColumns: `repeat(${daysInMonth}, minmax(34px, 1fr))` }}
+                >
                   {monthDays.map(day => (
                     <div 
                       key={day.iso}
-                      className={`flex-1 min-w-[32px] text-center py-1.5 border-r border-[#2d2f34] flex flex-col items-center justify-center ${
+                      className={`text-center py-1.5 border-r border-[#2d2f34] flex flex-col items-center justify-center ${
                         day.isToday 
                           ? 'bg-purple-950/50 text-purple-300 font-extrabold border-t-2 border-t-purple-500' 
                           : day.isWeekend 
@@ -388,16 +391,10 @@ export default function TimelineView({ tasks = [], onSelectTask, activeListName 
                       }
                     }
 
-                    // Clamp
-                    startDayNum = Math.max(1, Math.min(daysInMonth, startDayNum));
-                    dueDayNum = Math.max(startDayNum, Math.min(daysInMonth, dueDayNum));
-
-                    const colIndex = startDayNum - 1;  // 0-indexed: day 21 → col 20
-                    const spanDays = Math.max(1, dueDayNum - startDayNum + 1);
-                    // Use fixed pixel width per column (must match minWidth = daysInMonth*34 formula)
-                    const COL_W = 34; // px per day column
-                    const barLeft = colIndex * COL_W;
-                    const barWidth = spanDays * COL_W;
+                    // Safety Clamp to valid month days
+                    if (isNaN(startDayNum) || startDayNum < 1) startDayNum = 1;
+                    if (isNaN(dueDayNum) || dueDayNum > daysInMonth) dueDayNum = daysInMonth;
+                    if (dueDayNum < startDayNum) dueDayNum = startDayNum;
 
                     return (
                       <div 
@@ -424,40 +421,50 @@ export default function TimelineView({ tasks = [], onSelectTask, activeListName 
                         </div>
 
                         {/* Gantt Bar Area on Right */}
-                        <div className="flex-1 flex relative h-full items-center px-0 overflow-hidden">
+                        <div className="flex-1 relative h-full">
                           {/* Day Grid Column Background Lines */}
-                          {monthDays.map(day => (
-                            <div 
-                              key={day.iso}
-                              className={`flex-1 min-w-[32px] h-full border-r border-[#24262a] ${
-                                day.isToday 
-                                  ? 'bg-purple-500/10' 
-                                  : day.isWeekend 
-                                  ? 'bg-[#151618]/30' 
-                                  : ''
-                              }`}
-                            />
-                          ))}
-
-                          {/* Authentic Gantt Bar */}
                           <div 
-                            className={`absolute top-1.5 bottom-1.5 rounded px-2 text-[11px] font-semibold text-white shadow truncate flex items-center justify-between transition hover:brightness-110 z-10 ${
-                              isCompleted 
-                                ? 'bg-emerald-600/90 border border-emerald-400/40' 
-                                : task.status === 'IN PROGRESS' 
-                                ? 'bg-blue-600/90 border border-blue-400/40' 
-                                : 'bg-rose-600/90 border border-rose-400/40'
-                            }`}
-                            style={{
-                              left: `${barLeft}px`,
-                              width: `${barWidth}px`
-                            }}
-                            title={`${task.name} (กำหนดส่ง: ${task.due_date || 'ไม่ระบุ'})`}
+                            className="grid h-full w-full"
+                            style={{ gridTemplateColumns: `repeat(${daysInMonth}, minmax(34px, 1fr))` }}
                           >
-                            <span className="truncate mr-1 text-[10px]">{task.name}</span>
-                            <span className="text-[9px] font-mono opacity-80 flex-shrink-0 hidden sm:inline">
-                              {isCompleted ? '✓' : (task.due_date ? task.due_date.slice(5) : '')}
-                            </span>
+                            {monthDays.map(day => (
+                              <div 
+                                key={day.iso}
+                                className={`h-full border-r border-[#24262a] ${
+                                  day.isToday 
+                                    ? 'bg-purple-500/10' 
+                                    : day.isWeekend 
+                                    ? 'bg-[#151618]/30' 
+                                    : ''
+                                }`}
+                              />
+                            ))}
+                          </div>
+
+                          {/* Authentic Gantt Bar placed accurately via CSS Grid */}
+                          <div 
+                            className="absolute inset-0 grid items-center pointer-events-none px-0.5"
+                            style={{ gridTemplateColumns: `repeat(${daysInMonth}, minmax(34px, 1fr))` }}
+                          >
+                            <div 
+                              className={`pointer-events-auto h-7 my-auto mx-0.5 rounded px-2 text-[11px] font-semibold text-white shadow truncate flex items-center justify-between transition hover:brightness-110 z-10 ${
+                                isCompleted 
+                                  ? 'bg-emerald-600/90 border border-emerald-400/40' 
+                                  : task.status === 'IN PROGRESS' 
+                                  ? 'bg-blue-600/90 border border-blue-400/40' 
+                                  : 'bg-rose-600/90 border border-rose-400/40'
+                              }`}
+                              style={{
+                                gridColumnStart: startDayNum,
+                                gridColumnEnd: dueDayNum + 1
+                              }}
+                              title={`${task.name} (กำหนดส่ง: ${task.due_date || 'ไม่ระบุ'})`}
+                            >
+                              <span className="truncate mr-1 text-[10px]">{task.name}</span>
+                              <span className="text-[9px] font-mono opacity-80 flex-shrink-0 hidden sm:inline">
+                                {isCompleted ? '✓' : (task.due_date ? task.due_date.slice(5) : '')}
+                              </span>
+                            </div>
                           </div>
                         </div>
                       </div>
