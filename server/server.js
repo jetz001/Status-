@@ -11,7 +11,7 @@ const multer = require('multer');
 const path = require('path');
 
 debugLog('requiring ./db');
-const { db, logMcpActivity, getMcpLogs, clearMcpLogs } = require('./db');
+const { db, autoArchiveCompletedTasks, logMcpActivity, getMcpLogs, clearMcpLogs } = require('./db');
 debugLog('requiring ./ragService');
 const { indexTask, semanticSearch, reindexAll } = require('./ragService');
 debugLog('requiring ./aiService');
@@ -109,10 +109,10 @@ app.get('/api/spaces', (req, res) => {
     const spaces = db.prepare('SELECT * FROM spaces ORDER BY position ASC, created_at ASC').all();
     const lists = db.prepare('SELECT * FROM lists ORDER BY position ASC, created_at ASC').all();
 
-    // Attach lists and task counts to spaces
+    // Attach lists and pending task counts to spaces
     const result = spaces.map(space => {
       const spaceLists = lists.filter(l => l.space_id === space.id).map(l => {
-        const count = db.prepare('SELECT COUNT(*) as c FROM tasks WHERE list_id = ?').get(l.id).c;
+        const count = db.prepare("SELECT COUNT(*) as c FROM tasks WHERE list_id = ? AND status != 'COMPLETED' AND (is_archived = 0 OR is_archived IS NULL)").get(l.id).c;
         return { ...l, taskCount: count };
       });
       return { ...space, lists: spaceLists };
@@ -268,10 +268,10 @@ app.post('/api/lists/:id/duplicate', (req, res) => {
 app.get('/api/tasks', (req, res) => {
   try {
     const { listId } = req.query;
-    let query = 'SELECT * FROM tasks';
+    let query = 'SELECT * FROM tasks WHERE (is_archived = 0 OR is_archived IS NULL)';
     const params = [];
     if (listId && listId !== 'all') {
-      query += ' WHERE list_id = ?';
+      query += ' AND list_id = ?';
       params.push(listId);
     }
     query += ' ORDER BY position ASC, created_at DESC';
@@ -313,6 +313,7 @@ app.get('/api/tasks/all', (req, res) => {
       FROM tasks t
       LEFT JOIN lists l ON t.list_id = l.id
       LEFT JOIN spaces s ON l.space_id = s.id
+      WHERE (t.is_archived = 0 OR t.is_archived IS NULL)
       ORDER BY t.due_date ASC, t.created_at DESC
     `).all();
 
@@ -651,6 +652,82 @@ app.post('/api/tasks/:id/copy', (req, res) => {
 });
 
 // ==========================================
+// 2.5 ARCHIVED TASKS (Anti-Bloat & Logs Sheet)
+// ==========================================
+
+app.get('/api/tasks/archived', (req, res) => {
+  try {
+    const tasks = db.prepare(`
+      SELECT t.*, l.name as list_name, l.color as list_color, s.name as space_name, s.color as space_color
+      FROM tasks t
+      LEFT JOIN lists l ON t.list_id = l.id
+      LEFT JOIN spaces s ON l.space_id = s.id
+      WHERE t.is_archived = 1
+      ORDER BY t.archived_at DESC, t.updated_at DESC
+    `).all();
+
+    const enrichedTasks = tasks.map(t => {
+      const subtasks = db.prepare('SELECT * FROM subtasks WHERE task_id = ? ORDER BY position ASC').all(t.id);
+      return {
+        ...t,
+        subtasks
+      };
+    });
+
+    res.json(enrichedTasks);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/tasks/:id/restore', (req, res) => {
+  try {
+    const { id } = req.params;
+    db.prepare('UPDATE tasks SET is_archived = 0, archived_at = NULL WHERE id = ?').run(id);
+    indexTask(id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/tasks/archive/run', (req, res) => {
+  try {
+    const { olderThanDays = 7 } = req.body;
+    const archivedCount = autoArchiveCompletedTasks(olderThanDays);
+    res.json({ success: true, archivedCount });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/tasks/archive/export-csv', (req, res) => {
+  try {
+    const { exportArchivedTasksToCSV } = require('./backupService');
+    const csvData = exportArchivedTasksToCSV();
+    const filename = `archived-tasks-${new Date().toISOString().split('T')[0]}.csv`;
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(csvData);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/tasks/archived/clear', (req, res) => {
+  try {
+    const archivedTasks = db.prepare('SELECT id FROM tasks WHERE is_archived = 1').all();
+    for (const t of archivedTasks) {
+      db.prepare('DELETE FROM task_embeddings WHERE task_id = ?').run(t.id);
+      db.prepare('DELETE FROM tasks WHERE id = ?').run(t.id);
+    }
+    res.json({ success: true, deletedCount: archivedTasks.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
 // 3. SUBTASKS
 // ==========================================
 
@@ -977,7 +1054,7 @@ app.get('/api/notifications', (req, res) => {
       SELECT t.id, t.name, t.due_date, t.status, t.priority, t.list_id, l.name as list_name
       FROM tasks t
       LEFT JOIN lists l ON t.list_id = l.id
-      WHERE t.status != 'COMPLETED' AND t.due_date IS NOT NULL AND t.due_date != ''
+      WHERE t.status != 'COMPLETED' AND (t.is_archived = 0 OR t.is_archived IS NULL) AND t.due_date IS NOT NULL AND t.due_date != ''
       ORDER BY t.due_date ASC
     `).all();
     const todayStr = new Date().toISOString().split('T')[0];

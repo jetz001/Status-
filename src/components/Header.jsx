@@ -17,6 +17,7 @@ import {
   CheckCircle2,
   Circle,
   Clock,
+  Archive,
   X
 } from 'lucide-react';
 
@@ -32,6 +33,7 @@ export default function Header({
   onOpenPrintReport,
   onOpenCustomFieldModal,
   onOpenBackupDataModal,
+  onOpenArchiveLogsModal,
   onQuickAddTask,
   notificationCount = 0,
   searchQuery = '',
@@ -266,6 +268,16 @@ export default function Header({
           >
             <ImageIcon size={15} className="text-pink-400" />
             <span className="hidden sm:inline">Wallpaper</span>
+          </button>
+
+          {/* Archive Logs Modal Button */}
+          <button 
+            onClick={onOpenArchiveLogsModal}
+            title="คลังประวัติงานที่เสร็จแล้ว (Task Archive & Logs Sheet)"
+            className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded hover:bg-[#2a2b2d] text-gray-300 hover:text-amber-400 text-xs font-medium transition cursor-pointer"
+          >
+            <Archive size={15} className="text-amber-400" />
+            <span className="hidden sm:inline">Archive Logs</span>
           </button>
 
           {/* Export / Backup Modal Button */}

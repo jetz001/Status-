@@ -165,6 +165,22 @@ function initSchema() {
     db.prepare('ALTER TABLE tasks ADD COLUMN eisenhower_quadrant TEXT DEFAULT NULL').run();
   } catch (e) {}
 
+  // Safe migration for is_archived & archived_at (anti-bloat)
+  try {
+    db.prepare('ALTER TABLE tasks ADD COLUMN is_archived INTEGER DEFAULT 0').run();
+  } catch (e) {}
+  try {
+    db.prepare('ALTER TABLE tasks ADD COLUMN archived_at TEXT DEFAULT NULL').run();
+  } catch (e) {}
+  try {
+    db.prepare('CREATE INDEX IF NOT EXISTS idx_tasks_archived ON tasks(is_archived)').run();
+  } catch (e) {}
+
+  // Run auto-archive on startup (completed tasks older than 7 days)
+  try {
+    autoArchiveCompletedTasks(7);
+  } catch (e) {}
+
   // Clean up legacy mock test case columns if present
   try {
     db.prepare("DELETE FROM custom_fields WHERE id IN ('f-tester', 'f-case-id', 'f-severity', 'f-exec-date', 'f-qa-ai')").run();
@@ -210,6 +226,35 @@ function seedDefaultData() {
   insertSetting.run('wallpaper_opacity', '85');
 
   console.log('Initial clean workspace created with 0 tasks.');
+}
+
+function autoArchiveCompletedTasks(olderThanDays = 7) {
+  try {
+    let stmt;
+    if (olderThanDays === 'all' || olderThanDays === 0) {
+      stmt = db.prepare(`
+        UPDATE tasks
+        SET is_archived = 1, archived_at = datetime('now', 'localtime')
+        WHERE status = 'COMPLETED'
+          AND (is_archived = 0 OR is_archived IS NULL)
+      `);
+      const info = stmt.run();
+      return info.changes;
+    } else {
+      stmt = db.prepare(`
+        UPDATE tasks
+        SET is_archived = 1, archived_at = datetime('now', 'localtime')
+        WHERE status = 'COMPLETED'
+          AND (is_archived = 0 OR is_archived IS NULL)
+          AND date(COALESCE(updated_at, created_at)) <= date('now', 'localtime', '-' || ? || ' days')
+      `);
+      const info = stmt.run(String(olderThanDays));
+      return info.changes;
+    }
+  } catch (err) {
+    console.error('Error auto-archiving completed tasks:', err);
+    return 0;
+  }
 }
 
 initSchema();
@@ -260,6 +305,7 @@ function clearMcpLogs() {
 module.exports = {
   db,
   initSchema,
+  autoArchiveCompletedTasks,
   logMcpActivity,
   getMcpLogs,
   clearMcpLogs

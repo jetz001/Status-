@@ -16,6 +16,7 @@ import SettingsModal from './components/SettingsModal.jsx';
 import ImageLightboxModal from './components/ImageLightboxModal.jsx';
 import PrintReportView from './components/PrintReportView.jsx';
 import BackupDataModal from './components/BackupDataModal.jsx';
+import ArchiveLogsModal from './components/ArchiveLogsModal.jsx';
 import HomeView from './components/HomeView.jsx';
 
 export default function App() {
@@ -46,6 +47,7 @@ export default function App() {
   const [showNotificationCenter, setShowNotificationCenter] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showBackupModal, setShowBackupModal] = useState(false);
+  const [showArchiveLogsModal, setShowArchiveLogsModal] = useState(false);
   const [showMoveCopyModal, setShowMoveCopyModal] = useState(false);
   const [taskForMoveCopy, setTaskForMoveCopy] = useState(null);
   const [showCustomFieldModal, setShowCustomFieldModal] = useState(false);
@@ -430,6 +432,9 @@ export default function App() {
       }
       loadTasks();
       loadAllTasks();
+      if (updates.status !== undefined || updates.list_id !== undefined) {
+        loadSpaces();
+      }
       if (selectedTask && selectedTask.id === taskId) {
         setSelectedTask(prev => ({ 
           ...prev, 
@@ -593,7 +598,7 @@ export default function App() {
             setActiveView('list');
           }
         }}
-        allTasksCount={allTasks.length}
+        allTasksCount={allTasks.filter(t => t.status !== 'COMPLETED').length}
         onCreateSpace={handleCreateSpace}
         onCreateList={handleCreateList}
         onUpdateSpace={handleUpdateSpace}
@@ -626,6 +631,7 @@ export default function App() {
           onOpenPrintReport={(viewType) => setPrintConfig({ type: viewType || activeView || 'list' })}
           onOpenCustomFieldModal={() => setShowCustomFieldModal(true)}
           onOpenBackupDataModal={() => setShowBackupModal(true)}
+          onOpenArchiveLogsModal={() => setShowArchiveLogsModal(true)}
           onQuickAddTask={() => handleQuickAddTask({ name: 'งานใหม่...', status: 'NOT STARTED' })}
           notificationCount={notifications.length}
           searchQuery={searchQuery}
@@ -669,6 +675,7 @@ export default function App() {
             <ListView 
               tasks={filteredTasks}
               fields={fields}
+              activeListId={activeListId}
               onSelectTask={setSelectedTask}
               onUpdateTask={handleUpdateTask}
               onUpdateTaskStatus={handleUpdateTaskStatus}
@@ -881,6 +888,17 @@ export default function App() {
         activeListId={activeListId}
         activeListName={activeListName}
         onDataRestored={() => {
+          loadSpaces();
+          loadAllTasks();
+          loadTasks();
+        }}
+      />
+
+      {/* 13. Archive & Task Logs Sheet Modal */}
+      <ArchiveLogsModal 
+        isOpen={showArchiveLogsModal}
+        onClose={() => setShowArchiveLogsModal(false)}
+        onTasksChanged={() => {
           loadSpaces();
           loadAllTasks();
           loadTasks();

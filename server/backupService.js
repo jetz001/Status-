@@ -285,6 +285,70 @@ function exportListToCSV(listId) {
 }
 
 /**
+ * Generates CSV string for archived tasks with UTF-8 BOM for Microsoft Excel compatibility
+ */
+function exportArchivedTasksToCSV() {
+  const tasks = db.prepare(`
+    SELECT t.*, l.name as list_name, s.name as space_name
+    FROM tasks t
+    LEFT JOIN lists l ON t.list_id = l.id
+    LEFT JOIN spaces s ON l.space_id = s.id
+    WHERE t.is_archived = 1
+    ORDER BY t.archived_at DESC, t.updated_at DESC
+  `).all();
+
+  const escapeCSV = (str) => {
+    if (str === null || str === undefined) return '""';
+    const s = String(str).replace(/"/g, '""');
+    return `"${s}"`;
+  };
+
+  const headers = [
+    'Task ID', 
+    'Name', 
+    'Space', 
+    'List', 
+    'Status', 
+    'Priority', 
+    'Due Date', 
+    'Assignee', 
+    'Description', 
+    'Subtasks Total', 
+    'Subtasks Completed',
+    'Archived At',
+    'Created At'
+  ];
+
+  const rows = [headers.map(escapeCSV).join(',')];
+
+  tasks.forEach(t => {
+    const subtasks = db.prepare('SELECT completed FROM subtasks WHERE task_id = ?').all(t.id);
+    const totalSubs = subtasks.length;
+    const completedSubs = subtasks.filter(s => s.completed).length;
+
+    const row = [
+      t.id,
+      t.name,
+      t.space_name || '',
+      t.list_name || '',
+      t.status,
+      t.priority,
+      t.due_date || '',
+      t.assignee || '',
+      t.description || '',
+      totalSubs,
+      completedSubs,
+      t.archived_at || '',
+      t.created_at || ''
+    ];
+
+    rows.push(row.map(escapeCSV).join(','));
+  });
+
+  return '\uFEFF' + rows.join('\r\n');
+}
+
+/**
  * Imports tasks from CSV content into a target list
  */
 function importTasksFromCSV(listId, csvText) {
@@ -370,6 +434,7 @@ module.exports = {
   listBackups,
   restoreBackupData,
   exportListToCSV,
+  exportArchivedTasksToCSV,
   importTasksFromCSV,
   BACKUP_DIR
 };

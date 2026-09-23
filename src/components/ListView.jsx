@@ -57,6 +57,7 @@ const PRIORITIES = [
 export default function ListView({
   tasks,
   fields = [],
+  activeListId,
   onSelectTask,
   onUpdateTask,
   onUpdateTaskStatus,
@@ -236,7 +237,21 @@ export default function ListView({
       const thaiMonths = ['', 'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
       const mNum = parseInt(m, 10);
       const dNum = parseInt(d, 10);
-      return `${dNum} ${thaiMonths[mNum] || m} ${y}`;
+      const thaiYearShort = (parseInt(y, 10) + 543) % 100;
+      return `${dNum} ${thaiMonths[mNum] || m} ${thaiYearShort}`;
+    }
+    return dateStr;
+  };
+
+  const formatDateShort = (dateStr) => {
+    if (!dateStr) return '';
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      const [, m, d] = parts;
+      const thaiMonths = ['', 'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+      const mNum = parseInt(m, 10);
+      const dNum = parseInt(d, 10);
+      return `${dNum} ${thaiMonths[mNum] || m}`;
     }
     return dateStr;
   };
@@ -246,9 +261,10 @@ export default function ListView({
     const today = new Date().toISOString().split('T')[0];
     const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
     const dmy = formatDateDMY(dateStr);
-    if (dateStr === today) return { label: `วันนี้ (${dmy})`, color: 'text-amber-400 bg-amber-950/40 border-amber-500/50' };
-    if (dateStr === tomorrow) return { label: `พรุ่งนี้ (${dmy})`, color: 'text-blue-300 bg-blue-950/40 border-blue-500/40' };
-    if (dateStr < today) return { label: `เกินกำหนด (${dmy})`, color: 'text-red-400 bg-red-950/40 border-red-500/50' };
+    const shortDate = formatDateShort(dateStr);
+    if (dateStr === today) return { label: `📌 วันนี้ (${shortDate})`, color: 'text-amber-400 bg-amber-950/40 border-amber-500/50' };
+    if (dateStr === tomorrow) return { label: `⏱️ พรุ่งนี้ (${shortDate})`, color: 'text-blue-300 bg-blue-950/40 border-blue-500/40' };
+    if (dateStr < today) return { label: `⚠️ ${dmy}`, color: 'text-rose-400 bg-rose-950/40 border-rose-500/50' };
     return { label: dmy, color: 'text-gray-300 bg-[#25272b] border-[#383a40]' };
   };
 
@@ -390,19 +406,19 @@ export default function ListView({
             <div className="bg-[#1e1f21] border border-[#2a2b2d] rounded-md overflow-visible">
               <table className="w-full text-left border-collapse table-fixed min-w-[850px]">
                 <thead>
-                  <tr className="border-b border-[#2a2b2d] text-gray-400 text-[11px] bg-[#1a1b1d]">
-                    <th className="py-2 px-3 font-medium min-w-[220px]">Name (ชื่องาน)</th>
-                    <th className="py-2 px-2 font-medium w-28">Assignee (ผู้รับผิดชอบ)</th>
-                    <th className="py-2 px-2 font-medium w-36">Due Date (กำหนดส่ง)</th>
-                    <th className="py-2 px-2 font-medium w-24">Priority (ความสำคัญ)</th>
-                    <th className="py-2 px-2 font-medium w-24">Subtasks (งานย่อย)</th>
-                    <th className="py-2 px-2 font-medium w-28">Status (สถานะ)</th>
+                  <tr className="border-b border-[#2a2b2d] text-gray-400 text-[11px] bg-[#1a1b1d] whitespace-nowrap select-none">
+                    <th className="py-2 px-3 font-medium min-w-[200px] whitespace-nowrap">Name (ชื่องาน)</th>
+                    <th className="py-2 px-2 font-medium w-28 whitespace-nowrap">Assignee (ผู้รับผิดชอบ)</th>
+                    <th className="py-2 px-2 font-medium w-36 whitespace-nowrap">Due Date (กำหนดส่ง)</th>
+                    <th className="py-2 px-2 font-medium w-24 whitespace-nowrap">Priority (ความสำคัญ)</th>
+                    <th className="py-2 px-2 font-medium w-20 whitespace-nowrap">Subtasks (งานย่อย)</th>
+                    <th className="py-2 px-2 font-medium w-28 whitespace-nowrap">Status (สถานะ)</th>
                     {fields.map(f => (
-                      <th key={f.id} className="py-2 px-2 font-medium w-28">
+                      <th key={f.id} className="py-2 px-2 font-medium w-28 whitespace-nowrap">
                         {f.name}
                       </th>
                     ))}
-                    <th className="py-2 px-3 font-medium w-20 text-right">Actions</th>
+                    <th className="py-2 px-3 font-medium w-20 text-right whitespace-nowrap">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#26272a]">
@@ -424,8 +440,8 @@ export default function ListView({
                         title="คลิกขวาเพื่อเปิดเมนูลัด"
                       >
                         {/* 1. Name Column with inline rename & status toggle */}
-                        <td className="py-2.5 px-3 max-w-0 overflow-hidden">
-                          <div className="flex items-center space-x-2 min-w-0">
+                        <td className="py-2.5 px-3 max-w-0 overflow-hidden whitespace-nowrap">
+                          <div className="flex items-center space-x-2 min-w-0 whitespace-nowrap">
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -458,12 +474,12 @@ export default function ListView({
                               />
                             ) : (
                               <div 
-                                className="flex items-center space-x-1.5 min-w-0 flex-1 group/name"
+                                className="flex items-center space-x-1.5 min-w-0 flex-1 group/name whitespace-nowrap"
                                 onDoubleClick={(e) => startInlineEdit(e, task)}
                               >
                                 <span 
                                   title={task.name}
-                                  className={`font-medium truncate block ${
+                                  className={`font-medium truncate block whitespace-nowrap ${
                                     task.status === 'COMPLETED' ? 'line-through text-gray-500' : 'text-gray-100'
                                   }`}
                                 >
@@ -473,14 +489,14 @@ export default function ListView({
                                 {task.list_name && (
                                   <span 
                                     style={{ borderColor: task.list_color ? `${task.list_color}40` : '#374151' }}
-                                    className="text-[10px] px-1.5 py-0.5 rounded bg-[#22242a] text-gray-400 border flex-shrink-0 flex items-center space-x-1"
+                                    className="text-[10px] px-1.5 py-0.5 rounded bg-[#22242a] text-gray-400 border flex-shrink-0 flex items-center space-x-1 whitespace-nowrap"
                                     title={`List: ${task.list_name}`}
                                   >
                                     <span 
-                                      className="w-1.5 h-1.5 rounded-full inline-block" 
+                                      className="w-1.5 h-1.5 rounded-full inline-block flex-shrink-0" 
                                       style={{ backgroundColor: task.list_color || '#7b68ee' }} 
                                     />
-                                    <span className="truncate max-w-[80px]">{task.list_name}</span>
+                                    <span className="truncate max-w-[80px] whitespace-nowrap">{task.list_name}</span>
                                   </span>
                                 )}
 
@@ -681,17 +697,17 @@ export default function ListView({
                         </td>
 
                         {/* 3. Interactive Due Date Column */}
-                        <td className={`py-2.5 px-2 relative ${activePopover?.taskId === task.id && activePopover?.type === 'dueDate' ? 'z-50' : ''}`}>
-                          <div className="flex items-center space-x-1" data-popover-trigger="true">
+                        <td className={`py-2.5 px-2 relative whitespace-nowrap ${activePopover?.taskId === task.id && activePopover?.type === 'dueDate' ? 'z-50' : ''}`}>
+                          <div className="flex items-center space-x-1 whitespace-nowrap" data-popover-trigger="true">
                             <div 
                               onClick={(e) => handleTogglePopover(e, task.id, 'dueDate')}
-                              className={`inline-flex items-center space-x-1.5 px-2 py-1 rounded border cursor-pointer transition shadow-sm ${
+                              className={`inline-flex items-center space-x-1.5 px-2 py-1 rounded border cursor-pointer transition shadow-sm whitespace-nowrap ${
                                 dueInfo ? dueInfo.color : 'text-gray-400 bg-[#24262b] border-dashed border-[#383a3f] hover:border-gray-400'
                               }`}
                               title="คลิกเพื่อตั้งกำหนดส่งงานและรอบทำซ้ำ"
                             >
-                              <Calendar size={12} />
-                              <span className="text-[11px] font-medium">
+                              <Calendar size={12} className="flex-shrink-0" />
+                              <span className="text-[11px] font-medium whitespace-nowrap">
                                 {dueInfo ? dueInfo.label : '+ กำหนดส่ง'}
                               </span>
                             </div>
@@ -700,7 +716,7 @@ export default function ListView({
                             {getRecurringLabel(task.recurring_rule) && (
                               <span 
                                 onClick={(e) => handleTogglePopover(e, task.id, 'dueDate')}
-                                className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-950/60 text-purple-300 border border-purple-500/40 cursor-pointer hover:bg-purple-900/60 transition"
+                                className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-950/60 text-purple-300 border border-purple-500/40 cursor-pointer hover:bg-purple-900/60 transition whitespace-nowrap flex-shrink-0"
                                 title={`รอบทำซ้ำ: ${getRecurringLabel(task.recurring_rule)}`}
                               >
                                 <span>🔁</span>
@@ -736,15 +752,15 @@ export default function ListView({
                         </td>
 
                         {/* 4. Interactive Priority Column */}
-                        <td className={`py-2.5 px-2 relative ${activePopover?.taskId === task.id && activePopover?.type === 'priority' ? 'z-50' : ''}`}>
+                        <td className={`py-2.5 px-2 relative whitespace-nowrap ${activePopover?.taskId === task.id && activePopover?.type === 'priority' ? 'z-50' : ''}`}>
                           <div 
                             data-popover-trigger="true"
                             onClick={(e) => handleTogglePopover(e, task.id, 'priority')}
-                            className="inline-flex items-center space-x-1.5 px-2 py-1 rounded bg-[#24262b] hover:bg-[#2c2f35] border border-[#383a3f] cursor-pointer transition shadow-sm"
+                            className="inline-flex items-center space-x-1.5 px-2 py-1 rounded bg-[#24262b] hover:bg-[#2c2f35] border border-[#383a3f] cursor-pointer transition shadow-sm whitespace-nowrap"
                             title="คลิกเพื่อเปลี่ยนระดับความสำคัญ"
                           >
-                            <Flag size={12} style={{ color: priorityObj.color }} />
-                            <span className="text-[11px] font-medium" style={{ color: priorityObj.color }}>
+                            <Flag size={12} style={{ color: priorityObj.color }} className="flex-shrink-0" />
+                            <span className="text-[11px] font-medium whitespace-nowrap" style={{ color: priorityObj.color }}>
                               {priorityObj.id}
                             </span>
                           </div>
@@ -784,20 +800,20 @@ export default function ListView({
                         </td>
 
                         {/* 5. Interactive Subtasks Column */}
-                        <td className={`py-2.5 px-2 relative ${activePopover?.taskId === task.id && activePopover?.type === 'subtasks' ? 'z-50' : ''}`}>
+                        <td className={`py-2.5 px-2 relative whitespace-nowrap ${activePopover?.taskId === task.id && activePopover?.type === 'subtasks' ? 'z-50' : ''}`}>
                           <div 
                             data-popover-trigger="true"
                             onClick={(e) => handleTogglePopover(e, task.id, 'subtasks')}
-                            className={`inline-flex items-center space-x-1.5 px-2 py-1 rounded border cursor-pointer transition shadow-sm ${
+                            className={`inline-flex items-center space-x-1.5 px-2 py-1 rounded border cursor-pointer transition shadow-sm whitespace-nowrap ${
                               totalSubs > 0 
                                 ? (completedSubs === totalSubs ? 'bg-emerald-950/40 text-emerald-300 border-emerald-500/40' : 'bg-blue-950/40 text-blue-300 border-blue-500/40')
                                 : 'bg-[#24262b] text-gray-400 border-[#383a3f] hover:border-gray-400'
                             }`}
                             title="คลิกเพื่อดูและจัดการงานย่อย (Checklist)"
                           >
-                            <CheckSquare size={12} />
-                            <span className="text-[11px] font-medium">
-                              {totalSubs > 0 ? `${completedSubs}/${totalSubs}` : '0 งานย่อย'}
+                            <CheckSquare size={12} className="flex-shrink-0" />
+                            <span className="text-[11px] font-medium whitespace-nowrap">
+                              {totalSubs > 0 ? `${completedSubs}/${totalSubs}` : '—'}
                             </span>
                           </div>
 
@@ -879,11 +895,11 @@ export default function ListView({
                         </td>
 
                         {/* 6. Interactive Status Badge Column */}
-                        <td className={`py-2.5 px-2 relative ${activePopover?.taskId === task.id && activePopover?.type === 'status' ? 'z-50' : ''}`}>
+                        <td className={`py-2.5 px-2 relative whitespace-nowrap ${activePopover?.taskId === task.id && activePopover?.type === 'status' ? 'z-50' : ''}`}>
                           <div 
                             data-popover-trigger="true"
                             onClick={(e) => handleTogglePopover(e, task.id, 'status')}
-                            className="px-2.5 py-1 rounded text-[10px] font-bold tracking-wider inline-block cursor-pointer hover:opacity-90 transition shadow-sm"
+                            className="px-2.5 py-1 rounded text-[10px] font-bold tracking-wider inline-block cursor-pointer hover:opacity-90 transition shadow-sm whitespace-nowrap"
                             style={{ backgroundColor: config.color, color: '#fff' }}
                             title="คลิกเพื่อเปลี่ยนสถานะงาน"
                           >
@@ -931,20 +947,20 @@ export default function ListView({
                         {fields.map(f => {
                           const val = task.fieldValues ? task.fieldValues[f.id] : '';
                           return (
-                            <td key={f.id} className="py-2.5 px-2 text-gray-300 truncate max-w-[150px]">
+                            <td key={f.id} className="py-2.5 px-2 text-gray-300 truncate max-w-[150px] whitespace-nowrap">
                               {f.type === 'select' && val ? (
-                                <span className="px-2 py-0.5 bg-[#2a2b2d] border border-[#383a3e] rounded text-[10px] font-medium text-amber-300">
+                                <span className="px-2 py-0.5 bg-[#2a2b2d] border border-[#383a3e] rounded text-[10px] font-medium text-amber-300 whitespace-nowrap">
                                   {val}
                                 </span>
                               ) : (
-                                <span>{val || '-'}</span>
+                                <span className="whitespace-nowrap">{val || '-'}</span>
                               )}
                             </td>
                           );
                         })}
 
                         {/* Actions */}
-                        <td className="py-2.5 px-3 text-right">
+                        <td className="py-2.5 px-3 text-right whitespace-nowrap">
                           <div className="flex items-center justify-end space-x-1 opacity-0 group-hover:opacity-100 transition">
                             <button
                               onClick={(e) => {
@@ -992,47 +1008,49 @@ export default function ListView({
                     );
                   })}
 
-                  {/* Quick Add Row */}
-                  <tr className="border-t border-[#26272a] bg-[#1a1b1d]/50">
-                    <td colSpan={7 + fields.length} className="py-2 px-3">
-                      {quickAddStatus === status ? (
-                        <div className="flex items-center space-x-2">
-                          <input 
-                            autoFocus
-                            type="text"
-                            value={quickAddName}
-                            onChange={(e) => setQuickAddName(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') handleQuickAdd(status);
-                              if (e.key === 'Escape') setQuickAddStatus(null);
-                            }}
-                            placeholder="พิมพ์ชื่องาน แล้วกด Enter..."
-                            className="flex-1 bg-[#222427] border border-[#7b68ee] px-2 py-1 rounded text-white text-xs outline-none"
-                          />
+                  {/* Quick Add Row (Hidden in All Tasks view) */}
+                  {activeListId !== 'all' && (
+                    <tr className="border-t border-[#26272a] bg-[#1a1b1d]/50">
+                      <td colSpan={7 + fields.length} className="py-2 px-3 whitespace-nowrap">
+                        {quickAddStatus === status ? (
+                          <div className="flex items-center space-x-2">
+                            <input 
+                              autoFocus
+                              type="text"
+                              value={quickAddName}
+                              onChange={(e) => setQuickAddName(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') handleQuickAdd(status);
+                                if (e.key === 'Escape') setQuickAddStatus(null);
+                              }}
+                              placeholder="พิมพ์ชื่องาน แล้วกด Enter..."
+                              className="flex-1 bg-[#222427] border border-[#7b68ee] px-2 py-1 rounded text-white text-xs outline-none"
+                            />
+                            <button 
+                              onClick={() => handleQuickAdd(status)}
+                              className="px-3 py-1 bg-[#7b68ee] hover:bg-[#6a55e0] text-white rounded font-medium text-xs transition"
+                            >
+                              บันทึก
+                            </button>
+                            <button 
+                              onClick={() => setQuickAddStatus(null)}
+                              className="px-2 py-1 text-gray-400 hover:text-white text-xs"
+                            >
+                              ยกเลิก
+                            </button>
+                          </div>
+                        ) : (
                           <button 
-                            onClick={() => handleQuickAdd(status)}
-                            className="px-3 py-1 bg-[#7b68ee] hover:bg-[#6a55e0] text-white rounded font-medium text-xs transition"
+                            onClick={() => setQuickAddStatus(status)}
+                            className="flex items-center space-x-1.5 text-gray-400 hover:text-gray-200 transition py-0.5"
                           >
-                            บันทึก
+                            <Plus size={13} />
+                            <span>+ เพิ่มงานใน {status}</span>
                           </button>
-                          <button 
-                            onClick={() => setQuickAddStatus(null)}
-                            className="px-2 py-1 text-gray-400 hover:text-white text-xs"
-                          >
-                            ยกเลิก
-                          </button>
-                        </div>
-                      ) : (
-                        <button 
-                          onClick={() => setQuickAddStatus(status)}
-                          className="flex items-center space-x-1.5 text-gray-400 hover:text-gray-200 transition py-0.5"
-                        >
-                          <Plus size={13} />
-                          <span>+ เพิ่มงานใน {status}</span>
-                        </button>
-                      )}
-                    </td>
-                  </tr>
+                        )}
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
