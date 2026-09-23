@@ -256,12 +256,18 @@ export default function ListView({
     return dateStr;
   };
 
-  const formatDueDateDisplay = (dateStr) => {
+  const formatDueDateDisplay = (dateStr, status) => {
     if (!dateStr) return null;
-    const today = new Date().toISOString().split('T')[0];
-    const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
     const dmy = formatDateDMY(dateStr);
     const shortDate = formatDateShort(dateStr);
+
+    // If task is already COMPLETED, do not show overdue or urgency warnings!
+    if (status === 'COMPLETED') {
+      return { label: dmy, color: 'text-gray-400 bg-[#24262b] border-[#383a3f]' };
+    }
+
+    const today = new Date().toISOString().split('T')[0];
+    const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
     if (dateStr === today) return { label: `📌 วันนี้ (${shortDate})`, color: 'text-amber-400 bg-amber-950/40 border-amber-500/50' };
     if (dateStr === tomorrow) return { label: `⏱️ พรุ่งนี้ (${shortDate})`, color: 'text-blue-300 bg-blue-950/40 border-blue-500/40' };
     if (dateStr < today) return { label: `⚠️ ${dmy}`, color: 'text-rose-400 bg-rose-950/40 border-rose-500/50' };
@@ -427,7 +433,7 @@ export default function ListView({
                     const completedSubs = (task.subtasks || []).filter(s => s.completed).length;
                     const totalSubs = (task.subtasks || []).length;
                     const priorityObj = PRIORITIES.find(p => p.id === task.priority) || PRIORITIES[2];
-                    const dueInfo = formatDueDateDisplay(task.due_date);
+                    const dueInfo = formatDueDateDisplay(task.due_date, task.status);
 
                     return (
                       <tr 
