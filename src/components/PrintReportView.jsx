@@ -1,5 +1,6 @@
-import React, { useEffect } from 'react';
-import { Printer, X, CheckSquare, Calendar, User, Flag } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Printer, X, CheckSquare, Calendar, User, Flag, Filter } from 'lucide-react';
+import { isRoutineTask } from '../utils/routineUtils.js';
 
 export default function PrintReportView({
   type = 'list', // 'list', 'board', 'timeline', 'home', 'task'
@@ -15,16 +16,48 @@ export default function PrintReportView({
     window.print();
   };
 
+  const [hideCompleted, setHideCompleted] = useState(() => {
+    try {
+      const collapsed = JSON.parse(localStorage.getItem('status_collapsed_groups') || '{}');
+      if (type === 'list' && collapsed['COMPLETED']) return true;
+    } catch (_) {}
+    return localStorage.getItem('status_hide_completed') === 'true';
+  });
+
+  const [hideRoutine, setHideRoutine] = useState(() => {
+    return localStorage.getItem('status_hide_routine') === 'true';
+  });
+
+  const toggleHideCompleted = (val) => {
+    setHideCompleted(val);
+    try { localStorage.setItem('status_hide_completed', val.toString()); } catch (_) {}
+  };
+  const toggleHideRoutine = (val) => {
+    setHideRoutine(val);
+    try { localStorage.setItem('status_hide_routine', val.toString()); } catch (_) {}
+  };
+
+  const filteredTasks = useMemo(() => {
+    let list = Array.isArray(tasks) ? tasks : [];
+    if (hideCompleted) {
+      list = list.filter(t => t.status !== 'COMPLETED');
+    }
+    if (hideRoutine) {
+      list = list.filter(t => !isRoutineTask(t));
+    }
+    return list;
+  }, [tasks, hideCompleted, hideRoutine]);
+
   const currentDate = new Date().toLocaleDateString('th-TH', {
     day: 'numeric',
     month: 'long',
     year: 'numeric'
   });
 
-  const completedTasks = tasks.filter(t => t.status === 'COMPLETED');
-  const inProgressTasks = tasks.filter(t => t.status === 'IN PROGRESS');
-  const notStartedTasks = tasks.filter(t => t.status === 'NOT STARTED');
-  const completionRate = tasks.length > 0 ? Math.round((completedTasks.length / tasks.length) * 100) : 0;
+  const completedTasks = filteredTasks.filter(t => t.status === 'COMPLETED');
+  const inProgressTasks = filteredTasks.filter(t => t.status === 'IN PROGRESS');
+  const notStartedTasks = filteredTasks.filter(t => t.status === 'NOT STARTED');
+  const completionRate = filteredTasks.length > 0 ? Math.round((completedTasks.length / filteredTasks.length) * 100) : 0;
 
   // Real Gantt Chart Timeline Calculations (21-Day Landscape Grid)
   const todayDate = new Date();
@@ -33,7 +66,7 @@ export default function PrintReportView({
   let startGanttDate = new Date(todayDate);
   startGanttDate.setDate(startGanttDate.getDate() - 3);
 
-  const validDueDates = tasks.map(t => t.due_date).filter(Boolean).sort();
+  const validDueDates = filteredTasks.map(t => t.due_date).filter(Boolean).sort();
   if (validDueDates.length > 0) {
     const earliestDue = new Date(validDueDates[0]);
     if (!isNaN(earliestDue) && earliestDue < startGanttDate) {
@@ -91,10 +124,10 @@ export default function PrintReportView({
   }
 
   // Month stats for calendar
-  const calTasksInMonth = tasks.filter(t => t.due_date && t.due_date.startsWith(monthPrefix));
+  const calTasksInMonth = filteredTasks.filter(t => t.due_date && t.due_date.startsWith(monthPrefix));
   const calCompletedInMonth = calTasksInMonth.filter(t => t.status === 'COMPLETED').length;
   const calOverdueInMonth = calTasksInMonth.filter(t => t.status !== 'COMPLETED' && t.due_date < todayDateStr).length;
-  const unscheduledTasksInList = tasks.filter(t => !t.due_date);
+  const unscheduledTasksInList = filteredTasks.filter(t => !t.due_date);
 
   // Eisenhower Matrix Categorization (for type === 'matrix')
   const matrixQ1Tasks = [];
@@ -104,7 +137,7 @@ export default function PrintReportView({
 
   const next3DaysStr = new Date(todayDate.getTime() + 3 * 86400000).toISOString().split('T')[0];
 
-  tasks.forEach(t => {
+  filteredTasks.forEach(t => {
     let q = t.eisenhower_quadrant;
     if (!q || !['q1', 'q2', 'q3', 'q4'].includes(q)) {
       const pUpper = (t.priority || 'NORMAL').toUpperCase();
@@ -163,6 +196,32 @@ export default function PrintReportView({
           </span>
         </div>
         <div className="flex items-center space-x-2">
+          {type !== 'task' && (
+            <div className="flex items-center space-x-2 mr-2 bg-[#141517] p-1 px-2.5 rounded-lg border border-[#383a3e]">
+              <label className="flex items-center space-x-1.5 cursor-pointer text-xs select-none">
+                <input
+                  type="checkbox"
+                  checked={hideCompleted}
+                  onChange={(e) => toggleHideCompleted(e.target.checked)}
+                  className="w-3.5 h-3.5 rounded text-purple-600 bg-[#24262b] border-[#383a3e] focus:ring-purple-500 cursor-pointer accent-purple-600"
+                />
+                <span className="font-medium whitespace-nowrap text-gray-200 hover:text-white">ซ่อนงานเสร็จแล้ว</span>
+              </label>
+
+              <div className="w-[1px] h-3.5 bg-gray-700"></div>
+
+              <label className="flex items-center space-x-1.5 cursor-pointer text-xs select-none">
+                <input
+                  type="checkbox"
+                  checked={hideRoutine}
+                  onChange={(e) => toggleHideRoutine(e.target.checked)}
+                  className="w-3.5 h-3.5 rounded text-amber-500 bg-[#24262b] border-[#383a3e] focus:ring-amber-500 cursor-pointer accent-amber-500"
+                />
+                <span className="font-medium whitespace-nowrap text-amber-300 hover:text-amber-200">ซ่อนงาน Routine</span>
+              </label>
+            </div>
+          )}
+
           <button
             onClick={handlePrint}
             className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded shadow transition flex items-center space-x-1.5 cursor-pointer"
@@ -201,7 +260,7 @@ export default function PrintReportView({
               </div>
               <div className="text-right text-xs text-gray-500">
                 <p>วันที่พิมพ์: <span className="font-medium text-gray-800">{currentDate}</span></p>
-                <p>จำนวนงานทั้งหมด: <span className="font-bold text-gray-800">{tasks.length} รายการ</span></p>
+                <p>จำนวนงานทั้งหมด: <span className="font-bold text-gray-800">{filteredTasks.length} รายการ</span></p>
               </div>
             </div>
 
@@ -241,14 +300,14 @@ export default function PrintReportView({
                 </tr>
               </thead>
               <tbody>
-                {tasks.length === 0 ? (
+                {filteredTasks.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="p-6 text-center text-gray-400 italic">
                       ไม่มีรายการงานในลิสต์นี้
                     </td>
                   </tr>
                 ) : (
-                  tasks.map((t, idx) => {
+                  filteredTasks.map((t, idx) => {
                     const completedSubs = (t.subtasks || []).filter(s => s.completed).length;
                     const totalSubs = (t.subtasks || []).length;
 
@@ -312,7 +371,7 @@ export default function PrintReportView({
               </div>
               <div className="text-right text-xs text-gray-500">
                 <p>วันที่พิมพ์: <span className="font-medium text-gray-800">{currentDate}</span></p>
-                <p>รวมงานทั้งหมด: <span className="font-bold text-gray-800">{tasks.length} รายการ</span></p>
+                <p>รวมงานทั้งหมด: <span className="font-bold text-gray-800">{filteredTasks.length} รายการ</span></p>
               </div>
             </div>
 
@@ -415,7 +474,7 @@ export default function PrintReportView({
               </div>
               <div className="text-right text-xs text-gray-500">
                 <p>วันที่พิมพ์: <span className="font-medium text-gray-800">{currentDate}</span></p>
-                <p>จำนวนงานทั้งหมด: <span className="font-bold text-gray-800">{tasks.length} รายการ</span></p>
+                <p>จำนวนงานทั้งหมด: <span className="font-bold text-gray-800">{filteredTasks.length} รายการ</span></p>
               </div>
             </div>
 
@@ -483,14 +542,14 @@ export default function PrintReportView({
                   </tr>
                 </thead>
                 <tbody>
-                  {tasks.length === 0 ? (
+                  {filteredTasks.length === 0 ? (
                     <tr>
                       <td colSpan={6 + totalGanttCols} className="p-8 text-center text-gray-400 italic">
                         ไม่มีรายการงานในโครงการนี้
                       </td>
                     </tr>
                   ) : (
-                    tasks.map((t, idx) => {
+                    filteredTasks.map((t, idx) => {
                       const dueIso = t.due_date ? t.due_date.split('T')[0] : null;
                       let dueColIdx = dueIso ? ganttDateList.findIndex(d => d.toISOString().split('T')[0] === dueIso) : -1;
                       
@@ -686,7 +745,7 @@ export default function PrintReportView({
                   return (
                     <tr key={weekIdx} className="border-b border-gray-400 align-top">
                       {weekCells.map((cell, cIdx) => {
-                        const cellTasks = tasks.filter(t => t.due_date === cell.iso);
+                        const cellTasks = filteredTasks.filter(t => t.due_date === cell.iso);
                         const isWeekend = cIdx === 0 || cIdx === 6;
 
                         return (
@@ -811,7 +870,7 @@ export default function PrintReportView({
 
               <div className="text-right text-xs text-gray-500 space-y-0.5">
                 <p>วันที่พิมพ์: <span className="font-medium text-gray-800">{currentDate}</span></p>
-                <p>รวมทั้งระบบ: <span className="font-bold text-gray-800">{tasks.length} งาน</span></p>
+                <p>รวมทั้งระบบ: <span className="font-bold text-gray-800">{filteredTasks.length} งาน</span></p>
               </div>
             </div>
 
@@ -822,7 +881,7 @@ export default function PrintReportView({
                 <span className="text-xl font-black text-rose-700">
                   {matrixQ1Tasks.length}
                   <span className="text-xs font-normal ml-1">
-                    ({tasks.length > 0 ? Math.round((matrixQ1Tasks.length / tasks.length) * 100) : 0}%)
+                    ({filteredTasks.length > 0 ? Math.round((matrixQ1Tasks.length / filteredTasks.length) * 100) : 0}%)
                   </span>
                 </span>
               </div>
@@ -831,7 +890,7 @@ export default function PrintReportView({
                 <span className="text-xl font-black text-blue-700">
                   {matrixQ2Tasks.length}
                   <span className="text-xs font-normal ml-1">
-                    ({tasks.length > 0 ? Math.round((matrixQ2Tasks.length / tasks.length) * 100) : 0}%)
+                    ({filteredTasks.length > 0 ? Math.round((matrixQ2Tasks.length / filteredTasks.length) * 100) : 0}%)
                   </span>
                 </span>
               </div>
@@ -840,7 +899,7 @@ export default function PrintReportView({
                 <span className="text-xl font-black text-amber-700">
                   {matrixQ3Tasks.length}
                   <span className="text-xs font-normal ml-1">
-                    ({tasks.length > 0 ? Math.round((matrixQ3Tasks.length / tasks.length) * 100) : 0}%)
+                    ({filteredTasks.length > 0 ? Math.round((matrixQ3Tasks.length / filteredTasks.length) * 100) : 0}%)
                   </span>
                 </span>
               </div>
@@ -849,7 +908,7 @@ export default function PrintReportView({
                 <span className="text-xl font-black text-gray-700">
                   {matrixQ4Tasks.length}
                   <span className="text-xs font-normal ml-1">
-                    ({tasks.length > 0 ? Math.round((matrixQ4Tasks.length / tasks.length) * 100) : 0}%)
+                    ({filteredTasks.length > 0 ? Math.round((matrixQ4Tasks.length / filteredTasks.length) * 100) : 0}%)
                   </span>
                 </span>
               </div>
@@ -1065,7 +1124,7 @@ export default function PrintReportView({
               </div>
               <div className="text-right text-xs text-gray-500">
                 <p>วันที่พิมพ์: <span className="font-medium text-gray-800">{currentDate}</span></p>
-                <p>รวมทั้งระบบ: <span className="font-bold text-gray-800">{tasks.length} งาน</span></p>
+                <p>รวมทั้งระบบ: <span className="font-bold text-gray-800">{filteredTasks.length} งาน</span></p>
               </div>
             </div>
 
@@ -1073,7 +1132,7 @@ export default function PrintReportView({
             <div className="grid grid-cols-4 gap-3">
               <div className="border border-gray-300 rounded-lg p-3 bg-gray-50 text-center">
                 <span className="text-xs text-gray-500 block">งานทั้งหมด (Total Tasks)</span>
-                <span className="text-2xl font-black text-gray-900">{tasks.length}</span>
+                <span className="text-2xl font-black text-gray-900">{filteredTasks.length}</span>
               </div>
               <div className="border border-emerald-200 rounded-lg p-3 bg-emerald-50 text-center">
                 <span className="text-xs text-emerald-700 block">อัตราความสำเร็จ (Completed)</span>
@@ -1097,7 +1156,7 @@ export default function PrintReportView({
               <h3 className="font-bold text-sm text-gray-900 border-b border-gray-300 pb-1 flex items-center justify-between">
                 <span>รายการงานที่ต้องให้ความสำคัญเร่งด่วน (Urgent & High Priority Tasks)</span>
                 <span className="text-xs font-normal text-gray-500">
-                  {tasks.filter(t => (t.priority === 'URGENT' || t.priority === 'HIGH') && t.status !== 'COMPLETED').length} งานคงค้าง
+                  {filteredTasks.filter(t => (t.priority === 'URGENT' || t.priority === 'HIGH') && t.status !== 'COMPLETED').length} งานคงค้าง
                 </span>
               </h3>
               <table className="w-full text-left text-xs border-collapse border border-gray-300">
@@ -1112,14 +1171,14 @@ export default function PrintReportView({
                   </tr>
                 </thead>
                 <tbody>
-                  {tasks.filter(t => (t.priority === 'URGENT' || t.priority === 'HIGH') && t.status !== 'COMPLETED').length === 0 ? (
+                  {filteredTasks.filter(t => (t.priority === 'URGENT' || t.priority === 'HIGH') && t.status !== 'COMPLETED').length === 0 ? (
                     <tr>
                       <td colSpan={6} className="p-4 text-center text-emerald-600 font-medium italic">
                         ไม่มีงานด่วนหรือความสำคัญสูงที่คั่งค้าง
                       </td>
                     </tr>
                   ) : (
-                    tasks
+                    filteredTasks
                       .filter(t => (t.priority === 'URGENT' || t.priority === 'HIGH') && t.status !== 'COMPLETED')
                       .map((t, i) => (
                         <tr key={t.id} className="border-b border-gray-200">

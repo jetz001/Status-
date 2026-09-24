@@ -130,8 +130,12 @@ export default function MatrixView({
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
-  const [hideCompleted, setHideCompleted] = useState(false);
-  const [hideRoutine, setHideRoutine] = useState(false);
+  const [hideCompleted, setHideCompleted] = useState(() => {
+    return localStorage.getItem('status_hide_completed') === 'true';
+  });
+  const [hideRoutine, setHideRoutine] = useState(() => {
+    return localStorage.getItem('status_hide_routine') === 'true';
+  });
   const [draggedTask, setDraggedTask] = useState(null);
   const [dragOverQuadrant, setDragOverQuadrant] = useState(null);
 
@@ -319,7 +323,10 @@ export default function MatrixView({
             <input
               type="checkbox"
               checked={hideCompleted}
-              onChange={(e) => setHideCompleted(e.target.checked)}
+              onChange={(e) => {
+                setHideCompleted(e.target.checked);
+                localStorage.setItem('status_hide_completed', e.target.checked.toString());
+              }}
               className="w-3.5 h-3.5 rounded text-purple-600 bg-[#24262b] border-[#383a3e] focus:ring-purple-500 cursor-pointer accent-purple-600"
             />
             <span className="font-medium whitespace-nowrap">ซ่อนงานเสร็จแล้ว</span>
@@ -330,7 +337,10 @@ export default function MatrixView({
             <input
               type="checkbox"
               checked={hideRoutine}
-              onChange={(e) => setHideRoutine(e.target.checked)}
+              onChange={(e) => {
+                setHideRoutine(e.target.checked);
+                localStorage.setItem('status_hide_routine', e.target.checked.toString());
+              }}
               className="w-3.5 h-3.5 rounded text-amber-500 bg-[#24262b] border-[#383a3e] focus:ring-amber-500 cursor-pointer accent-amber-500"
             />
             <span className="font-medium whitespace-nowrap">ซ่อนงาน Routine</span>
