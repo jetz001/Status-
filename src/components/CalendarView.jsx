@@ -60,6 +60,7 @@ export default function CalendarView({
   activeListId = 'all'
 }) {
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [statusFilter, setStatusFilter] = useState('ALL');
   const [hideCompleted, setHideCompleted] = useState(() => {
     return localStorage.getItem('status_hide_completed') === 'true';
   });
