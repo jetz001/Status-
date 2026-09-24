@@ -435,6 +435,9 @@ export default function App() {
       if (updates.status !== undefined || updates.list_id !== undefined) {
         loadSpaces();
       }
+      if (updates.status !== undefined || updates.due_date !== undefined) {
+        checkNotifications();
+      }
       if (selectedTask && selectedTask.id === taskId) {
         setSelectedTask(prev => ({ 
           ...prev, 

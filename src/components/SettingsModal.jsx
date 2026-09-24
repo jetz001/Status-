@@ -48,7 +48,8 @@ export default function SettingsModal({
 
   const PROVIDERS = [
     { id: 'gemini', label: 'Google Gemini', defaultModel: 'gemini-1.5-flash', badge: 'แนะนำ / ฟรี' },
-    { id: 'openrouter', label: 'OpenRouter', defaultModel: 'google/gemini-2.0-flash-exp:free', badge: 'หลายโมเดล / ฟรี' },
+    { id: 'openrouter', label: 'OpenRouter', defaultModel: 'nex-agi/nex-n2.5-mini:free', badge: 'หลายโมเดล / ฟรี' },
+    { id: 'groq', label: 'Groq Cloud (เร็วสุด)', defaultModel: 'llama-3.3-70b-versatile', badge: 'เร็วที่สุด / ฟรี' },
     { id: 'openai', label: 'OpenAI (ChatGPT)', defaultModel: 'gpt-4o-mini', badge: 'ยอดนิยม' },
     { id: 'claude', label: 'Claude (Anthropic)', defaultModel: 'claude-3-5-sonnet-20241022', badge: 'ฉลาดขั้นสูง' },
     { id: 'mistral', label: 'Mistral AI', defaultModel: 'pixtral-12b-2409', badge: 'เร็ว & รองรับภาพ' },
@@ -58,6 +59,12 @@ export default function SettingsModal({
   ];
 
   const POPULAR_MODELS = {
+    groq: [
+      { id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B (แนะนำ - ฉลาดและเร็วมาก)' },
+      { id: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B (เร็วสูงสุด)' },
+      { id: 'gemma2-9b-it', label: 'Google Gemma 2 9B' },
+      { id: 'mixtral-8x7b-32768', label: 'Mixtral 8x7B' }
+    ],
     mistral: [
       { id: 'pixtral-12b-2409', label: 'Pixtral 12B' },
       { id: 'mistral-small-latest', label: 'Mistral Small (Latest)' },
@@ -78,14 +85,14 @@ export default function SettingsModal({
       { id: 'claude-3-5-haiku-20241022', label: 'Claude 3.5 Haiku' }
     ],
     openrouter: [
-      { id: 'google/gemini-2.0-flash-exp:free', label: 'Gemini 2.0 Flash (ฟรี)' },
-      { id: 'google/gemini-flash-1.5-8b:free', label: 'Gemini 1.5 Flash 8B (ฟรี)' },
-      { id: 'meta-llama/llama-3.3-70b-instruct:free', label: 'Llama 3.3 70B (ฟรี)' },
-      { id: 'deepseek/deepseek-chat-v3-0324:free', label: 'DeepSeek V3 (ฟรี)' },
-      { id: 'mistralai/mistral-7b-instruct:free', label: 'Mistral 7B (ฟรี)' },
+      { id: 'nex-agi/nex-n2.5-mini:free', label: 'Nex-N2.5 Mini (แนะนำ / ฟรี - เสถียรและเร็ว)' },
+      { id: 'liquid/lfm-2.5-2.6b:free', label: 'Liquid LFM 2.5 (ฟรี - รองรับภาษาไทยดี)' },
+      { id: 'nvidia/nemotron-3.5-lightning:free', label: 'Nvidia Nemotron (ฟรี)' },
+      { id: 'google/gemma-4-31b-it:free', label: 'Google Gemma 4 31B (ฟรี)' },
+      { id: 'qwen/qwen3.8-27b:free', label: 'Qwen 3.8 27B (ฟรี)' },
+      { id: 'openai/gpt-4o-mini', label: 'OpenAI GPT-4o Mini' },
       { id: 'anthropic/claude-3.5-sonnet', label: 'Claude 3.5 Sonnet' },
-      { id: 'openai/gpt-4o-mini', label: 'GPT-4o Mini' },
-      { id: 'openai/gpt-4o', label: 'GPT-4o' }
+      { id: 'deepseek/deepseek-v4.1-flash', label: 'DeepSeek V4.1 Flash' }
     ]
   };
 
@@ -591,6 +598,8 @@ export default function SettingsModal({
                       }}
                       placeholder={
                         provider === 'gemini' ? 'AIzaSy...' :
+                        provider === 'openrouter' ? 'sk-or-v1-...' :
+                        provider === 'groq' ? 'gsk_...' :
                         provider === 'claude' ? 'sk-ant-api03-...' :
                         provider === 'mistral' ? 'ใส่ Mistral API Key...' :
                         provider === 'qwen' ? 'sk-...' :

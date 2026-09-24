@@ -1073,8 +1073,9 @@ app.get('/api/notifications', (req, res) => {
 
     for (const t of tasks) {
       if (t.due_date < todayStr) {
-        const notifId = `notif-overdue-${t.id}`;
-        if (!readSet.has(notifId)) {
+        const notifId = `notif-overdue-${t.id}-${t.due_date}`;
+        // Support backward compatibility with old notifId format
+        if (!readSet.has(notifId) && !readSet.has(`notif-overdue-${t.id}`)) {
           notifications.push({
             id: notifId,
             taskId: t.id,
@@ -1089,8 +1090,9 @@ app.get('/api/notifications', (req, res) => {
           });
         }
       } else if (t.due_date === todayStr || t.due_date === tomorrow) {
-        const notifId = `notif-soon-${t.id}`;
-        if (!readSet.has(notifId)) {
+        const notifId = `notif-soon-${t.id}-${t.due_date}`;
+        // Support backward compatibility with old notifId format
+        if (!readSet.has(notifId) && !readSet.has(`notif-soon-${t.id}`)) {
           notifications.push({
             id: notifId,
             taskId: t.id,
@@ -1120,10 +1122,16 @@ app.post('/api/notifications/read', (req, res) => {
     const insert = db.prepare('INSERT OR IGNORE INTO read_notifications (id) VALUES (?)');
 
     if (Array.isArray(ids) && ids.length > 0) {
-      const insertMany = db.transaction((list) => {
-        for (const item of list) insert.run(item);
-      });
-      insertMany(ids);
+      db.exec('BEGIN TRANSACTION;');
+      try {
+        for (const item of ids) {
+          if (item) insert.run(item);
+        }
+        db.exec('COMMIT;');
+      } catch (errTrans) {
+        db.exec('ROLLBACK;');
+        throw errTrans;
+      }
     } else if (id) {
       insert.run(id);
     }
@@ -1303,9 +1311,9 @@ app.post('/api/ai/test-connection', async (req, res) => {
     }
 
     if (provider === 'openrouter') {
-      const orModel = (model || 'google/gemini-2.0-flash-exp:free').trim();
+      let orModel = (model || 'nex-agi/nex-n2.5-mini:free').trim();
       const url = 'https://openrouter.ai/api/v1/chat/completions';
-      const response = await fetch(url, {
+      let response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1316,14 +1324,61 @@ app.post('/api/ai/test-connection', async (req, res) => {
         body: JSON.stringify({
           model: orModel,
           messages: [{ role: 'user', content: testPrompt }],
-          max_tokens: 10
+          max_tokens: 25
+        })
+      });
+      let data = await response.json();
+
+      // Auto-fallback if specific free model rate-limited
+      if (response.status === 429 || response.status === 502 || response.status === 503) {
+        orModel = orModel === 'nex-agi/nex-n2.5-mini:free' ? 'liquid/lfm-2.5-2.6b:free' : 'nex-agi/nex-n2.5-mini:free';
+        response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${trimmedKey}`,
+            'HTTP-Referer': 'https://status-plus.app',
+            'X-Title': 'Status+'
+          },
+          body: JSON.stringify({
+            model: orModel,
+            messages: [{ role: 'user', content: testPrompt }],
+            max_tokens: 25
+          })
+        });
+        data = await response.json();
+      }
+
+      if (!response.ok) {
+        const errMsg = data.error?.metadata?.raw || data.error?.message || `OpenRouter API Error (${response.status})`;
+        return res.status(response.status).json({
+          success: false,
+          error: errMsg
+        });
+      }
+      return res.json({ success: true, reply: data.choices?.[0]?.message?.content || 'OK' });
+    }
+
+    if (provider === 'groq') {
+      const groqModel = (model || 'llama-3.3-70b-versatile').trim();
+      const url = 'https://api.groq.com/openai/v1/chat/completions';
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${trimmedKey}`
+        },
+        body: JSON.stringify({
+          model: groqModel,
+          messages: [{ role: 'user', content: testPrompt }],
+          max_tokens: 25
         })
       });
       const data = await response.json();
       if (!response.ok) {
         return res.status(response.status).json({
           success: false,
-          error: data.error?.message || `OpenRouter API Error (${response.status})`
+          error: data.error?.message || `Groq API Error (${response.status})`
         });
       }
       return res.json({ success: true, reply: data.choices?.[0]?.message?.content || 'OK' });

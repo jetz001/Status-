@@ -76,11 +76,20 @@ async function callLLM(prompt, systemInstruction = '', fileProcessed = null, for
     mistral: 'pixtral-12b-2409',
     qwen: 'qwen-plus',
     kimi: 'moonshot-v1-8k',
-    openrouter: 'google/gemini-2.0-flash-exp:free',
+    openrouter: 'nex-agi/nex-n2.5-mini:free',
+    groq: 'llama-3.3-70b-versatile',
     ollama: 'llama3'
   };
 
   let model = getSetting('ai_model', defaultModelMap[provider] || 'gemini-1.5-flash');
+
+  // Auto-upgrade legacy, broken, or rate-limited openrouter model
+  if (provider === 'openrouter' && (model === 'google/gemini-2.0-flash-exp:free' || model === 'qwen/qwen3.8-27b:free' || model === 'openrouter/free' || !model)) {
+    model = 'nex-agi/nex-n2.5-mini:free';
+    try {
+      db.prepare('UPDATE app_settings SET value = ? WHERE key = ?').run(model, 'ai_model');
+    } catch (e) {}
+  }
 
   // Auto-upgrade legacy or tier-restricted mistral model to vision-capable pixtral
   if (provider === 'mistral' && (model === 'mistral-large-latest' || !model)) {
@@ -295,8 +304,62 @@ async function callLLM(prompt, systemInstruction = '', fileProcessed = null, for
         messages.push({ role: 'user', content: prompt });
       }
 
+      let orModel = (model || 'openrouter/free').trim();
       const payload = {
-        model: model || 'google/gemini-2.0-flash-exp:free',
+        model: orModel,
+        messages,
+        temperature: 0.7
+      };
+      if (forceJson) {
+        payload.response_format = { type: 'json_object' };
+      }
+
+      let res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+          'HTTP-Referer': 'https://status-plus.app',
+          'X-Title': 'Status+'
+        },
+        body: JSON.stringify(payload)
+      });
+      let data = await res.json();
+
+      // If rate-limited (429) or upstream error on a free model, retry with reliable fallback
+      if (res.status === 429 || res.status === 502 || res.status === 503) {
+        const fallbackModel = orModel === 'nex-agi/nex-n2.5-mini:free' ? 'liquid/lfm-2.5-2.6b:free' : 'nex-agi/nex-n2.5-mini:free';
+        console.warn(`[OpenRouter] Model ${orModel} returned ${res.status}. Falling back to ${fallbackModel}...`);
+        payload.model = fallbackModel;
+        res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+            'HTTP-Referer': 'https://status-plus.app',
+            'X-Title': 'Status+'
+          },
+          body: JSON.stringify(payload)
+        });
+        data = await res.json();
+      }
+
+      if (data.choices && data.choices[0]?.message?.content) {
+        return data.choices[0].message.content.trim();
+      }
+      const errMsg = data.error?.metadata?.raw || data.error?.message || `OpenRouter API Error (${res.status})`;
+      throw new Error(errMsg);
+    }
+
+    // 6. Groq (Ultra-fast inference, OpenAI-compatible)
+    if (provider === 'groq') {
+      const url = 'https://api.groq.com/openai/v1/chat/completions';
+      const messages = [];
+      if (systemInstruction) messages.push({ role: 'system', content: systemInstruction });
+      messages.push({ role: 'user', content: prompt });
+
+      const payload = {
+        model: model || 'llama-3.3-70b-versatile',
         messages,
         temperature: 0.7
       };
@@ -308,9 +371,7 @@ async function callLLM(prompt, systemInstruction = '', fileProcessed = null, for
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-          'HTTP-Referer': 'https://status-plus.app',
-          'X-Title': 'Status+'
+          'Authorization': `Bearer ${apiKey}`
         },
         body: JSON.stringify(payload)
       });
@@ -318,7 +379,7 @@ async function callLLM(prompt, systemInstruction = '', fileProcessed = null, for
       if (data.choices && data.choices[0]?.message?.content) {
         return data.choices[0].message.content.trim();
       }
-      throw new Error(data.error?.message || `OpenRouter API Error (${res.status})`);
+      throw new Error(data.error?.message || `Groq API Error (${res.status})`);
     }
 
     // 6. Qwen (Alibaba Cloud DashScope)
